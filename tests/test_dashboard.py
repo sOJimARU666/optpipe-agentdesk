@@ -13,7 +13,7 @@ from optpipe.dashboard.app import timeline_model, tickets_model  # noqa: E402
 from optpipe.dashboard.data import OutDir, berlin, clock, pair  # noqa: E402
 
 DATE = "2026-10-13"
-SV1 = "1.0.0"                    # the v1 file stays v1 (Moodle: trace_ref is a v1.1 proposal only)
+SV = "1.1.0"                     # Doodle's spec 1.1.0: the record is written as 1.1.0 (with trace_ref)
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -32,7 +32,7 @@ def client(out):
 
 @pytest.fixture(scope="module")
 def v11(out):
-    return json.loads((out / f"session-{DATE}.v1_1.json").read_text())
+    return json.loads((out / f"session-{DATE}.json").read_text())
 
 
 def test_all_routes_are_get_only(out):
@@ -108,7 +108,7 @@ def test_timeline_page_and_step_partial(client, out):
         assert run["run_id"] in html and run["recommendation"] in html
         for st in run["steps"]:
             assert f'hx-get="/s/{DATE}/step/{run["run_id"]}/{st["seq"]}"' in html
-    assert "sidecar ✓" in html and "v1.1 trace_ref ✓" in html and "session_ref ✓" in html
+    assert "sidecar ✓" in html and "trace_ref ✓" in html and "session_ref ✗" not in html
     for a in ("DiscoveryAgent", "ResearchAgent", "PlannerAgent", "RiskOfficerAgent", "WatcherAgent"):
         assert a in html
     r = client.get(f"/s/{DATE}/step/run-premarket/4")
@@ -141,7 +141,7 @@ def test_history_and_idea_log(client, v11):
 
 def test_raw_files_only_session_files(client, out):
     r = client.get(f"/files/session-{DATE}.json")
-    assert r.status_code == 200 and r.json()["schema_version"] == SV1
+    assert r.status_code == 200 and r.json()["schema_version"] == SV
     for bad in ("../pyproject.toml", "settings.yaml", "session-x.py", "..%2F..%2Fetc%2Fpasswd"):
         assert client.get(f"/files/{bad}").status_code == 404
 
@@ -162,7 +162,9 @@ def test_v1_only_session_is_upgraded(out, tmp_path):
     import shutil
     d = tmp_path / "o"
     shutil.copytree(out, d)
-    (d / f"session-{DATE}.v1_1.json").unlink()
+    from optpipe.records.compat import to_v1
+    jp = d / f"session-{DATE}.json"
+    jp.write_text(json.dumps(to_v1(json.loads(jp.read_text()))))     # an older, v1-only output
     s = OutDir(d).load(DATE)
     assert s.origin.startswith("v1 ") and s.record["schema_version"].startswith("1.1")
     assert TestClient(create_app(d)).get(f"/s/{DATE}/tickets").status_code == 200

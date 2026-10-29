@@ -40,16 +40,12 @@ def summary(rec: dict, trace) -> str:
                      f"limit {tk['limit_price']['amount']} {tk['limit_price']['price_type']} "
                      f"max loss ${tk['max_loss']['amount_usd']}{why}{flags}")
     lines.append(f"recommendation: {rt.recommendation}")
-    from .records import to_v1
-    dq = to_v1(rec)["data_quality"]
-    lines.append(f"data quality (v1 record): {len(dq['missing'])} missing, {len(dq['stale'])} stale, "
+    dq = rec["data_quality"]
+    lines.append(f"data quality: {len(dq['missing'])} missing, {len(dq['stale'])} stale, "
                  f"{len(dq['conflicting'])} conflicting")
     v = rt.validation
     lines.append(f"validate_session: {'OK' if not v.get('errors') else str(len(v['errors'])) + ' error(s)'}"
-                 f"{'' if v.get('validator') else ' (spec validator not found)'} (v1 record, Doodle's schema)")
-    if "v1_1_errors" in v:
-        lines.append(f"validate_session: {'OK' if not v['v1_1_errors'] else str(len(v['v1_1_errors'])) + ' error(s)'}"
-                     f" (v1.1 preview, {v['v1_1_schema']})")
+                 f"{'' if v.get('validator') else ' (spec validator not found)'} (record {rec['schema_version']}, Doodle's schema)")
     lines.append("trace: " + " -> ".join(f"{s.stage}({s.duration_ms:.0f}ms)" for s in rt.steps))
     return "\n".join(lines)
 
@@ -111,7 +107,7 @@ def main(argv: list[str] | None = None) -> int:
         mod = discover(settings.spec_path).load_module("session_validator")
         if mod is None:
             print("spec validate_session.py not found"); return 2
-        errs = mod.validate(json.loads(Path(a.file).read_text()))
+        errs = mod.validate(json.loads(Path(a.file).read_text()), base_dir=Path(a.file).resolve().parent)
         print("\n".join(errs) if errs else "OK: 0 errors")
         return 1 if errs else 0
 
@@ -129,10 +125,15 @@ def main(argv: list[str] | None = None) -> int:
     rec, trace = run_session(settings, inputs, as_of, fixtures, existing, trace)
     w = write_session(rec, trace, a.out)
     print(summary(rec, trace))
-    print(f"wrote {w.json}  sha256 {w.json_sha256}\nwrote {w.trace}  sha256 {w.trace_sha256}\n"
-          f"wrote {w.v1_1}  (v1.1 preview, trace_ref -> {w.trace.name})\nwrote {w.md}")
+    from .orchestrator import validate_file
+    ferrs = validate_file(settings, w.json)
+    print(f"wrote {w.json}  sha256 {w.json_sha256}  (schema {rec['schema_version']}, trace_ref -> {w.trace.name})\n"
+          f"wrote {w.trace}  sha256 {w.trace_sha256}\nwrote {w.md}")
+    if ferrs is not None:
+        print(f"validate_session {w.json.name}: " + ("OK (schema + invariants INV-01..13)" if not ferrs
+                                                     else f"{len(ferrs)} error(s)\n  " + "\n  ".join(ferrs[:20])))
     v = trace.runs[-1].validation
-    return 1 if (v.get("errors") or v.get("v1_1_errors")) else 0
+    return 1 if (v.get("errors") or ferrs) else 0
 
 
 if __name__ == "__main__":

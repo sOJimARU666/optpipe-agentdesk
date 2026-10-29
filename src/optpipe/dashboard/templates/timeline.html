@@ -15,13 +15,13 @@
 {% block main %}
 <h1>Agent timeline · {{ s.date }}</h1>
 <p class="mute small">From <span class="mono">{{ s.files.trace or 'no trace' }}</span>{% if s.integrity.trace_sha256 %} · sha256 <span class="mono">{{ s.integrity.trace_sha256[:16] }}…</span>
-  ({% if s.integrity.sidecar_ok %}<span class="ok">sidecar ✓</span>{% else %}<span class="bad">sidecar ✗</span>{% endif %}{% if s.integrity.trace_ref_ok is not none %}, {% if s.integrity.trace_ref_ok %}<span class="ok">v1.1 trace_ref ✓</span>{% else %}<span class="bad">trace_ref ✗</span>{% endif %}{% endif %}{% if s.integrity.session_ref_ok is not none %}, {% if s.integrity.session_ref_ok %}<span class="ok">session_ref ✓</span>{% else %}<span class="bad">session_ref ✗</span>{% endif %}{% endif %}){% endif %}.
+  ({% if s.integrity.sidecar_ok %}<span class="ok">sidecar ✓</span>{% else %}<span class="bad">sidecar ✗</span>{% endif %}{% if s.integrity.trace_ref_ok is not none %}, {% if s.integrity.trace_ref_ok %}<span class="ok">trace_ref ✓</span>{% else %}<span class="bad">trace_ref ✗</span>{% endif %}{% endif %}{% if s.integrity.session_ref_ok is not none %}, {% if s.integrity.session_ref_ok %}<span class="ok">session_ref ✓</span>{% else %}<span class="bad">session_ref ✗</span>{% endif %}{% endif %}){% endif %}.
   Market time is the run's <i>as_of</i> (ET); bar positions are wall-clock compute time of each agent.</p>
 {% for R in runs %}{% set run = R.run %}
 <div class="card">
   <h2 style="margin-top:0">{{ run.run_id }} <span class="mute small">{{ R.rec_run.phase }} · as_of {{ run.as_of }} ({{ run.as_of|berlin }}) · data mode {{ run.data_mode }} · {{ '%.0f'|format(R.total_ms) }} ms total</span></h2>
   <p><b>{{ run.recommendation }}</b> {% for v,n in R.verdicts.items() %}<span class="badge {{ v }}">{{ n }} {{ v }}</span> {% endfor %}
-   · validation {% if not R.validation.errors and not R.validation.v1_1_errors %}<span class="ok">v1 ✓ v1.1 ✓</span>{% else %}<span class="bad">{{ (R.validation.errors or [])|length }} v1 / {{ (R.validation.v1_1_errors or [])|length }} v1.1 errors</span>{% endif %}</p>
+   · validation {% if not R.validation.errors and not R.validation.v1_1_errors %}<span class="ok">spec ✓</span>{% else %}<span class="bad">{{ (R.validation.errors or [])|length + (R.validation.v1_1_errors or [])|length }} errors</span>{% endif %}</p>
 
   <div class="flow">
   {% for st in R.steps %}

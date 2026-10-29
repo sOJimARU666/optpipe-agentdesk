@@ -1,5 +1,6 @@
 """Doodle's rulings (2026-10-29): review ids, tick rounding, per-run scans, closed phase, both schemas,
-trace hash, generated code/patch in sync. Moodle's steering: trace_ref is a v1.1 proposal only."""
+trace hash, generated code/patch in sync. Since Doodle's spec 1.1.0 (merged + pinned 2026-10-29) the record itself is
+1.1.0 with trace_ref; compat.to_v1 remains for v1 readers."""
 from __future__ import annotations
 
 import hashlib
@@ -24,12 +25,12 @@ def two_runs(tmp_path_factory):
     from optpipe.cli import main
     out = tmp_path_factory.mktemp("two")
     assert main(["run", "--fixtures", FIXTURE_DIR, "--out", str(out)]) == 0
-    first = json.loads((out / "session-2026-10-13.v1_1.json").read_text())
+    first = json.loads((out / "session-2026-10-13.json").read_text())
     assert main(["run", "--fixtures", FIXTURE_DIR, "--out", str(out), "--append",
                  "--as-of", "2026-10-13T09:40:00-04:00"]) == 0
-    return {"out": out, "first": first,
-            "v1": json.loads((out / "session-2026-10-13.json").read_text()),
-            "v11": json.loads((out / "session-2026-10-13.v1_1.json").read_text())}
+    v11 = json.loads((out / "session-2026-10-13.json").read_text())
+    assert not (out / "session-2026-10-13.v1_1.json").exists(), "the preview file is superseded by the 1.1.0 record"
+    return {"out": out, "first": first, "v1": to_v1(v11), "v11": v11}
 
 
 # ---- ruling 2: review ids unique and stable -------------------------------------------------
@@ -139,14 +140,18 @@ def test_closed_phase(ts, phase, ruleset_calendar):
     assert phase_for(datetime.fromisoformat(ts), ruleset_calendar) == phase
 
 
-def test_closed_phase_written_as_afterhours_in_v1(settings, spec, tmp_path):
+def test_closed_phase_written_as_closed_in_1_1_0(settings, spec, tmp_path):
     from optpipe.orchestrator import load_inputs, run_session
     from optpipe.records.store import write_session
     inputs = load_inputs(Path(FIXTURE_DIR) / "session_inputs.yaml")
     rec, trace = run_session(settings, inputs, datetime.fromisoformat("2026-10-13T17:05:00-04:00"), Path(FIXTURE_DIR))
     assert rec["runs"][0]["phase"] == "closed"
     w = write_session(rec, trace, tmp_path)
-    v1 = json.loads(w.json.read_text())
+    on_disk = json.loads(w.json.read_text())
+    assert on_disk["schema_version"] == "1.1.0" and on_disk["runs"][0]["phase"] == "closed"
+    errs = spec.load_module("session_validator").validate(on_disk, base_dir=tmp_path)
+    assert not [e for e in errs if e.startswith(("INV-10", "INV-11", "INV-12", "INV-13"))], errs
+    v1 = to_v1(on_disk)                                    # v1 readers still get afterhours + a note
     assert v1["runs"][0]["phase"] == "afterhours" and "closed" in v1["runs"][0]["summary"]
 
 
@@ -157,11 +162,11 @@ def test_trace_sha256_matches_sidecar_and_trace_ref(two_runs):
     sha = hashlib.sha256(tp.read_bytes()).hexdigest()
     assert (out / "session-2026-10-13.trace.json.sha256").read_text().split()[0] == sha
     assert two_runs["v11"]["trace_ref"] == {"path": tp.name, "sha256": sha}
-    assert "trace_ref" not in two_runs["v1"], "trace_ref is a v1.1 proposal only"
+    assert "trace_ref" not in two_runs["v1"], "v1 readers never see the 1.1.0-only trace_ref"
     tr = json.loads(tp.read_text())
     jp = out / "session-2026-10-13.json"
-    assert tr["session_ref"]["path"] == jp.name
-    assert tr["session_ref"]["sha256"] == hashlib.sha256(jp.read_bytes()).hexdigest()
+    # record -> trace is pinned by hash (INV-11); trace -> record by name only (a hash both ways is a cycle)
+    assert tr["session_ref"] == {"path": jp.name, "sha256": None, "schema_version": "1.1.0"}
 
 
 # ---- generated code / patch in sync ------------------------------------------------------------

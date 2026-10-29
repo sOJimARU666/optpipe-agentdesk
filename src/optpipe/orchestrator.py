@@ -23,9 +23,9 @@ from .discovery import DiscoveryAgent
 from .discovery.agent import SETTINGS_SRC
 from .models.contracts import (DiscoveryInput, ManualCandidate, ManualCoverage, ManualEvent, ManualSource,
                                PlannerInput, PlannerParams, ResearchInput, RiskInput, WatcherInput)
-from .models.schema_v1 import SessionRecordV1
+from .models.schema_spec import SessionRecordSpec
 from .models.schema_v1_1 import SessionRecordV11
-from .records.compat import from_v1, to_v1
+from .records.compat import from_v1
 from .scenario import scenario_note
 from .models.session import HandoffTrace, RunTrace, SessionTrace
 from .planner import PlannerAgent
@@ -46,8 +46,7 @@ from .risk.engine import Calendar
 from .risk.ruleset import Ruleset, load_ruleset
 from .spec import SpecFiles, discover
 
-SCHEMA_VERSION = "1.1.0"   # internal superset (spec_patches/v1.1); written to disk as strict v1 via compat.to_v1
-V1_1_SCHEMA = REPO_ROOT / "spec_patches" / "v1.1" / "session.schema.json"
+SCHEMA_VERSION = "1.1.0"   # Doodle's spec 1.1.0 (pinned 2026-10-29): written as-is; compat.to_v1 only for v1 readers
 MODE = "paper"   # the only mode the schema allows; there is no live mode anywhere in this package
 
 
@@ -86,7 +85,7 @@ def phase_for(t: datetime, cal: Calendar) -> str:
     closed    weekend / NYSE holiday, before 04:00, or at/after the regular close
               (16:00; 13:00 on early-close days)                      [Doodle's ruling, v1.1]
     premarket 04:00 .. open-1h | preopen open-1h .. open | open open .. open+15m | intraday .. close
-    v1 has no "closed": records/compat.to_v1 writes it as "afterhours" and keeps the true phase in the summary.
+    Records are schema 1.1.0, so "closed" is written as-is (Doodle's INV-10 checks it against the NY clock).
     """
     n = t.astimezone(NY)
     if not cal.is_trading_day(n.date()):
@@ -277,7 +276,7 @@ class Orchestrator:
                 continue
             if q.market_status:
                 t = q.fetched_at or as_of
-                return F(q.market_status, f"src-nasdaq-{slug(sym)}-info-{t.astimezone(NY):%H%M}", t, "ok")
+                return F(q.market_status, f"src-nasdaq-{slug(sym)}-info-{as_of.astimezone(NY):%H%M}", t, "ok")  # same id as research (run hhmm)
         return MISS(note="no quote source reported a market status")
 
     # ---- one run ----
@@ -355,7 +354,7 @@ class Orchestrator:
         rec["idea_log"], recommendation = apply_reviews(rec["idea_log"], reviews, as_of)
         rec["data_quality"] = {**quality_index(rec), "notes": [recommendation, *notes][:50]}
         SessionRecordV11.model_validate(rec)
-        SessionRecordV1.model_validate(to_v1(rec))
+        SessionRecordSpec.model_validate(rec)          # Doodle's schema 1.1.0
 
         validation = self.validate(rec)
         trace = RunTrace(run_id=run_id, as_of=as_of, data_mode=self.p.data_mode, steps=self.steps,
@@ -407,18 +406,12 @@ class Orchestrator:
         return rec
 
     def validate(self, rec: dict) -> dict:
-        """errors: the written v1 record against Doodle's validator + schema (canonical).
-        v1_1_errors: the internal record against the same validator bound to the v1.1 proposal schema."""
+        """errors: the 1.1.0 record against Doodle's validator + schema (the INV-11 trace file check runs
+        on the written file, see validate_file)."""
         mod = self.spec.load_module("session_validator") if self.spec else None
         if mod is None:
             return {"validator": None, "errors": [], "note": "spec validate_session.py not found; pydantic only"}
-        out = {"validator": str(self.spec.path("session_validator")),
-               "errors": list(mod.validate(to_v1(rec)))}
-        m11 = self.spec.validator_for_schema(V1_1_SCHEMA)
-        if m11 is not None:
-            out["v1_1_schema"] = str(V1_1_SCHEMA.relative_to(REPO_ROOT))
-            out["v1_1_errors"] = list(m11.validate(copy.deepcopy(rec)))
-        return out
+        return {"validator": str(self.spec.path("session_validator")), "errors": list(mod.validate(copy.deepcopy(rec)))}
 
 
 def run_session(settings: Settings, inputs: SessionInputs, as_of: datetime, fixtures_dir: Optional[Path],
@@ -429,3 +422,13 @@ def run_session(settings: Settings, inputs: SessionInputs, as_of: datetime, fixt
     trace = existing_trace or SessionTrace(session_id=rec["session"]["id"])
     trace.runs.append(rt)
     return rec, trace
+
+
+def validate_file(settings: Settings, path: Path) -> Optional[list[str]]:
+    """Doodle's validator on a written record file, with base_dir so INV-11 checks trace_ref against the trace."""
+    import json
+    mod = discover(settings.spec_path).load_module("session_validator")
+    if mod is None:
+        return None
+    p = Path(path)
+    return list(mod.validate(json.loads(p.read_text()), base_dir=p.resolve().parent))

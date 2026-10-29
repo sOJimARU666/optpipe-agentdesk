@@ -79,8 +79,11 @@ class OutDir:
         sp = tp.with_name(tp.name + ".sha256")
         if not jp.exists():
             raise KeyError(date)
-        if vp.exists():
-            rec, origin = json.loads(vp.read_text()), "v1.1 preview"
+        main = json.loads(jp.read_text())
+        if main.get("schema_version") == "1.1.0":
+            rec, origin = main, "record (schema 1.1.0)"
+        elif vp.exists():
+            rec, origin = json.loads(vp.read_text()), "v1.1 preview (older output)"
         else:
             rec, origin = from_v1(json.loads(jp.read_text())), "v1 (upgraded for display)"
         integ, trace = Integrity(), None
@@ -96,9 +99,9 @@ class OutDir:
             if ref:
                 integ.trace_ref_ok = ref.get("sha256") == integ.trace_sha256 and ref.get("path") == tp.name
                 if not integ.trace_ref_ok:
-                    integ.problems.append("trace_ref in the v1.1 preview does not match the trace file")
+                    integ.problems.append("trace_ref in the record does not match the trace file")
             sref = trace.get("session_ref")
-            if sref:
+            if sref and sref.get("sha256"):
                 integ.session_ref_ok = sref.get("sha256") == sha256_bytes(jp.read_bytes())
                 if not integ.session_ref_ok:
                     integ.problems.append(f"trace.session_ref does not match {jp.name}")

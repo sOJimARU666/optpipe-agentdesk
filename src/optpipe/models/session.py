@@ -39,7 +39,7 @@ class RunTrace(Model):
 
 class FileRef(Model):
     path: str                       # relative to the trace file's directory
-    sha256: str
+    sha256: Optional[str] = None    # None in session_ref: the record pins the trace hash (trace_ref), not vice versa
     schema_version: Optional[str] = None
 
 
