@@ -221,16 +221,16 @@ def sync_approvals(s):
     return requality(s)
 
 
-def test_example_is_1_1_1_and_passes_inv14():
-    assert EXAMPLE["schema_version"] == "1.1.1" and vs.validate(EXAMPLE) == []
+def test_example_is_1_1_2_and_passes_inv14():
+    assert EXAMPLE["schema_version"] == "1.1.2" and vs.validate(EXAMPLE) == []
     assert vs.vertical_errors(tk(EXAMPLE)) == []
 
 
-def test_inv14_only_for_1_1_1():
-    for version in ("1.1.0", "1.1.1"):
+def test_inv14_only_for_1_1_1_and_later():
+    for version in ("1.1.0", "1.1.1", "1.1.2"):
         s = ex(version); tk(s)["max_loss"]["amount_usd"] = 350.0
         e = [x for x in vs.validate(s) if x.startswith("INV-14")]
-        assert bool(e) == (version == "1.1.1"), e
+        assert bool(e) == (version != "1.1.0"), e
 
 
 def credit_session(version="1.1.1", lim=("up", 4.00), stop=("down", 7.95), tgt=("up", 1.99)):

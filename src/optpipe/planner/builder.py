@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Optional
 
+from ..records.compat import V11 as RECORD_SCHEMA_VERSION
 from .verticals import validate_vertical
 from .ticks import TickRule
 from ..models.contracts import HYPOTHETICAL_LABEL, PlannerParams
@@ -173,7 +174,8 @@ def build_vertical(cand: dict, strategy: str, p: PlannerParams, as_of: datetime,
         "intended_event_ids": [],
         "dm_alternatives": [],          # filled by the planner once all ideas are known
     }
-    errs = validate_vertical(ticket)          # INV-14 (spec 1.1.1 rule), on every planner ticket: fail closed
+    # INV-14 (+ INV-15 once records are 1.1.2), on every planner ticket, for the schema we write: fail closed
+    errs = validate_vertical(ticket, RECORD_SCHEMA_VERSION)
     if errs:
         idea.reason = "INV-14: " + "; ".join(errs)
         return idea

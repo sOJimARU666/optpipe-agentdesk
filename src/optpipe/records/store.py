@@ -1,6 +1,6 @@
 """Persistence. Owner: Doodle (schema) / Poodle (code). Writes only to the local output directory.
 
-  session-<date>.json          canonical record, schema 1.1.1 (Doodle's spec 1.1.1) <- validate_session.py
+  session-<date>.json          canonical record, schema 1.1.2 (Doodle's spec 1.1.2) <- validate_session.py
                                per-run premarket_scans[]/global_snapshots[] + the singular v1 objects,
                                phase "closed", raw tick fields, trace_ref {path, sha256} -> trace (INV-11)
   session-<date>.trace.json    hand-off trace; session_ref = {path, sha256, sha256_covers, schema_version}.
@@ -22,7 +22,7 @@ from ..models.legacy import LegacySessionRecord
 from ..models.schema_v1 import SessionRecordV1
 from ..models.schema_spec import SessionRecordSpec
 from ..models.session import FileRef, SessionTrace
-from .compat import from_v1, strip_trace_ref, to_v1
+from .compat import V11_SHAPE, from_v1, strip_trace_ref, to_v1
 from .markdown import render_markdown
 
 
@@ -107,7 +107,7 @@ def write_session(rec: dict, trace: SessionTrace, out_dir: str | Path) -> Writte
 
 def read_session(path: str | Path) -> dict:
     d = json.loads(Path(path).read_text())
-    (SessionRecordSpec if d.get("schema_version") in ("1.1.0", "1.1.1") else SessionRecordV1).model_validate(d)
+    (SessionRecordSpec if d.get("schema_version") in V11_SHAPE else SessionRecordV1).model_validate(d)
     return d
 
 
@@ -115,7 +115,7 @@ def read_session_for_append(json_path: str | Path) -> dict:
     """1.1.x record as-is; older outputs: the v1.1 preview if present, else the upgraded v1 record."""
     jp = Path(json_path)
     d = read_session(jp)
-    if d.get("schema_version") in ("1.1.0", "1.1.1"):
+    if d.get("schema_version") in V11_SHAPE:
         return strip_trace_ref(d)
     vp = v1_1_path(jp)
     return strip_trace_ref(read_session(vp)) if vp.exists() else from_v1(d)

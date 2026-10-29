@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://poodle.local/trading/spec/session.schema.json",
   "title": "Paper US options trading session record",
-  "description": "Canonical per-session record for a PAPER-ONLY US equity options workflow (scan -> candidates -> tickets -> risk review -> approval -> simulated fill -> watch -> close). No broker, no live orders: 'executed' always means a simulated paper fill. Sourced market data is ALWAYS wrapped in a Field object (value + source_id + as_of + status). Identifiers, keys, and decisions (ticket legs, limit prices, verdicts) are plain values because they are authored by the system/user, not observed. Cross-object invariants that JSON Schema cannot express are listed in x-invariants and enforced by validate_session.py. Schema v1.1 / 1.1.1 (see CHANGELOG.md; 1.1.1 adds INV-13 credit rounding and INV-14 vertical consistency; adds per-run premarket_scans/global_snapshots, raw tick fields, trace_ref, integer open interest, 'closed' phase) is a backward-compatible superset of v1.0: every valid 1.0.0 record is a valid record under this schema.",
+  "description": "Canonical per-session record for a PAPER-ONLY US equity options workflow (scan -> candidates -> tickets -> risk review -> approval -> simulated fill -> watch -> close). No broker, no live orders: 'executed' always means a simulated paper fill. Sourced market data is ALWAYS wrapped in a Field object (value + source_id + as_of + status). Identifiers, keys, and decisions (ticket legs, limit prices, verdicts) are plain values because they are authored by the system/user, not observed. Cross-object invariants that JSON Schema cannot express are listed in x-invariants and enforced by validate_session.py. Schema v1.1 / 1.1.1 / 1.1.2 (see CHANGELOG.md; 1.1.2 adds INV-15 vertical stop/target comparison direction; 1.1.1 adds INV-13 credit rounding and INV-14 vertical consistency; adds per-run premarket_scans/global_snapshots, raw tick fields, trace_ref, integer open interest, 'closed' phase) is a backward-compatible superset of v1.0: every valid 1.0.0 record is a valid record under this schema.",
   "$comment": "MARKET HOURS: all US market-hours, DTE, expiry, hold-window, and 'during market hours' logic MUST be computed in America/New_York (IANA zone via zoneinfo), never by a fixed offset from Europe/Berlin. US and EU DST transitions differ: e.g. 2026-10-25 (EU ends DST) to 2026-11-01 (US ends DST) the NY-Berlin gap is 5h, so the 09:30 ET open is 14:30 Berlin, not 15:30; likewise in March (US starts 2nd Sunday, EU last Sunday). Berlin times are display-only.",
   "x-market-hours": {
     "timezone": "America/New_York",
@@ -25,11 +25,12 @@
     "INV-07 idea_log history is chronological and current_status equals the last history entry's status",
     "INV-08 a ticket's legs reference contract_ids present in the referenced candidate's option_chain_slices",
     "INV-09 Field.as_of must be <= the fetched_at of its source when status is ok or stale (data cannot be newer than its fetch)",
-    "INV-10 (v1.1) run phase vs NY clock: 'closed' requires schema_version 1.1.0 and runs[].started (America/New_York) in the closed window (before 04:00, at/after 16:00 or the 13:00 early close, weekend, NYSE holiday per risk_rules.yaml config.market_hours); in 1.1.0 records every run started in that window must have phase 'closed' and 'afterhours' is not used",
-    "INV-11 (v1.1) trace_ref requires schema_version 1.1.0; when validating a file, trace_ref.path resolves inside the record's directory, exists, and its SHA-256 equals trace_ref.sha256",
-    "INV-12 (v1.1) premarket_scans[] and global_snapshots[] require schema_version 1.1.0 or 1.1.1; within each array run_id is unique and references an existing runs[].run_id; when the singular premarket_scan / global_snapshot is also present its run_id must appear in the array",
-    "INV-13 (v1.1) raw tick fields (limit_price.raw_amount/tick_size/rounding; Condition.raw_value/tick_size/rounding on ticket entry/exit/stop/target rules and watcher_rules) require schema_version 1.1.0 or 1.1.1; tick_size must equal the tick rule for the ticket's underlying at the raw price (risk_rules.yaml config.tick_rules); rounded == round(raw, tick_size, rounding) exactly (Decimal); debit limit rounds down, stop conditions round up, target conditions round down; for 1.1.1 records credit verticals (bull_put_credit_spread, bear_call_credit_spread) must round the min-credit limit up, stop conditions down and target conditions up",
-    "INV-14 (1.1.1 records only) vertical tickets (bull_call_debit_spread, bear_put_debit_spread, bull_put_credit_spread, bear_call_credit_spread): legs must form the declared vertical (2 legs, same type and expiry, 1:1, one buy one sell, strikes in the right order, matching price_type); width, strikes and the LIMIT price (max debit / min credit) come from the legs and limit_price; stop/target = the position_value condition (cost to close) in stop_rules/target_rules (exactly one each). Credit: 0 < credit < width; credit < stop < width; 0 <= target < credit; max_loss = (width - credit)*100*qty; max_profit = credit*100*qty; breakeven = short_strike - credit (put) / + credit (call); (stop - credit)*100*qty <= max_loss. Debit: 0 < debit < width; 0 < stop < debit; debit < target <= width; max_loss = debit*100*qty; max_profit = (width - debit)*100*qty; breakeven = long_strike + debit (call) / - debit (put). Stored max_loss/max_profit amount_usd and the breakeven at the limit must equal the computed values (0.01 tolerance on $ amounts), unlimited false, at_price (if set) = limit; any other breakevens[] must match the formula at their own at_price. Exact Decimal arithmetic; inequalities strict as written."
+    "INV-10 (v1.1) run phase vs NY clock: 'closed' requires schema_version 1.1.0, 1.1.1 or 1.1.2 and runs[].started (America/New_York) in the closed window (before 04:00, at/after 16:00 or the 13:00 early close, weekend, NYSE holiday per risk_rules.yaml config.market_hours); in 1.1.x records every run started in that window must have phase 'closed' and 'afterhours' is not used",
+    "INV-11 (v1.1) trace_ref requires schema_version 1.1.0, 1.1.1 or 1.1.2; when validating a file, trace_ref.path resolves inside the record's directory, exists, and its SHA-256 equals trace_ref.sha256",
+    "INV-12 (v1.1) premarket_scans[] and global_snapshots[] require schema_version 1.1.0, 1.1.1 or 1.1.2; within each array run_id is unique and references an existing runs[].run_id; when the singular premarket_scan / global_snapshot is also present its run_id must appear in the array",
+    "INV-13 (v1.1) raw tick fields (limit_price.raw_amount/tick_size/rounding; Condition.raw_value/tick_size/rounding on ticket entry/exit/stop/target rules and watcher_rules) require schema_version 1.1.0, 1.1.1 or 1.1.2; tick_size must equal the tick rule for the ticket's underlying at the raw price (risk_rules.yaml config.tick_rules); rounded == round(raw, tick_size, rounding) exactly (Decimal); debit limit rounds down, stop conditions round up, target conditions round down; for 1.1.1 records credit verticals (bull_put_credit_spread, bear_call_credit_spread) must round the min-credit limit up, stop conditions down and target conditions up",
+    "INV-14 (1.1.1 and 1.1.2 records) vertical tickets (bull_call_debit_spread, bear_put_debit_spread, bull_put_credit_spread, bear_call_credit_spread): legs must form the declared vertical (2 legs, same type and expiry, 1:1, one buy one sell, strikes in the right order, matching price_type); width, strikes and the LIMIT price (max debit / min credit) come from the legs and limit_price; stop/target = the position_value condition (cost to close) in stop_rules/target_rules (exactly one each). Credit: 0 < credit < width; credit < stop < width; 0 <= target < credit; max_loss = (width - credit)*100*qty; max_profit = credit*100*qty; breakeven = short_strike - credit (put) / + credit (call); (stop - credit)*100*qty <= max_loss. Debit: 0 < debit < width; 0 < stop < debit; debit < target <= width; max_loss = debit*100*qty; max_profit = (width - debit)*100*qty; breakeven = long_strike + debit (call) / - debit (put). Stored max_loss/max_profit amount_usd and the breakeven at the limit must equal the computed values (0.01 tolerance on $ amounts), unlimited false, at_price (if set) = limit; any other breakevens[] must match the formula at their own at_price. Exact Decimal arithmetic; inequalities strict as written.",
+    "INV-15 (1.1.2 records only) vertical tickets: the comparison operator of the single position_value condition (cost to close; the same condition INV-14 reads) in stop_rules and in target_rules. Debit verticals (bull_call_debit_spread, bear_put_debit_spread): stop op 'lte', target op 'gte'. Credit verticals (bull_put_credit_spread, bear_call_credit_spread), where position_value is the cost to buy the spread back: stop op 'gte', target op 'lte'. A missing or duplicate condition is reported by INV-14 only."
   ],
   "type": "object",
   "additionalProperties": false,
@@ -56,9 +57,10 @@
       "enum": [
         "1.0.0",
         "1.1.0",
-        "1.1.1"
+        "1.1.1",
+        "1.1.2"
       ],
-      "description": "1.0.0 = v1 record; 1.1.0 = may use v1.1 additions (run phase 'closed', trace_ref, premarket_scans/global_snapshots, raw tick fields); 1.1.1 = same shape as 1.1.0 plus the stricter checks INV-13 credit directions and INV-14 vertical consistency. Integer open_interest applies to all (integral floats like 472.0 still validate)."
+      "description": "1.0.0 = v1 record; 1.1.0 = may use v1.1 additions (run phase 'closed', trace_ref, premarket_scans/global_snapshots, raw tick fields); 1.1.1 = same shape as 1.1.0 plus the stricter checks INV-13 credit directions and INV-14 vertical consistency; 1.1.2 = same shape and checks as 1.1.1 plus INV-15 vertical stop/target comparison direction. Integer open_interest applies to all (integral floats like 472.0 still validate)."
     },
     "session": {
       "type": "object",
@@ -233,7 +235,7 @@
               "afterhours",
               "closed"
             ],
-            "description": "Computed on the America/New_York clock from started. closed (v1.1 only) = before 04:00 or at/after the regular close (16:00, 13:00 on early-close days) on a trading day, or a weekend / NYSE holiday. In 1.1.0 records a run started in that window MUST be 'closed' and 'closed' MUST NOT be used outside it (INV-10); 'afterhours' remains valid only in 1.0.0 records."
+            "description": "Computed on the America/New_York clock from started. closed (v1.1 only) = before 04:00 or at/after the regular close (16:00, 13:00 on early-close days) on a trading day, or a weekend / NYSE holiday. In 1.1.x records a run started in that window MUST be 'closed' and 'closed' MUST NOT be used outside it (INV-10); 'afterhours' remains valid only in 1.0.0 records."
           },
           "started": {
             "$ref": "#/$defs/TsPair"
@@ -409,7 +411,7 @@
       }
     },
     "premarket_scans": {
-      "description": "(v1.1, 1.1.0 records only) one premarket scan per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'premarket_scan', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+      "description": "(v1.1, 1.1.0 / 1.1.1 / 1.1.2 records only) one premarket scan per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'premarket_scan', if present, is kept for v1 readers and must be one of these entries (same run_id).",
       "type": "array",
       "items": {
         "$ref": "#/properties/premarket_scan"
@@ -480,7 +482,7 @@
       }
     },
     "global_snapshots": {
-      "description": "(v1.1, 1.1.0 records only) one global snapshot per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'global_snapshot', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+      "description": "(v1.1, 1.1.0 / 1.1.1 / 1.1.2 records only) one global snapshot per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'global_snapshot', if present, is kept for v1 readers and must be one of these entries (same run_id).",
       "type": "array",
       "items": {
         "$ref": "#/properties/global_snapshot"
@@ -2573,9 +2575,9 @@
       "debit limit_price": "down",
       "debit stop_rules conditions": "up",
       "debit target_rules conditions": "down",
-      "credit limit_price (1.1.1)": "up",
-      "credit stop_rules conditions (1.1.1)": "down",
-      "credit target_rules conditions (1.1.1)": "up",
+      "credit limit_price (1.1.1, 1.1.2)": "up",
+      "credit stop_rules conditions (1.1.1, 1.1.2)": "down",
+      "credit target_rules conditions (1.1.1, 1.1.2)": "up",
       "other / watcher conditions": "any (consistency only); credit in 1.1.0 records: any"
     }
   }

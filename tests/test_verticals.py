@@ -10,7 +10,7 @@ from decimal import Decimal
 
 import pytest
 
-from optpipe.planner.verticals import from_ticket, validate_vertical
+from optpipe.planner.verticals import direction_errors, from_ticket, record_errors, validate_vertical
 
 
 def _cond(value, raw, tick, rounding, op="lte"):
@@ -224,15 +224,84 @@ def test_structure_errors(mutate, needle):
     _only(validate_vertical(t), needle)
 
 
+# ---- INV-15 (spec 1.1.2): stop/target op direction, 1.1.2 records only ------------------------------------
+OPS = {"credit": {"stop": "gte", "target": "lte"}, "debit": {"stop": "lte", "target": "gte"}}
+ALL_OPS = ("gte", "lte", "gt", "lt", "eq")
+
+
 @pytest.mark.parametrize("s", list(GOOD))
-def test_stop_op_direction_spec_1_1_2(s):
-    """credit stop: debit to close rises to the stop (gte); debit stop: value falls to it (lte)."""
-    want = "gte" if "credit" in s else "lte"
-    assert GOOD[s]["stop_rules"][0]["conditions"][0]["op"] == want and validate_vertical(GOOD[s]) == []
-    for bad in ({"gte", "lte", "gt", "lt", "eq"} - {want}):
+@pytest.mark.parametrize("kind", ["stop", "target"])
+def test_inv15_direction_only_for_1_1_2_records(s, kind):
+    fam = "credit" if "credit" in s else "debit"
+    want = OPS[fam][kind]
+    assert GOOD[s][f"{kind}_rules"][0]["conditions"][0]["op"] == want
+    assert validate_vertical(GOOD[s], "1.1.2") == [] and direction_errors(GOOD[s]) == []
+    for bad in set(ALL_OPS) - {want}:                    # strict: lt / gt fail too
         t = copy.deepcopy(GOOD[s])
-        t["stop_rules"][0]["conditions"][0]["op"] = bad
-        _only(validate_vertical(t), f"stop op {bad!r} must be {want!r}")
+        t[f"{kind}_rules"][0]["conditions"][0]["op"] = bad
+        errs = validate_vertical(t, "1.1.2")
+        assert len(errs) == 1 and errs[0].startswith(
+            f"INV-15 {kind} position_value op is {bad!r}, must be {want!r} for a {fam} vertical ({s}): "), errs
+        assert validate_vertical(t, "1.1.1") == [], "1.1.1 records are not affected by INV-15"
+        assert validate_vertical(t, "1.1.0") == [] and validate_vertical(t, "1.0.0") == []
+
+
+@pytest.mark.parametrize("s", list(GOOD))
+@pytest.mark.parametrize("kind", ["stop", "target"])
+@pytest.mark.parametrize("how", ["missing", "duplicate"])
+def test_inv15_skips_a_side_inv14_already_flags(s, kind, how):
+    t = copy.deepcopy(GOOD[s])
+    rules = t[f"{kind}_rules"]
+    wrong = next(o for o in ALL_OPS if o != rules[0]["conditions"][0]["op"])
+    if how == "missing":
+        rules[0]["conditions"][0]["metric"] = "underlying_price"
+    else:
+        rules[0]["conditions"].append({**rules[0]["conditions"][0], "op": wrong})
+    assert direction_errors(t) == []
+    errs = validate_vertical(t, "1.1.2")
+    assert errs and not any(e.startswith("INV-15") for e in errs) and any("exactly one position_value" in e for e in errs)
+
+
+def test_inv14_still_applies_to_1_1_2_records():
+    t = copy.deepcopy(GOOD["bull_call_debit_spread"])
+    t["max_loss"]["amount_usd"] += 1
+    assert validate_vertical(t, "1.1.0") == []
+    assert validate_vertical(t, "1.1.1") == validate_vertical(t, "1.1.2") != []
+
+
+def test_record_errors_gated_by_schema_version():
+    t = copy.deepcopy(GOOD["bear_call_credit_spread"])
+    t["target_rules"][0]["conditions"][0]["op"] = "gte"
+    t["ticket_id"] = "tkt-x"
+    assert record_errors({"schema_version": "1.1.1", "tickets": [t]}) == []
+    errs = record_errors({"schema_version": "1.1.2", "tickets": [t]})
+    assert len(errs) == 1 and errs[0].startswith("tkt-x: INV-15 target position_value op is 'gte', must be 'lte'")
+
+
+@pytest.mark.parametrize("s", list(GOOD))
+@pytest.mark.parametrize("kind", ["stop", "target"])
+@pytest.mark.parametrize("op", ALL_OPS)
+def test_inv15_parity_with_spec_direction_errors(validator, s, kind, op):
+    """Same messages as the pinned spec's validate_session.direction_errors (verbatim)."""
+    if not hasattr(validator, "direction_errors"):
+        pytest.skip("spec < 1.1.2")
+    t = copy.deepcopy(GOOD[s])
+    t[f"{kind}_rules"][0]["conditions"][0]["op"] = op
+    assert direction_errors(t) == validator.direction_errors(copy.deepcopy(t))
+
+
+def test_planner_records_are_1_1_2_and_pass_inv15(pipeline_output, validator):
+    rec = pipeline_output["record"]
+    assert rec["schema_version"] == "1.1.2" and rec["tickets"] and record_errors(rec) == []
+    assert [e for e in validator.validate(copy.deepcopy(rec)) if e.startswith(("INV-14", "INV-15"))] == []
+    bad = copy.deepcopy(rec)
+    tk = next(t for t in bad["tickets"] if t["strategy"] in GOOD)
+    pv = next(c for r in tk["stop_rules"] for c in r["conditions"] if c["metric"] == "position_value")
+    pv["op"] = {"gte": "gt", "lte": "lt"}[pv["op"]]                          # strict: gt/lt are wrong
+    mine = record_errors(bad)
+    theirs = [e for e in validator.validate(copy.deepcopy(bad)) if e.startswith("INV-15")]
+    assert len(mine) == len(theirs) == 1 and theirs[0] == "INV-15 " + mine[0].split(": INV-15 ", 1)[0] + " " + mine[0].split(": INV-15 ", 1)[1]
+    assert record_errors({**bad, "schema_version": "1.1.1"}) == []
 
 
 def test_stop_found_among_other_conditions():
@@ -274,7 +343,8 @@ def test_every_planner_ticket_is_checked_and_fails_closed(monkeypatch, tmp_path,
     from optpipe.planner import builder
     from conftest import FIXTURES
     seen = []
-    monkeypatch.setattr(builder, "validate_vertical", lambda t: seen.append(t["ticket_id"]) or ["synthetic error"])
+    monkeypatch.setattr(builder, "validate_vertical", lambda t, sv=None: seen.append(t["ticket_id"]) or ["synthetic error"])
+    # (the builder passes the schema version it writes; INV-15 joins once that is 1.1.2)
     assert main(["run", "--fixtures", str(FIXTURES), "--out", str(tmp_path)]) in (0, 1)
     out = json.loads((tmp_path / "session-2026-10-13.json").read_text())
     assert set(seen) >= {t["ticket_id"] for t in rec["tickets"]}, "every ticket the planner builds is validated"
@@ -338,6 +408,12 @@ def test_parity_with_spec_vertical_errors(validator, s, m):
     t = copy.deepcopy(GOOD[s])
     _MUTATIONS[m](t)
     spec_errs = validator.vertical_errors(copy.deepcopy(t))
-    extras = ("stop op ", "tick", "rounding is", "rounded")          # 1.1.2 stop op + INV-13 tick checks: not INV-14
-    mine = [e for e in validate_vertical(t) if not any(x in e for x in extras)]
+    extras = ("tick", "rounding is", "rounded")                       # INV-13 tick checks: not part of INV-14
+    mine = [e for e in validate_vertical(t, "1.1.1") if not any(x in e for x in extras)]   # INV-14 only
     assert bool(mine) == bool(spec_errs), (mine, spec_errs)
+
+
+def test_one_record_version_everywhere():
+    from optpipe import orchestrator
+    from optpipe.records import compat
+    assert orchestrator.SCHEMA_VERSION == compat.V11 == "1.1.2" and "1.1.2" in compat.V11_SHAPE

@@ -1,4 +1,4 @@
-"""Validate a session record (schema v1.0.0, v1.1.0 or v1.1.1): JSON Schema (draft 2020-12) + x-invariants INV-01..14.
+"""Validate a session record (schema v1.0.0, v1.1.0, v1.1.1 or v1.1.2): JSON Schema (draft 2020-12) + x-invariants INV-01..15.
 Usage: python validate_session.py session.example.json [more.json ...]"""
 from __future__ import annotations
 
@@ -90,13 +90,14 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
             if is_field(o) and o["status"] in ("ok", "stale") and o["source_id"] in src:
                 if datetime.fromisoformat(o["as_of"]) > datetime.fromisoformat(src[o["source_id"]]["fetched_at"]):
                     errs.append(f"INV-09 {p} as_of after source fetch")
-    v11 = sess["schema_version"] in ("1.1.0", "1.1.1")   # v1.1 shape
-    v111 = sess["schema_version"] == "1.1.1"            # stricter 1.1.1 checks (INV-13 credit, INV-14)
+    v11 = sess["schema_version"] in ("1.1.0", "1.1.1", "1.1.2")   # v1.1 shape
+    v111 = sess["schema_version"] in ("1.1.1", "1.1.2")          # stricter 1.1.1 checks (INV-13 credit, INV-14), kept in 1.1.2
+    v112 = sess["schema_version"] == "1.1.2"                     # 1.1.2 checks (INV-15 stop/target operators)
     # INV-10 run phase vs NY clock (v1.1 'closed')
     for r in sess["runs"]:
         closed = CAL.is_closed(datetime.fromisoformat(r["started"]["ny"]))
         if r["phase"] == "closed" and not v11:
-            errs.append(f"INV-10 run {r['run_id']} phase 'closed' requires schema_version 1.1.0 or 1.1.1")
+            errs.append(f"INV-10 run {r['run_id']} phase 'closed' requires schema_version 1.1.0, 1.1.1 or 1.1.2")
         elif r["phase"] == "closed" and not closed:
             errs.append(f"INV-10 run {r['run_id']} phase 'closed' but started {r['started']['ny']} is inside NY 04:00-close on a trading day")
         elif v11 and closed and r["phase"] != "closed":
@@ -105,7 +106,7 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
     tr = sess.get("trace_ref")
     if tr is not None:
         if not v11:
-            errs.append("INV-11 trace_ref requires schema_version 1.1.0 or 1.1.1")
+            errs.append("INV-11 trace_ref requires schema_version 1.1.0, 1.1.1 or 1.1.2")
         elif base_dir is not None:
             base = Path(base_dir).resolve()
             f = (base / tr["path"]).resolve()
@@ -207,7 +208,7 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
         if arr not in sess:
             continue
         if not v11:
-            errs.append(f"INV-12 {arr} requires schema_version 1.1.0 or 1.1.1")
+            errs.append(f"INV-12 {arr} requires schema_version 1.1.0, 1.1.1 or 1.1.2")
             continue
         ids = [x["run_id"] for x in sess[arr]]
         if len(ids) != len(set(ids)):
@@ -220,7 +221,7 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
     # INV-13 raw tick fields (v1.1): tick per rule, rounded == round(raw, tick, direction), safe directions
     def tick_check(where, underlying, rounded, raw, tick, direction, need=None):
         if not v11:
-            errs.append(f"INV-13 {where} raw tick fields require schema_version 1.1.0 or 1.1.1")
+            errs.append(f"INV-13 {where} raw tick fields require schema_version 1.1.0, 1.1.1 or 1.1.2")
             return
         if need and direction != need:
             errs.append(f"INV-13 {where} rounding {direction!r}, must be {need!r}")
@@ -231,7 +232,7 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
     for t in sess["tickets"]:
         lp = t["limit_price"]
         credit111 = v111 and vt.is_vertical(t["strategy"]) and vt.VERTICALS[t["strategy"]][1] == "credit"
-        # debit: limit down / stop up / target down; 1.1.1 credit verticals: min credit up / stop down / target up
+        # debit: limit down / stop up / target down; 1.1.1+ credit verticals: min credit up / stop down / target up
         need_lim = "up" if credit111 else ("down" if lp["price_type"] == "debit" else None)
         need_stop, need_tgt = ("down", "up") if credit111 else ("up", "down")
         if "raw_amount" in lp:
@@ -246,11 +247,16 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
         for j, c in enumerate(w["conditions"]):
             if "raw_value" in c and tk:
                 tick_check(f"watch {w['watch_id']}[{j}]", tk["underlying"], c["value"], c["raw_value"], c["tick_size"], c["rounding"])
-    # INV-14 vertical consistency (1.1.1 only)
+    # INV-14 vertical consistency (1.1.1 and 1.1.2)
     if v111:
         for t in sess["tickets"]:
             if vt.is_vertical(t["strategy"]):
                 errs.extend(f"INV-14 {t['ticket_id']} {m}" for m in vertical_errors(t))
+    # INV-15 vertical stop/target comparison direction (1.1.2 only)
+    if v112:
+        for t in sess["tickets"]:
+            if vt.is_vertical(t["strategy"]):
+                errs.extend(f"INV-15 {t['ticket_id']} {m}" for m in direction_errors(t))
     # data_quality must be regenerable
     qi = quality_index(sess)
     for k in ("missing", "stale", "conflicting"):
@@ -260,9 +266,36 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
 
 
 def _pv(t, grp):
-    """position_value conditions (cost to close the spread) in stop_rules / target_rules; INV-14 needs exactly one"""
+    """position_value conditions (cost to close the spread) in stop_rules / target_rules; INV-14 needs exactly one, INV-15 checks its op"""
     cs = [c for r in t.get(grp, []) for c in r["conditions"] if c["metric"] == "position_value"]
     return cs
+
+
+# INV-15: required op on the position_value (cost to close) condition, by price_type
+DIRECTION_OPS = {"debit": {"stop": "lte", "target": "gte"}, "credit": {"stop": "gte", "target": "lte"}}
+_WHY = {
+    ("debit", "stop"): "a debit spread is stopped out when its value falls to the stop",
+    ("debit", "target"): "a debit spread hits its target when its value rises to the target",
+    ("credit", "stop"): "a credit spread is stopped out when the buy-back cost rises to the stop",
+    ("credit", "target"): "a credit spread hits its target when the buy-back cost falls to the target",
+}
+
+
+def direction_errors(t: dict) -> list[str]:
+    """INV-15: comparison operator of the single position_value stop / target condition (same lookup as INV-14).
+    Debit verticals: stop lte, target gte. Credit verticals (value = cost to buy back): stop gte, target lte.
+    A missing or duplicate condition is reported by INV-14 and skipped here."""
+    ptype = vt.VERTICALS[t["strategy"]][1]
+    out = []
+    for kind, grp in (("stop", "stop_rules"), ("target", "target_rules")):
+        cs = _pv(t, grp)
+        if len(cs) != 1:
+            continue
+        op, want = cs[0]["op"], DIRECTION_OPS[ptype][kind]
+        if op != want:
+            out.append(f"{kind} position_value op is {op!r}, must be {want!r} for a {ptype} vertical ({t['strategy']}): "
+                       f"{_WHY[(ptype, kind)]} (position_value {want} {cs[0]['value']})")
+    return out
 
 
 def vertical_errors(t: dict) -> list[str]:

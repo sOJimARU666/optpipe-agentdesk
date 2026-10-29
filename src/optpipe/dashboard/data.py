@@ -83,7 +83,7 @@ class OutDir:
         if not jp.exists():
             raise KeyError(date)
         main = json.loads(jp.read_text())
-        if main.get("schema_version") in ("1.1.0", "1.1.1"):
+        if main.get("schema_version") in ("1.1.0", "1.1.1", "1.1.2"):
             rec, origin = main, f"record (schema {main['schema_version']})"
         elif vp.exists():
             rec, origin = json.loads(vp.read_text()), "v1.1 preview (older output)"

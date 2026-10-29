@@ -13,7 +13,7 @@ from typing import Optional
 from pydantic import AwareDatetime, Field
 
 from .common import Bias, Model
-# Runtime contracts use the PINNED spec schema (1.1.1); schema_v1_1 (the spec_patches proposal) is tooling only.
+# Runtime contracts use the PINNED spec schema (1.1.2); schema_v1_1 (the spec_patches proposal) is tooling only.
 from .schema_spec import (Candidate, EventCalendar, GlobalSnapshot, IdeaLogItem, PremarketScan, RiskReview,
                           SessionRecordSpec, Source, Ticket, WatcherRule)
 

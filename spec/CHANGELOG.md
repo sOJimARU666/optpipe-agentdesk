@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.2 (2026-10-29)
+`schema_version` accepts `1.0.0 | 1.1.0 | 1.1.1 | 1.1.2`. 1.1.2 has the same shape as 1.1.1 and keeps every 1.1.1 check (INV-13 credit rounding, INV-14); the new check below applies to 1.1.2 records only, and 1.0.0 / 1.1.0 / 1.1.1 records validate exactly as before (only the wording of the "requires schema_version ..." messages for INV-10..13 now lists 1.1.2). The 1.1.1 spec is frozen in `_v1_1_1_backup/`.
+- **INV-15 stop/target direction (1.1.2):** for the four verticals, the comparison operator of the single `position_value` stop and target condition (the same condition INV-14 reads, via the shared `_pv` lookup) is enforced. Debit verticals (bull call / bear put): stop `lte`, target `gte`. Credit verticals (bull put / bear call), where position_value is the cost to buy the spread back: stop `gte`, target `lte`. Any other operator (including `lt` / `gt`, `eq`, `cross_*`) fails with a message naming the side, the found and the required operator and why. A missing or duplicate condition is reported by INV-14 only. New `validate_session.direction_errors`.
+- Closes the 1.1.1 open item on stop/target comparison operators.
+- `risk_rules.md`: new "Stop / target direction" section after "Vertical consistency"; tick-rounding and vertical-consistency headings now say 1.1.1 / 1.1.2. The risk ruleset stays **1.1.1**: no rule logic changed and the ruleset does not embed the schema version (only the `config.tick_rules.directions` comment in `risk_rules.yaml` now says "1.1.1 / 1.1.2").
+- `session.schema.json`: enum and `schema_version` description, INV-15 in `x-invariants`, INV-10..14 and `x-tick-rules` wording list 1.1.2.
+- The example is regenerated as 1.1.2. Its JPM bull call debit spread already uses `lte` for the stop (1.52) and `gte` for the target (6.05), so only `schema_version` changed.
+- Tests: `test_direction_v1_1_2.py` (96): every operator on the stop and the target for all four verticals, message content, other conditions ignored, missing/duplicate left to INV-14, integration through `validate()` for the JPM debit and a credit session, and version gating (the same wrong directions pass in 1.0.0 / 1.1.0 / 1.1.1 records; 1.1.2 still enforces INV-13 credit and INV-14). Existing tests updated for the example version (1.1.2), the INV-12 message, and INV-14 gating now also covering 1.1.2. 390 tests in total.
+- `conftest.py` also ignores `_v1_1_1_backup/`, which is also left out of `MANIFEST.sha256` like the other backups. `VERSION` is 1.1.2 and `MANIFEST.sha256` is regenerated.
+
 ## 1.1.1 (2026-10-29)
 `schema_version` accepts `1.0.0 | 1.1.0 | 1.1.1`. 1.1.1 has the same shape as 1.1.0; the new checks below apply to 1.1.1 records only, and 1.0.0 / 1.1.0 records validate exactly as before. The 1.1.0 spec is frozen in `_v1_1_0_backup/`.
 - **INV-13 credit rounding (1.1.1):** a credit vertical (bull put / bear call) rounds the min-credit limit **up**, stop conditions **down** and target conditions **up**. Debit tickets are unchanged: limit down, stop up, target down. The directions are listed in `config.tick_rules.directions` and in the schema's `x-tick-rules`.
@@ -10,7 +20,7 @@
 - The example is regenerated as 1.1.1. Its JPM bull call debit spread already satisfied INV-14 (max loss 310, max profit 690, breakeven 343.10), so no values changed.
 - Tests: `test_verticals_v1_1_1.py` (90): pass and fail cases for every INV-14 clause on all four verticals, structure and stored-field checks, credit rounding through `validate()`, version gating, and R04.
 - `conftest.py` also ignores `_v1_1_0_backup/`. `VERSION` is 1.1.1 and `MANIFEST.sha256` is regenerated.
-- Open: INV-14 does not check the stop/target comparison operators (e.g. a credit stop should be `gte`). 1.1.0 records still force stop up / target down on credit tickets, which is wrong for credit spreads; use 1.1.1 for credit tickets.
+- ~~Open: INV-14 does not check the stop/target comparison operators (e.g. a credit stop should be `gte`).~~ Closed in 1.1.2 by INV-15. Still applies: 1.1.0 records force stop up / target down on credit tickets, which is wrong for credit spreads; use 1.1.1 or later for credit tickets.
 
 ## 1.1.0 (2026-10-29)
 Backward compatible: every valid 1.0.0 record is still valid (tested against `_v1_backup/session.example.json` and the pipeline's v1 `session-2026-10-13.json`). The pre-merge spec is in `_v1_backup/`.

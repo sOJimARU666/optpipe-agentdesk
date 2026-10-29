@@ -4,7 +4,7 @@ Regenerate: .venv/bin/python scripts/gen_models.py
 """
 from __future__ import annotations
 
-SCHEMA_SHA256 = "ea3b2abc1bb7029d09f70255eedc8e1bd9168caeb0e2adca0ff5c33bbc7b8efd"
+SCHEMA_SHA256 = "48ec12872ccf1c1bc04e16c181ca4ca386ac76761881da31785f4bab40f4dc8d"
 SCHEMA_SOURCE = "<spec>/session.schema.json"
 
 from datetime import date as date_aliased
@@ -33,6 +33,7 @@ class SchemaVersion(Enum):
     field_1_0_0 = '1.0.0'
     field_1_1_0 = '1.1.0'
     field_1_1_1 = '1.1.1'
+    field_1_1_2 = '1.1.2'
 
 
 class NyBerlinOffsetHours(IntEnum):
@@ -853,7 +854,7 @@ class Run(BaseModel):
     run_id: Id
     phase: Phase = Field(
         ...,
-        description="Computed on the America/New_York clock from started. closed (v1.1 only) = before 04:00 or at/after the regular close (16:00, 13:00 on early-close days) on a trading day, or a weekend / NYSE holiday. In 1.1.0 records a run started in that window MUST be 'closed' and 'closed' MUST NOT be used outside it (INV-10); 'afterhours' remains valid only in 1.0.0 records.",
+        description="Computed on the America/New_York clock from started. closed (v1.1 only) = before 04:00 or at/after the regular close (16:00, 13:00 on early-close days) on a trading day, or a weekend / NYSE holiday. In 1.1.x records a run started in that window MUST be 'closed' and 'closed' MUST NOT be used outside it (INV-10); 'afterhours' remains valid only in 1.0.0 records.",
     )
     started: TsPair
     market_status: StringField = Field(
@@ -1331,7 +1332,7 @@ class PaperUSOptionsTradingSessionRecord(BaseModel):
     )
     schema_version: SchemaVersion = Field(
         ...,
-        description="1.0.0 = v1 record; 1.1.0 = may use v1.1 additions (run phase 'closed', trace_ref, premarket_scans/global_snapshots, raw tick fields); 1.1.1 = same shape as 1.1.0 plus the stricter checks INV-13 credit directions and INV-14 vertical consistency. Integer open_interest applies to all (integral floats like 472.0 still validate).",
+        description="1.0.0 = v1 record; 1.1.0 = may use v1.1 additions (run phase 'closed', trace_ref, premarket_scans/global_snapshots, raw tick fields); 1.1.1 = same shape as 1.1.0 plus the stricter checks INV-13 credit directions and INV-14 vertical consistency; 1.1.2 = same shape and checks as 1.1.1 plus INV-15 vertical stop/target comparison direction. Integer open_interest applies to all (integral floats like 472.0 still validate).",
     )
     session: Session
     sources: list[Source]
@@ -1343,12 +1344,12 @@ class PaperUSOptionsTradingSessionRecord(BaseModel):
     premarket_scan: PremarketScanModel
     premarket_scans: list[PremarketScan] | None = Field(
         None,
-        description="(v1.1, 1.1.0 records only) one premarket scan per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'premarket_scan', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+        description="(v1.1, 1.1.0 / 1.1.1 / 1.1.2 records only) one premarket scan per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'premarket_scan', if present, is kept for v1 readers and must be one of these entries (same run_id).",
     )
     global_snapshot: GlobalSnapshotModel
     global_snapshots: list[GlobalSnapshot] | None = Field(
         None,
-        description="(v1.1, 1.1.0 records only) one global snapshot per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'global_snapshot', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+        description="(v1.1, 1.1.0 / 1.1.1 / 1.1.2 records only) one global snapshot per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'global_snapshot', if present, is kept for v1 readers and must be one of these entries (same run_id).",
     )
     event_calendar: EventCalendar = Field(
         ...,

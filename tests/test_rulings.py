@@ -111,7 +111,7 @@ def test_both_schemas_pass(two_runs, validator, spec):
     v11 = spec.validator_for_schema(PATCH / "session.schema.json")    # the frozen v1.1 proposal only knows 1.1.0
     assert v11.validate({**two_runs["v11"], "schema_version": "1.1.0"}) == []
     assert v11.validate(two_runs["v1"]) == [], "the v1.1 proposal stays backward compatible"
-    assert two_runs["v11"]["schema_version"] == "1.1.1" and two_runs["v1"]["schema_version"] == "1.0.0"
+    assert two_runs["v11"]["schema_version"] == "1.1.2" and two_runs["v1"]["schema_version"] == "1.0.0"
 
 
 def test_open_interest_is_integer_in_output(two_runs):
@@ -149,7 +149,7 @@ def test_closed_phase_written_as_closed_in_1_1_0(settings, spec, tmp_path):
     assert rec["runs"][0]["phase"] == "closed"
     w = write_session(rec, trace, tmp_path)
     on_disk = json.loads(w.json.read_text())
-    assert on_disk["schema_version"] == "1.1.1" and on_disk["runs"][0]["phase"] == "closed"
+    assert on_disk["schema_version"] == "1.1.2" and on_disk["runs"][0]["phase"] == "closed"
     errs = spec.load_module("session_validator").validate(on_disk, base_dir=tmp_path)
     assert not [e for e in errs if e.startswith(("INV-10", "INV-11", "INV-12", "INV-13"))], errs
     v1 = to_v1(on_disk)                                    # v1 readers still get afterhours + a note
@@ -169,7 +169,7 @@ def test_trace_sha256_matches_sidecar_and_trace_ref(two_runs):
     # record -> trace: trace file bytes (INV-11); trace -> record: canonical content minus trace_ref (no cycle)
     from optpipe.records.store import SESSION_REF_COVERS, session_content_sha256
     assert tr["session_ref"] == {"path": jp.name, "sha256": session_content_sha256(json.loads(jp.read_text())),
-                                 "sha256_covers": SESSION_REF_COVERS, "schema_version": "1.1.1"}
+                                 "sha256_covers": SESSION_REF_COVERS, "schema_version": "1.1.2"}
 
 
 # ---- generated code / patch in sync ------------------------------------------------------------

@@ -12,7 +12,10 @@ truth; local/default runs keep reading ../trading/spec directly, CI sets OPTIONS
 
 Copied: the files listed in MANIFEST.sha256, the manifest itself, and the two frozen v1.0.0 files from
 _v1_backup/ that gen_models.py / make_spec_patch.py need (not covered by the manifest, so pinned by their
-own sha256 in spec/PIN.json). Never copied: .venv/, __pycache__/, .pytest_cache/, the rest of _v1_backup/.
+own sha256 in spec/PIN.json). Nothing is globbed from the source: the copy and the release check follow
+Doodle's MANIFEST.sha256 list exactly. Never copied or required: .venv/, __pycache__/, *.pyc, .pytest_cache/,
+backup folders (*_backup/, e.g. _v1_1_0_backup/) other than the two pinned _v1_backup files.
+The --check "nothing extra" scan of spec/ ignores the same build/backup clutter (Moodle, M4 review).
 Local only: no network, no git operations.
 """
 from __future__ import annotations
@@ -31,11 +34,21 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = ROOT.parent / "trading" / "spec"     # Doodle's live folder, the sibling of this repo
 DEFAULT_DEST = ROOT / "spec"
-EXPECTED_VERSION = "1.1.1"
-EXPECTED_MANIFEST_SHA256 = "477401b68298f5b4513aa9b46eed9a56df5d1097e85175bdcf8a166cd3d4f489"
+EXPECTED_VERSION = "1.1.2"
+EXPECTED_MANIFEST_SHA256 = "9fcc55b0b84b6a8be43d9e5fefda22c7f05102aef9991089b851d6946cde0fdd"
 MANIFEST, VERSION, PIN = "MANIFEST.sha256", "VERSION", "PIN.json"
 V1_FILES = ("_v1_backup/session.schema.json", "_v1_backup/session.example.json")
-IGNORED_DIRS = {"__pycache__", ".pytest_cache"}          # never pinned; created by running Doodle's tests
+IGNORED_DIRS = {"__pycache__", ".pytest_cache", ".venv"}  # never pinned; created by running Doodle's tests
+IGNORED_SUFFIXES = (".pyc", ".pyo")
+
+
+def is_ignored(rel: str) -> bool:
+    """Build/test clutter and backup folders: never copied, never required, never counted as 'extra'."""
+    parts = Path(rel).parts
+    if rel in V1_FILES:
+        return False
+    return (bool(IGNORED_DIRS.intersection(parts)) or rel.endswith(IGNORED_SUFFIXES)
+            or any(p.endswith("_backup") for p in parts[:-1]) or parts[-1].endswith("_backup"))
 
 
 class SpecMismatch(Exception):
@@ -55,6 +68,8 @@ def parse_manifest(text: str) -> dict[str, str]:
         name = name.lstrip("*")
         if len(digest) != 64 or not name or name.startswith("/") or ".." in Path(name).parts:
             raise SpecMismatch(f"{MANIFEST} line {n} is not a sha256sum line: {line!r}")
+        if is_ignored(name):
+            raise SpecMismatch(f"{MANIFEST} line {n} lists build/backup clutter: {name!r}")
         out[name] = digest
     return out
 
@@ -130,9 +145,8 @@ def verify_pinned(d: Path, version: str = EXPECTED_VERSION, manifest_sha: str = 
         if name not in V1_FILES or not (d / name).is_file() or sha256(d / name) != digest:
             raise SpecMismatch(f"{name} missing or edited (pinned {digest})")
     allowed = {*files, MANIFEST, PIN, *V1_FILES}
-    extra = sorted(str(p.relative_to(d)) for p in d.rglob("*")
-                   if p.is_file() and not IGNORED_DIRS.intersection(p.relative_to(d).parts)
-                   and str(p.relative_to(d)) not in allowed)
+    extra = sorted(rel for p in d.rglob("*") if p.is_file()
+                   and (rel := p.relative_to(d).as_posix()) not in allowed and not is_ignored(rel))
     if extra:
         raise SpecMismatch(f"files not in the pinned spec: {extra} (changes go through Doodle)")
     return pin

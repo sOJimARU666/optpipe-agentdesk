@@ -95,12 +95,12 @@ Applies to the 1.1.0+ raw tick fields: `limit_price.raw_amount` and `Condition.r
 | ticket | limit | stop (`stop_rules`) | target (`target_rules`) |
 |---|---|---|---|
 | debit (all versions) | down (pay at most the cap) | up (exit no later) | down (take profit no later) |
-| credit vertical (1.1.1 records) | **up** (receive at least the min credit) | **down** (buy back no later) | **up** (buy back no later) |
+| credit vertical (1.1.1 / 1.1.2 records) | **up** (receive at least the min credit) | **down** (buy back no later) | **up** (buy back no later) |
 
 - Entry, exit and watcher conditions are only checked for consistency, with no forced direction.
 - 1.1.0 records keep the 1.1.0 rule: no direction on a credit limit, and stop up / target down for every ticket.
 
-## Vertical consistency (session schema INV-14, 1.1.1 records only)
+## Vertical consistency (session schema INV-14, 1.1.1 and 1.1.2 records)
 Applies to bull call / bear put debit spreads and bull put / bear call credit spreads.
 - **Structure:** 2 legs of the same type and expiry, ratio 1:1, multiplier 100, one buy and one sell. Strikes must be ordered as the strategy says, and `price_type` must match (debit / credit).
 - **Inputs:** every value comes from the legs.
@@ -121,3 +121,16 @@ Applies to bull call / bear put debit spreads and bull put / bear call credit sp
 - **Stored values:** `max_loss.amount_usd`, `max_profit.amount_usd` and the breakeven whose `at_price` equals the limit must equal the computed values. `unlimited` must be false, and `at_price`, if set, must equal the limit. Any other `breakevens[]` entry must match the formula at its own `at_price`.
 - **Precision:** arithmetic is exact Decimal with a 0.01 tolerance on $ amounts and breakevens; the inequalities are exact.
 - **Credit stop check:** the planned loss at the stop is implied by stop < width, so it can only fail together with that clause.
+
+## Stop / target direction (session schema INV-15, 1.1.2 records only)
+Applies to the same four verticals. The stop and the target are the same single `position_value` condition (cost to close the spread) in `stop_rules` and in `target_rules` that INV-14 reads; INV-15 checks its comparison operator `op`.
+
+| | stop (`stop_rules`) | target (`target_rules`) |
+|---|---|---|
+| debit (bull call / bear put): position_value = what selling the spread back returns | **`lte`** (exit when the value falls to the stop) | **`gte`** (take profit when the value rises to the target) |
+| credit (bull put / bear call): position_value = cost to buy the spread back | **`gte`** (exit when the buy-back cost rises to the stop) | **`lte`** (take profit when the buy-back cost falls to the target) |
+
+- Any other operator (`lt`, `gt`, `eq`, `cross_above`, `cross_below`, or the opposite direction) is an INV-15 error naming the ticket, the side, the found and the required operator.
+- A missing or duplicate `position_value` condition is reported by INV-14 only; INV-15 skips that side.
+- Only the `position_value` condition is checked; other stop / target conditions (e.g. `underlying_close`) are free.
+- 1.0.0, 1.1.0 and 1.1.1 records are not checked, so the same operators there still validate.

@@ -4,6 +4,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -16,6 +17,15 @@ from optpipe.spec import discover  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "2026-10-13"
+
+# Hermetic by default: the suite reads ONLY the repo's pinned spec/ (never Doodle's live, possibly mid-edit
+# ../trading/spec). Set before any settings are loaded, and inherited by every subprocess the tests start
+# (optpipe CLI, gen_models.py, make_spec_patch.py, sync_spec.py). An explicit OPTIONS_SPEC_DIR is respected.
+# Comparisons with the live folder are opt-in: tests/test_live_spec.py (marker `live_spec`).
+PINNED_SPEC = ROOT / "spec"
+LIVE_SPEC = (ROOT.parent / "trading" / "spec").resolve()
+USER_SPEC_DIR = os.environ.get("OPTIONS_SPEC_DIR")
+os.environ.setdefault("OPTIONS_SPEC_DIR", str(PINNED_SPEC))
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -88,11 +98,25 @@ def ruleset_calendar(spec):
     return Calendar(load_ruleset(spec)[0].config.market_hours)
 
 
+def _live_spec_skip_reason(config) -> str | None:
+    if not (os.environ.get("OPTPIPE_LIVE_SPEC_TESTS") == "1" or "live_spec" in (config.getoption("-m") or "")):
+        return "live-spec comparison: opt in with `-m live_spec` or OPTPIPE_LIVE_SPEC_TESTS=1"
+    if not (LIVE_SPEC / "MANIFEST.sha256").is_file():
+        return f"live spec folder absent ({LIVE_SPEC.name} next to the repo)"
+    if USER_SPEC_DIR and Path(USER_SPEC_DIR).resolve() == PINNED_SPEC.resolve():
+        return "CI mode (OPTIONS_SPEC_DIR=spec): pinned copy only"
+    return None
+
+
 def pytest_collection_modifyitems(config, items):
-    """`live` tests are opt-in: they run only with `-m live` (any -m expression naming live) or OPTPIPE_LIVE_TESTS=1."""
-    if os.environ.get("OPTPIPE_LIVE_TESTS") == "1" or "live" in (config.getoption("-m") or ""):
-        return
-    skip = pytest.mark.skip(reason="live test: run with `-m live` or OPTPIPE_LIVE_TESTS=1")
+    """Opt-in markers. `live`: real read-only market-data GETs, run only with `-m live` or OPTPIPE_LIVE_TESTS=1.
+    `live_spec`: compare with Doodle's live ../trading/spec, run only with `-m live_spec` or
+    OPTPIPE_LIVE_SPEC_TESTS=1, and never in CI mode or when the folder is absent."""
+    m = config.getoption("-m") or ""
+    live_off = not (os.environ.get("OPTPIPE_LIVE_TESTS") == "1" or re.search(r"\blive\b(?!_)", m))
+    spec_reason = _live_spec_skip_reason(config)
     for item in items:
-        if "live" in item.keywords:
-            item.add_marker(skip)
+        if "live" in item.keywords and live_off:
+            item.add_marker(pytest.mark.skip(reason="live test: run with `-m live` or OPTPIPE_LIVE_TESTS=1"))
+        if "live_spec" in item.keywords and spec_reason:
+            item.add_marker(pytest.mark.skip(reason=spec_reason))

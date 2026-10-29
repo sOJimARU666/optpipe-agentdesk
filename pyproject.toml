@@ -1,6 +1,7 @@
 [project]
 name = "optpipe"
 version = "0.1.0"
+license = "MIT"
 description = "Paper-only options research pipeline (Moodle / Doodle / Poodle multi-agent project). No broker, no orders."
 requires-python = ">=3.11"
 dependencies = [
@@ -22,7 +23,7 @@ docs = ["playwright>=1.40"]
 optpipe = "optpipe.cli:main"
 
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]          # PEP 639 `license = "MIT"`
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
@@ -37,4 +38,5 @@ addopts = "-q"
 filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
 markers = [
     "live: hits real read-only market-data endpoints; skipped unless run with `-m live` or OPTPIPE_LIVE_TESTS=1 (never in CI)",
+    "live_spec: compares with Doodle's live ../trading/spec; skipped unless `-m live_spec` or OPTPIPE_LIVE_SPEC_TESTS=1, and in CI mode or when the folder is absent",
 ]

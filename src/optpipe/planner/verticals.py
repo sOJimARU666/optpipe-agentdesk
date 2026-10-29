@@ -1,4 +1,4 @@
-"""INV-14 vertical-spread validation (Doodle's spec 1.1.1, pinned 2026-10-29 21:17 CET) + the 1.1.2 stop-op check.
+"""INV-14 vertical-spread validation (spec 1.1.1, pinned 2026-10-29 21:17 CET) + INV-15 (spec 1.1.2, pinned 2026-10-29 21:32 CET).
 
 Runs on every planner ticket (builder.build_vertical -> validate_vertical); a ticket with any error is not emitted.
 All values are derived from the LEGS (strikes, width) + quantity + limit price (the worst acceptable price:
@@ -13,7 +13,12 @@ max debit / min credit). Exact Decimal; dollar amounts compared exactly to $0.01
   BE: put short - credit / call short + cr.  BE: call long + debit / put long - debit
   loss at stop = (stop - credit) x100 x qty <= max_loss
   rounding: limit UP, stop DOWN, target UP   rounding: limit DOWN, stop UP, target DOWN   (each on tick)
-  stop op: gte (debit to close rises)        stop op: lte (value falls)                   (spec 1.1.2, mirrored)
+
+INV-15 (spec 1.1.2 records ONLY; 1.1.0/1.1.1 unaffected; 1.1.2 keeps every INV-14 check): the op of the SAME
+single position_value stop / target condition INV-14 reads. Strict: lt/gt fail. A side INV-14 already flagged
+as missing or duplicated is skipped.
+  credit: stop gte (debit to close rises), target lte (buy-back falls)
+  debit:  stop lte (spread value falls),   target gte (spread value rises)
 
 Structure (as the spec's verticals.py / INV-14): 2 legs, same option type and expiry, ratio 1:1, multiplier 100,
 exactly one buy and one sell, strikes ordered for the declared structure, limit price_type matching debit/credit.
@@ -33,7 +38,16 @@ VERTICALS = {   # strategy: (option type, price type, long leg has the higher st
     "bull_put_credit_spread": ("put", "credit", False),
     "bear_call_credit_spread": ("call", "credit", True),
 }
-STOP_OP = {"credit": "gte", "debit": "lte"}       # spec 1.1.2 (announced; mirrored before the pin)
+# INV-15 (spec 1.1.2, validate_session.DIRECTION_OPS)
+CONDITION_OPS = {"credit": {"stop": "gte", "target": "lte"}, "debit": {"stop": "lte", "target": "gte"}}
+INV14_FROM, INV15_FROM = (1, 1, 1), (1, 1, 2)          # record schema_version where each invariant starts
+
+
+def _ver(v: Optional[str]) -> tuple[int, ...]:
+    try:
+        return tuple(int(x) for x in str(v).split("."))
+    except ValueError:
+        return (0,)
 ROUNDING = {"debit": {"limit": "down", "stop": "up", "target": "down"},
             "credit": {"limit": "up", "stop": "down", "target": "up"}}
 
@@ -141,10 +155,49 @@ def _tick_errs(where: str, value: Any, c: dict, need: str) -> list[str]:
     return out
 
 
-def validate_vertical(t: dict) -> list[str]:
-    """INV-14 errors for one ticket ([] = OK). Non-vertical strategies return []."""
+_WHY = {    # Doodle's wording (validate_session.py 1.1.2), so messages match the spec validator verbatim
+    ("debit", "stop"): "a debit spread is stopped out when its value falls to the stop",
+    ("debit", "target"): "a debit spread hits its target when its value rises to the target",
+    ("credit", "stop"): "a credit spread is stopped out when the buy-back cost rises to the stop",
+    ("credit", "target"): "a credit spread hits its target when the buy-back cost falls to the target",
+}
+
+
+def direction_errors(t: dict) -> list[str]:
+    """INV-15 (spec 1.1.2), mirrors validate_session.direction_errors: the op of the SINGLE position_value stop /
+    target condition (the one INV-14 reads) must be exactly CONDITION_OPS[price_type][side]; strict, so lt/gt
+    fail. A side with a missing or duplicate condition is skipped (INV-14 reports it)."""
     if not is_vertical(t.get("strategy", "")):
         return []
+    ptype = VERTICALS[t["strategy"]][1]
+    out = []
+    for kind, grp in (("stop", "stop_rules"), ("target", "target_rules")):
+        cs = _pv(t, grp)
+        if len(cs) != 1:
+            continue
+        op, want = cs[0].get("op"), CONDITION_OPS[ptype][kind]
+        if op != want:
+            out.append(f"{kind} position_value op is {op!r}, must be {want!r} for a {ptype} vertical ({t['strategy']}): "
+                       f"{_WHY[(ptype, kind)]} (position_value {want} {cs[0].get('value')})")
+    return out
+
+
+def validate_vertical(t: dict, schema_version: str = "1.1.2") -> list[str]:
+    """Vertical checks for one ticket ([] = OK) as they apply to a record of `schema_version`:
+    INV-14 from 1.1.1, plus INV-15 (stop/target op) from 1.1.2. Non-vertical strategies return []."""
+    if not is_vertical(t.get("strategy", "")) or _ver(schema_version) < INV14_FROM:
+        return []
+    out15 = [f"INV-15 {m}" for m in direction_errors(t)] if _ver(schema_version) >= INV15_FROM else []
+    return _inv14(t) + out15
+
+
+def record_errors(rec: dict) -> list[str]:
+    """INV-14/15 over every ticket of a session record, gated by the record's schema_version."""
+    sv = rec.get("schema_version")
+    return [f"{t.get('ticket_id')}: {e}" for t in rec.get("tickets") or [] for e in validate_vertical(t, sv)]
+
+
+def _inv14(t: dict) -> list[str]:
     v, errs = from_ticket(t)
     if v is None:
         return errs
@@ -156,11 +209,6 @@ def validate_vertical(t: dict) -> list[str]:
     if len(tgts) != 1:
         out.append(f"needs exactly one position_value target, has {len(tgts)}")
     stop = D(stops[0]["value"]) if len(stops) == 1 else None
-    # mirrors the coming spec 1.1.2 check: a credit stop triggers when the debit to close RISES to it (gte);
-    # a debit stop when the spread value FALLS to it (lte)
-    want_op = STOP_OP[v.price_type]
-    if len(stops) == 1 and stops[0].get("op") != want_op:
-        out.append(f"stop op {stops[0].get('op')!r} must be {want_op!r} for a {v.price_type} vertical (spec 1.1.2)")
     tgt = D(tgts[0]["value"]) if len(tgts) == 1 else None
     if v.price_type == "credit":
         if not (0 < p < w):
