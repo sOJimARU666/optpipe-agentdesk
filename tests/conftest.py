@@ -17,6 +17,21 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = ROOT / "tests" / "fixtures" / "2026-10-13"
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _isolated_state(tmp_path_factory):
+    """IV history / HTTP cache never touch the repo's var/ during tests."""
+    import os
+    base = tmp_path_factory.mktemp("state")
+    old = {k: os.environ.get(k) for k in ("OPTPIPE_STATE_DIR", "OPTPIPE_CACHE_DIR")}
+    os.environ["OPTPIPE_STATE_DIR"], os.environ["OPTPIPE_CACHE_DIR"] = str(base / "state"), str(base / "cache")
+    yield base
+    for k, v in old.items():
+        if v is None:
+            os.environ.pop(k, None)
+        else:
+            os.environ[k] = v
+
+
 @pytest.fixture(scope="session")
 def settings():
     return load_settings()
@@ -63,3 +78,10 @@ def pipeline_output(settings, spec, tmp_path_factory):
 @pytest.fixture
 def rec(pipeline_output):
     return copy.deepcopy(pipeline_output["record"])
+
+
+@pytest.fixture(scope="module")
+def ruleset_calendar(spec):
+    from optpipe.risk import load_ruleset
+    from optpipe.risk.engine import Calendar
+    return Calendar(load_ruleset(spec)[0].config.market_hours)

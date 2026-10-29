@@ -1,0 +1,684 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>optpipe · Tickets · 2026-10-13</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1d2330;--mute:#6b7385;--line:#e3e6ec;--accent:#3557d4;
+--pass:#1f8a4c;--flag:#b7791f;--unknown:#6b5bd2;--veto:#c53030;--stale:#a0671a;--missing:#9aa1ae}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.paper{background:#1d2330;color:#fff;padding:6px 20px;font-size:12px;letter-spacing:.04em;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.paper b{color:#ffd166}
+header{background:#fff;border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+header .brand{font-weight:700;font-size:16px}header nav a{margin-right:14px;padding:6px 2px;color:var(--mute);font-weight:500}
+header nav a.on{color:var(--ink);border-bottom:2px solid var(--accent)}
+header .meta{margin-left:auto;color:var(--mute);font-size:12px}
+main{padding:18px 20px;max-width:1280px;margin:0 auto}
+h1{font-size:20px;margin:4px 0 14px}h2{font-size:16px;margin:22px 0 8px}h3{font-size:14px;margin:12px 0 6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.grid{display:grid;gap:14px}.g2{grid-template-columns:repeat(auto-fit,minmax(380px,1fr))}.g4{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:600;font-size:12px;background:#fafbfc}td.num{text-align:right;font-variant-numeric:tabular-nums}
+.mute{color:var(--mute)}.small{font-size:12px}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.03em;color:#fff;vertical-align:middle}
+.PASS{background:var(--pass)}.FLAG{background:var(--flag)}.UNKNOWN{background:var(--unknown)}.VETO{background:var(--veto)}
+.st-ok{}.st-stale{color:var(--stale)}.st-missing,.st-unusable{color:var(--missing)}.st-conflicting{color:var(--veto)}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:1px 9px;margin:2px 4px 2px 0;font-size:12px;background:#fafbfc}
+.pill.on{border-color:var(--accent);color:var(--accent);font-weight:600}
+.kpi{font-size:22px;font-weight:700}.kpi-l{color:var(--mute);font-size:12px}
+.hyp{display:inline-block;background:#fff4d6;color:#7a5200;border:1px solid #f0d58a;border-radius:6px;padding:1px 8px;font-size:11px;font-weight:700}
+details>summary{cursor:pointer;color:var(--accent)}
+.ok{color:var(--pass)}.bad{color:var(--veto)}
+footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
+
+</style>
+
+</head>
+<body>
+<div class="paper"><span><b>PAPER ONLY</b> · research records, HYPOTHETICAL tickets · no broker, no orders</span>
+<span>all market logic in America/New_York · times shown ET and Europe/Berlin</span></div>
+<header>
+  <span class="brand">optpipe</span>
+  <nav>
+    <a href="today.html" class="">Today</a>
+    <a href="tickets.html" class="on">Tickets</a>
+    <a href="timeline.html" class="">Agent timeline</a>
+    <a href="history.html" class="">History</a>
+  </nav>
+  <span class="meta">session <b>2026-10-13</b> · v1.1 preview ·
+    trace <span class="ok" title="sha256 712f14b27af2b03374a419e4e5561f8c861b4e34dc2670640d8fabe6c07c2711">✓ sha256 verified</span></span>
+</header>
+<main>
+<h1>Tickets · 2026-10-13 <span class="hyp">HYPOTHETICAL - paper only, not an order</span></h1>
+<p class="mute small">Each ticket shows the Risk Officer verdict of the latest run and every rule with its reason. Earlier runs' reviews load on demand.</p>
+
+<div class="card" id="tkt-jpm-bcs-340-350">
+  <h2 style="margin-top:0"><span class="badge VETO">VETO</span>
+    JPM · bull call debit spread <span class="mono small mute">tkt-jpm-bcs-340-350</span></h2>
+  <p class="small">HYPOTHETICAL - paper only, not an order · bullish · Q3 EPS 5.57 vs 5.93 est and revenue 50.2bn vs 51.23bn (miss); NII 27.0bn beat; Premarket reversal from about -3.7% to positive</p>
+  <div class="grid g2">
+  <div>
+    <table><tr><th>leg</th><th>side</th><th>type</th><th class="num">strike</th><th>expiry</th><th>contract</th></tr>
+    <tr><td>leg-1</td><td>buy ×1</td><td>call</td><td class="num">340.00</td><td>2026-10-30</td><td class="mono">JPM261030C00340000</td></tr><tr><td>leg-2</td><td>sell ×1</td><td>call</td><td class="num">350.00</td><td>2026-10-30</td><td class="mono">JPM261030C00350000</td></tr></table>
+  </div>
+  <div><table>
+    <tr><th>limit (debit)</th><td><b>3.10</b>
+      <span class="small mute">raw 3.1006 → down to 0.05 tick</span>
+      <div class="small mute">re-quoted live after 09:45 ET with each leg spread &lt;= 10% of mid; reference mid 3.025, cap = mid x 1.025</div></td></tr>
+    <tr><th>qty</th><td>1</td></tr>
+    <tr><th>max loss</th><td>$310.00 <span class="small mute">1 x 3.10 x 100 at limit; $302.50 at ref mid 3.025</span></td></tr>
+    <tr><th>max profit</th><td>$690.00 <span class="small mute">(10 width - 3.10) x 100 x 1</span></td></tr>
+    <tr><th>breakevens</th><td>343.1 <span class="small mute">@3.1</span> · 343.025 <span class="small mute">@3.025</span></td></tr>
+    <tr><th>hold window</th><td class="small">2026-10-13 09:45 ET (15:45 Berlin) → 2026-10-27 16:00 ET (21:00 Berlin)</td></tr>
+  </table></div>
+  </div>
+  <details class="small"><summary>entry / exit / stop / target rules</summary>
+  <table>
+  <tr><td>entry</td><td>After 09:45 ET, only if JPM &gt; 334.3 (prev close), live net mid debit &lt;= 3.10 and each leg spread &lt;= 10% of mid</td><td class="mono">time_ny gte 09:45 · underlying_last gt 334.3 · net_debit_mid lte 3.1 (raw 3.1006, down 0.05) · leg_spread_pct_of_mid lte 10.0</td></tr>
+  
+  <tr><td>exit</td><td>Time stop: close by 2026-10-27</td><td class="mono">date_ny gte 2026-10-27</td></tr>
+  
+  <tr><td>stop</td><td>Exit if JPM closes below 330 or spread value &lt;= 1.52 (~50% of debit)</td><td class="mono">underlying_close lt 330.0 · position_value lte 1.52 (raw 1.5125, up 0.01)</td></tr>
+  
+  <tr><td>target</td><td>Close at spread value 6.05 or JPM &gt;= 350</td><td class="mono">position_value gte 6.05 (raw 6.05, down 0.05) · underlying_last gte 350.0</td></tr>
+  </table>
+  <p class="mute">Pricing (run-premarket): ref mid 3.025, natural 3.5, stale — UNPRICEABLE premarket: prior-session option quotes; tick rounding (penny-pilot JPM): limit 3.1006 -&gt; 3.10 (down to 0.05 tick); stop 1.5125 -&gt; 1.52 (up to 0.01 tick); target 6.0500 -&gt; 6.05 (down to 0.05 tick)</p>
+  </details>
+
+  <h3>Risk Officer</h3>
+  <div class="small">Reviews by run:
+    <a class="pill" href="#rv-rv-premarket-jpm-bcs-340-350">run-premarket · VETO</a><a class="pill" href="#rv-rv-open-0940-jpm-bcs-340-350">run-open-0940 · VETO</a></div>
+  <div id="rvslot-tkt-jpm-bcs-340-350">
+<div class="review" id="rv-rv-open-0940-jpm-bcs-340-350">
+<p style="margin:6px 0"><span class="badge VETO">VETO</span>
+  <span class="mono small">rv-open-0940-jpm-bcs-340-350</span> · run <b>run-open-0940</b> · evaluated 2026-10-13 09:40 ET (15:40 Berlin)
+  · approval required: yes</p>
+<p class="small">Blocking: <span class="pill">R01_QUOTE_FRESHNESS</span><span class="pill">R02_BID_ASK_WIDTH</span><span class="pill">R03_OPEN_INTEREST</span></p>
+<p class="small">Flags: <span class="pill">R08_MACRO_EVENTS</span><span class="pill">R10_IV_VS_HISTORY</span></p>
+<table>
+<tr><th style="width:190px">rule</th><th>severity</th><th>result</th><th>reason</th><th>measured</th><th>threshold</th></tr>
+
+<tr><td class="mono">R01_QUOTE_FRESHNESS</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>underlying.last age 108.0 min; leg-1.bid stale; leg-1.ask stale; leg-2.bid stale; leg-2.ask stale</td>
+<td class="mono small">{&#34;market_open&#34;: true, &#34;max_age_min&#34;: 1060.0}</td><td class="mono small">{&#34;quote_max_age_seconds&#34;: 900}</td></tr>
+
+<tr><td class="mono">R02_BID_ASK_WIDTH</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>leg-1 0.0829 PASS, leg-2 0.2083 VETO<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge PASS">PASS</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;PASS&#34;, &#34;measured&#34;: 0.0829}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 0.2083}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 0.0829, &#34;leg-2&#34;: 0.2083}</td><td class="mono small">{&#34;max_spread_pct_of_mid&#34;: 0.1}</td></tr>
+
+<tr><td class="mono">R03_OPEN_INTEREST</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>leg-1 OI 472 VETO, leg-2 OI 747 PASS<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 472}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge PASS">PASS</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;PASS&#34;, &#34;measured&#34;: 747}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 472, &#34;leg-2&#34;: 747}</td><td class="mono small">{&#34;min_open_interest&#34;: 500}</td></tr>
+
+<tr><td class="mono">R04_MAX_LOSS</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>max loss $310.00 at limit vs $500 (placeholder pending Eugene)</td>
+<td class="mono small">{&#34;unlimited&#34;: false, &#34;max_loss_usd&#34;: 310.0}</td><td class="mono small">{&#34;per_trade_max_loss_usd&#34;: 500}</td></tr>
+
+<tr><td class="mono">R05_NET_PRICE_VS_LIMIT</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>net debit 3.025 vs limit 3.1</td>
+<td class="mono small">{&#34;net&#34;: 3.025}</td><td class="mono small">{&#34;limit&#34;: 3.1, &#34;price_type&#34;: &#34;debit&#34;, &#34;basis&#34;: &#34;mid&#34;}</td></tr>
+
+<tr><td class="mono">R06_MIN_DTE</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>17 DTE (NY date 2026-10-13)</td>
+<td class="mono small">{&#34;dte&#34;: 17}</td><td class="mono small">{&#34;min_dte&#34;: 7}</td></tr>
+
+<tr><td class="mono">R07_EARNINGS_IN_WINDOW</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>no earnings in hold window</td>
+<td class="mono small">{&#34;events_in_window&#34;: [], &#34;window&#34;: [&#34;2026-10-13T09:45:00-04:00&#34;, &#34;2026-10-27T16:00:00-04:00&#34;]}</td><td class="mono small">{&#34;intended_event_ids&#34;: []}</td></tr>
+
+<tr><td class="mono">R08_MACRO_EVENTS</td><td class="small">soft</td><td><span class="badge FLAG">FLAG</span></td>
+<td>CPI ev-cpi-2026-10-14 in window; PPI ev-ppi-2026-10-15 in window</td>
+<td class="mono small">{&#34;events_in_window&#34;: [&#34;ev-cpi-2026-10-14&#34;, &#34;ev-ppi-2026-10-15&#34;]}</td><td class="mono small">{&#34;macro_event_kinds&#34;: [&#34;CPI&#34;, &#34;PPI&#34;, &#34;FOMC&#34;, &#34;NFP&#34;]}</td></tr>
+
+<tr><td class="mono">R09_EARLY_ASSIGNMENT</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>leg-2 PASS (no ex-div in window)<details class="small"><summary>per leg (1)</summary>
+<table><tr><td class="mono">leg-2</td><td><span class="badge PASS">PASS</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;PASS&#34;, &#34;measured&#34;: {&#34;exdiv_in_window&#34;: []}, &#34;reason&#34;: &#34;no ex-div in window&#34;}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-2&#34;: {&#34;exdiv_in_window&#34;: []}}</td><td class="mono small">{&#34;min_put_extrinsic&#34;: 0.05}</td></tr>
+
+<tr><td class="mono">R10_IV_VS_HISTORY</td><td class="small">soft</td><td><span class="badge UNKNOWN">UNKNOWN</span></td>
+<td>IV30 current or history unavailable</td>
+<td class="mono small">-</td><td class="mono small">{&#34;iv_rank_high&#34;: 0.8, &#34;iv_rank_low&#34;: 0.2, &#34;min_obs&#34;: 20}</td></tr>
+
+<tr><td class="mono">R11_CONCENTRATION</td><td class="small">soft</td><td><span class="badge PASS">PASS</span></td>
+<td>same-underlying $310.0, total $310.0, positions 1 (placeholder limits pending Eugene)</td>
+<td class="mono small">{&#34;same_underlying_usd&#34;: 310.0, &#34;total_usd&#34;: 310.0, &#34;count&#34;: 1}</td><td class="mono small">{&#34;max_underlying_risk_usd&#34;: 1000, &#34;max_total_open_risk_usd&#34;: 2000, &#34;max_open_positions&#34;: 5}</td></tr>
+
+</table>
+</div></div>
+  <details><summary>earlier review · run-premarket · VETO</summary>
+<div class="review" id="rv-rv-premarket-jpm-bcs-340-350">
+<p style="margin:6px 0"><span class="badge VETO">VETO</span>
+  <span class="mono small">rv-premarket-jpm-bcs-340-350</span> · run <b>run-premarket</b> · evaluated 2026-10-13 07:52 ET (13:52 Berlin)
+  · approval required: yes</p>
+<p class="small">Blocking: <span class="pill">R01_QUOTE_FRESHNESS</span><span class="pill">R02_BID_ASK_WIDTH</span><span class="pill">R03_OPEN_INTEREST</span><span class="pill">R09_EARLY_ASSIGNMENT</span></p>
+<p class="small">Flags: <span class="pill">R08_MACRO_EVENTS</span><span class="pill">R10_IV_VS_HISTORY</span></p>
+<table>
+<tr><th style="width:190px">rule</th><th>severity</th><th>result</th><th>reason</th><th>measured</th><th>threshold</th></tr>
+
+<tr><td class="mono">R01_QUOTE_FRESHNESS</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>US regular session closed at evaluated_at (America/New_York); quotes cannot be live</td>
+<td class="mono small">{&#34;market_open&#34;: false, &#34;evaluated_at_ny&#34;: &#34;2026-10-13T07:52:00-04:00&#34;}</td><td class="mono small">{&#34;quote_max_age_seconds&#34;: 900}</td></tr>
+
+<tr><td class="mono">R02_BID_ASK_WIDTH</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>leg-1 0.0829 PASS, leg-2 0.2083 VETO<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge PASS">PASS</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;PASS&#34;, &#34;measured&#34;: 0.0829}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 0.2083}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 0.0829, &#34;leg-2&#34;: 0.2083}</td><td class="mono small">{&#34;max_spread_pct_of_mid&#34;: 0.1}</td></tr>
+
+<tr><td class="mono">R03_OPEN_INTEREST</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>leg-1 OI 472 VETO, leg-2 OI 747 PASS<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 472}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge PASS">PASS</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;PASS&#34;, &#34;measured&#34;: 747}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 472, &#34;leg-2&#34;: 747}</td><td class="mono small">{&#34;min_open_interest&#34;: 500}</td></tr>
+
+<tr><td class="mono">R04_MAX_LOSS</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>max loss $310.00 at limit vs $500 (placeholder pending Eugene)</td>
+<td class="mono small">{&#34;unlimited&#34;: false, &#34;max_loss_usd&#34;: 310.0}</td><td class="mono small">{&#34;per_trade_max_loss_usd&#34;: 500}</td></tr>
+
+<tr><td class="mono">R05_NET_PRICE_VS_LIMIT</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>net debit 3.025 vs limit 3.1</td>
+<td class="mono small">{&#34;net&#34;: 3.025}</td><td class="mono small">{&#34;limit&#34;: 3.1, &#34;price_type&#34;: &#34;debit&#34;, &#34;basis&#34;: &#34;mid&#34;}</td></tr>
+
+<tr><td class="mono">R06_MIN_DTE</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>17 DTE (NY date 2026-10-13)</td>
+<td class="mono small">{&#34;dte&#34;: 17}</td><td class="mono small">{&#34;min_dte&#34;: 7}</td></tr>
+
+<tr><td class="mono">R07_EARNINGS_IN_WINDOW</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>no earnings in hold window</td>
+<td class="mono small">{&#34;events_in_window&#34;: [], &#34;window&#34;: [&#34;2026-10-13T09:45:00-04:00&#34;, &#34;2026-10-27T16:00:00-04:00&#34;]}</td><td class="mono small">{&#34;intended_event_ids&#34;: []}</td></tr>
+
+<tr><td class="mono">R08_MACRO_EVENTS</td><td class="small">soft</td><td><span class="badge FLAG">FLAG</span></td>
+<td>CPI ev-cpi-2026-10-14 in window; PPI ev-ppi-2026-10-15 in window</td>
+<td class="mono small">{&#34;events_in_window&#34;: [&#34;ev-cpi-2026-10-14&#34;, &#34;ev-ppi-2026-10-15&#34;]}</td><td class="mono small">{&#34;macro_event_kinds&#34;: [&#34;CPI&#34;, &#34;PPI&#34;, &#34;FOMC&#34;, &#34;NFP&#34;]}</td></tr>
+
+<tr><td class="mono">R09_EARLY_ASSIGNMENT</td><td class="small">hard</td><td><span class="badge UNKNOWN">UNKNOWN</span></td>
+<td>leg-2 UNKNOWN (ex_dividend coverage missing; ev-jpm-exdiv-2026-10-06 date/dividend unusable)<details class="small"><summary>per leg (1)</summary>
+<table><tr><td class="mono">leg-2</td><td><span class="badge UNKNOWN">UNKNOWN</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;UNKNOWN&#34;, &#34;measured&#34;: {&#34;exdiv_in_window&#34;: []}, &#34;reason&#34;: &#34;ex_dividend coverage missing; ev-jpm-exdiv-2026-10-06 date/dividend unusable&#34;}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-2&#34;: {&#34;exdiv_in_window&#34;: []}}</td><td class="mono small">{&#34;min_put_extrinsic&#34;: 0.05}</td></tr>
+
+<tr><td class="mono">R10_IV_VS_HISTORY</td><td class="small">soft</td><td><span class="badge UNKNOWN">UNKNOWN</span></td>
+<td>IV30 current or history unavailable</td>
+<td class="mono small">-</td><td class="mono small">{&#34;iv_rank_high&#34;: 0.8, &#34;iv_rank_low&#34;: 0.2, &#34;min_obs&#34;: 20}</td></tr>
+
+<tr><td class="mono">R11_CONCENTRATION</td><td class="small">soft</td><td><span class="badge PASS">PASS</span></td>
+<td>same-underlying $310.0, total $310.0, positions 1 (placeholder limits pending Eugene)</td>
+<td class="mono small">{&#34;same_underlying_usd&#34;: 310.0, &#34;total_usd&#34;: 310.0, &#34;count&#34;: 1}</td><td class="mono small">{&#34;max_underlying_risk_usd&#34;: 1000, &#34;max_total_open_risk_usd&#34;: 2000, &#34;max_open_positions&#34;: 5}</td></tr>
+
+</table>
+</div></details>
+</div>
+
+<div class="card" id="tkt-jpm-bps-335-325">
+  <h2 style="margin-top:0"><span class="badge VETO">VETO</span>
+    JPM · bear put debit spread <span class="mono small mute">tkt-jpm-bps-335-325</span></h2>
+  <p class="small">HYPOTHETICAL - paper only, not an order · bearish · Q3 EPS 5.57 vs 5.93 est and revenue 50.2bn vs 51.23bn (miss); NII 27.0bn beat; Premarket reversal from about -3.7% to positive</p>
+  <div class="grid g2">
+  <div>
+    <table><tr><th>leg</th><th>side</th><th>type</th><th class="num">strike</th><th>expiry</th><th>contract</th></tr>
+    <tr><td>leg-1</td><td>buy ×1</td><td>put</td><td class="num">335.00</td><td>2026-10-30</td><td class="mono">JPM261030P00335000</td></tr><tr><td>leg-2</td><td>sell ×1</td><td>put</td><td class="num">325.00</td><td>2026-10-30</td><td class="mono">JPM261030P00325000</td></tr></table>
+  </div>
+  <div><table>
+    <tr><th>limit (debit)</th><td><b>3.85</b>
+      <span class="small mute">raw 3.8694 → down to 0.05 tick</span>
+      <div class="small mute">re-quoted live after 09:45 ET with each leg spread &lt;= 10% of mid; reference mid 3.775, cap = mid x 1.025</div></td></tr>
+    <tr><th>qty</th><td>1</td></tr>
+    <tr><th>max loss</th><td>$385.00 <span class="small mute">1 x 3.85 x 100 at limit; $377.50 at ref mid 3.775</span></td></tr>
+    <tr><th>max profit</th><td>$615.00 <span class="small mute">(10 width - 3.85) x 100 x 1</span></td></tr>
+    <tr><th>breakevens</th><td>331.15 <span class="small mute">@3.85</span> · 331.225 <span class="small mute">@3.775</span></td></tr>
+    <tr><th>hold window</th><td class="small">2026-10-13 09:45 ET (15:45 Berlin) → 2026-10-27 16:00 ET (21:00 Berlin)</td></tr>
+  </table></div>
+  </div>
+  <details class="small"><summary>entry / exit / stop / target rules</summary>
+  <table>
+  <tr><td>entry</td><td>After 09:45 ET, only if JPM &lt; 334.3 (prev close), live net mid debit &lt;= 3.85 and each leg spread &lt;= 10% of mid</td><td class="mono">time_ny gte 09:45 · underlying_last lt 334.3 · net_debit_mid lte 3.85 (raw 3.8694, down 0.05) · leg_spread_pct_of_mid lte 10.0</td></tr>
+  
+  <tr><td>exit</td><td>Time stop: close by 2026-10-27</td><td class="mono">date_ny gte 2026-10-27</td></tr>
+  
+  <tr><td>stop</td><td>Exit if JPM closes above 335 or spread value &lt;= 1.89 (~50% of debit)</td><td class="mono">underlying_close gt 335.0 · position_value lte 1.89 (raw 1.8875, up 0.01)</td></tr>
+  
+  <tr><td>target</td><td>Close at spread value 7.55 or JPM &lt;= 325</td><td class="mono">position_value gte 7.55 (raw 7.55, down 0.05) · underlying_last lte 325.0</td></tr>
+  </table>
+  <p class="mute">Pricing (run-premarket): ref mid 3.775, natural 4.65, stale — UNPRICEABLE premarket: prior-session option quotes; tick rounding (penny-pilot JPM): limit 3.8694 -&gt; 3.85 (down to 0.05 tick); stop 1.8875 -&gt; 1.89 (up to 0.01 tick); target 7.5500 -&gt; 7.55 (down to 0.05 tick)</p>
+  </details>
+
+  <h3>Risk Officer</h3>
+  <div class="small">Reviews by run:
+    <a class="pill" href="#rv-rv-premarket-jpm-bps-335-325">run-premarket · VETO</a><a class="pill" href="#rv-rv-open-0940-jpm-bps-335-325">run-open-0940 · VETO</a></div>
+  <div id="rvslot-tkt-jpm-bps-335-325">
+<div class="review" id="rv-rv-open-0940-jpm-bps-335-325">
+<p style="margin:6px 0"><span class="badge VETO">VETO</span>
+  <span class="mono small">rv-open-0940-jpm-bps-335-325</span> · run <b>run-open-0940</b> · evaluated 2026-10-13 09:40 ET (15:40 Berlin)
+  · approval required: yes</p>
+<p class="small">Blocking: <span class="pill">R01_QUOTE_FRESHNESS</span><span class="pill">R02_BID_ASK_WIDTH</span><span class="pill">R03_OPEN_INTEREST</span></p>
+<p class="small">Flags: <span class="pill">R08_MACRO_EVENTS</span><span class="pill">R10_IV_VS_HISTORY</span></p>
+<table>
+<tr><th style="width:190px">rule</th><th>severity</th><th>result</th><th>reason</th><th>measured</th><th>threshold</th></tr>
+
+<tr><td class="mono">R01_QUOTE_FRESHNESS</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>underlying.last age 108.0 min; leg-1.bid stale; leg-1.ask stale; leg-2.bid stale; leg-2.ask stale</td>
+<td class="mono small">{&#34;market_open&#34;: true, &#34;max_age_min&#34;: 1060.0}</td><td class="mono small">{&#34;quote_max_age_seconds&#34;: 900}</td></tr>
+
+<tr><td class="mono">R02_BID_ASK_WIDTH</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>leg-1 0.1507 VETO, leg-2 0.1844 VETO<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 0.1507}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 0.1844}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 0.1507, &#34;leg-2&#34;: 0.1844}</td><td class="mono small">{&#34;max_spread_pct_of_mid&#34;: 0.1}</td></tr>
+
+<tr><td class="mono">R03_OPEN_INTEREST</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>leg-1 OI 290 VETO, leg-2 OI 321 VETO<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 290}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 321}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 290, &#34;leg-2&#34;: 321}</td><td class="mono small">{&#34;min_open_interest&#34;: 500}</td></tr>
+
+<tr><td class="mono">R04_MAX_LOSS</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>max loss $385.00 at limit vs $500 (placeholder pending Eugene)</td>
+<td class="mono small">{&#34;unlimited&#34;: false, &#34;max_loss_usd&#34;: 385.0}</td><td class="mono small">{&#34;per_trade_max_loss_usd&#34;: 500}</td></tr>
+
+<tr><td class="mono">R05_NET_PRICE_VS_LIMIT</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>net debit 3.775 vs limit 3.85</td>
+<td class="mono small">{&#34;net&#34;: 3.775}</td><td class="mono small">{&#34;limit&#34;: 3.85, &#34;price_type&#34;: &#34;debit&#34;, &#34;basis&#34;: &#34;mid&#34;}</td></tr>
+
+<tr><td class="mono">R06_MIN_DTE</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>17 DTE (NY date 2026-10-13)</td>
+<td class="mono small">{&#34;dte&#34;: 17}</td><td class="mono small">{&#34;min_dte&#34;: 7}</td></tr>
+
+<tr><td class="mono">R07_EARNINGS_IN_WINDOW</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>no earnings in hold window</td>
+<td class="mono small">{&#34;events_in_window&#34;: [], &#34;window&#34;: [&#34;2026-10-13T09:45:00-04:00&#34;, &#34;2026-10-27T16:00:00-04:00&#34;]}</td><td class="mono small">{&#34;intended_event_ids&#34;: []}</td></tr>
+
+<tr><td class="mono">R08_MACRO_EVENTS</td><td class="small">soft</td><td><span class="badge FLAG">FLAG</span></td>
+<td>CPI ev-cpi-2026-10-14 in window; PPI ev-ppi-2026-10-15 in window</td>
+<td class="mono small">{&#34;events_in_window&#34;: [&#34;ev-cpi-2026-10-14&#34;, &#34;ev-ppi-2026-10-15&#34;]}</td><td class="mono small">{&#34;macro_event_kinds&#34;: [&#34;CPI&#34;, &#34;PPI&#34;, &#34;FOMC&#34;, &#34;NFP&#34;]}</td></tr>
+
+<tr><td class="mono">R09_EARLY_ASSIGNMENT</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>leg-2 PASS<details class="small"><summary>per leg (1)</summary>
+<table><tr><td class="mono">leg-2</td><td><span class="badge PASS">PASS</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;PASS&#34;, &#34;measured&#34;: {&#34;itm&#34;: false, &#34;extrinsic&#34;: 3.525}}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-2&#34;: {&#34;itm&#34;: false, &#34;extrinsic&#34;: 3.525}}</td><td class="mono small">{&#34;min_put_extrinsic&#34;: 0.05}</td></tr>
+
+<tr><td class="mono">R10_IV_VS_HISTORY</td><td class="small">soft</td><td><span class="badge UNKNOWN">UNKNOWN</span></td>
+<td>IV30 current or history unavailable</td>
+<td class="mono small">-</td><td class="mono small">{&#34;iv_rank_high&#34;: 0.8, &#34;iv_rank_low&#34;: 0.2, &#34;min_obs&#34;: 20}</td></tr>
+
+<tr><td class="mono">R11_CONCENTRATION</td><td class="small">soft</td><td><span class="badge PASS">PASS</span></td>
+<td>same-underlying $385.0, total $385.0, positions 1 (placeholder limits pending Eugene)</td>
+<td class="mono small">{&#34;same_underlying_usd&#34;: 385.0, &#34;total_usd&#34;: 385.0, &#34;count&#34;: 1}</td><td class="mono small">{&#34;max_underlying_risk_usd&#34;: 1000, &#34;max_total_open_risk_usd&#34;: 2000, &#34;max_open_positions&#34;: 5}</td></tr>
+
+</table>
+</div></div>
+  <details><summary>earlier review · run-premarket · VETO</summary>
+<div class="review" id="rv-rv-premarket-jpm-bps-335-325">
+<p style="margin:6px 0"><span class="badge VETO">VETO</span>
+  <span class="mono small">rv-premarket-jpm-bps-335-325</span> · run <b>run-premarket</b> · evaluated 2026-10-13 07:52 ET (13:52 Berlin)
+  · approval required: yes</p>
+<p class="small">Blocking: <span class="pill">R01_QUOTE_FRESHNESS</span><span class="pill">R02_BID_ASK_WIDTH</span><span class="pill">R03_OPEN_INTEREST</span></p>
+<p class="small">Flags: <span class="pill">R08_MACRO_EVENTS</span><span class="pill">R10_IV_VS_HISTORY</span></p>
+<table>
+<tr><th style="width:190px">rule</th><th>severity</th><th>result</th><th>reason</th><th>measured</th><th>threshold</th></tr>
+
+<tr><td class="mono">R01_QUOTE_FRESHNESS</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>US regular session closed at evaluated_at (America/New_York); quotes cannot be live</td>
+<td class="mono small">{&#34;market_open&#34;: false, &#34;evaluated_at_ny&#34;: &#34;2026-10-13T07:52:00-04:00&#34;}</td><td class="mono small">{&#34;quote_max_age_seconds&#34;: 900}</td></tr>
+
+<tr><td class="mono">R02_BID_ASK_WIDTH</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>leg-1 0.1507 VETO, leg-2 0.1844 VETO<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 0.1507}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 0.1844}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 0.1507, &#34;leg-2&#34;: 0.1844}</td><td class="mono small">{&#34;max_spread_pct_of_mid&#34;: 0.1}</td></tr>
+
+<tr><td class="mono">R03_OPEN_INTEREST</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>leg-1 OI 290 VETO, leg-2 OI 321 VETO<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 290}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 321}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 290, &#34;leg-2&#34;: 321}</td><td class="mono small">{&#34;min_open_interest&#34;: 500}</td></tr>
+
+<tr><td class="mono">R04_MAX_LOSS</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>max loss $385.00 at limit vs $500 (placeholder pending Eugene)</td>
+<td class="mono small">{&#34;unlimited&#34;: false, &#34;max_loss_usd&#34;: 385.0}</td><td class="mono small">{&#34;per_trade_max_loss_usd&#34;: 500}</td></tr>
+
+<tr><td class="mono">R05_NET_PRICE_VS_LIMIT</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>net debit 3.775 vs limit 3.85</td>
+<td class="mono small">{&#34;net&#34;: 3.775}</td><td class="mono small">{&#34;limit&#34;: 3.85, &#34;price_type&#34;: &#34;debit&#34;, &#34;basis&#34;: &#34;mid&#34;}</td></tr>
+
+<tr><td class="mono">R06_MIN_DTE</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>17 DTE (NY date 2026-10-13)</td>
+<td class="mono small">{&#34;dte&#34;: 17}</td><td class="mono small">{&#34;min_dte&#34;: 7}</td></tr>
+
+<tr><td class="mono">R07_EARNINGS_IN_WINDOW</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>no earnings in hold window</td>
+<td class="mono small">{&#34;events_in_window&#34;: [], &#34;window&#34;: [&#34;2026-10-13T09:45:00-04:00&#34;, &#34;2026-10-27T16:00:00-04:00&#34;]}</td><td class="mono small">{&#34;intended_event_ids&#34;: []}</td></tr>
+
+<tr><td class="mono">R08_MACRO_EVENTS</td><td class="small">soft</td><td><span class="badge FLAG">FLAG</span></td>
+<td>CPI ev-cpi-2026-10-14 in window; PPI ev-ppi-2026-10-15 in window</td>
+<td class="mono small">{&#34;events_in_window&#34;: [&#34;ev-cpi-2026-10-14&#34;, &#34;ev-ppi-2026-10-15&#34;]}</td><td class="mono small">{&#34;macro_event_kinds&#34;: [&#34;CPI&#34;, &#34;PPI&#34;, &#34;FOMC&#34;, &#34;NFP&#34;]}</td></tr>
+
+<tr><td class="mono">R09_EARLY_ASSIGNMENT</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>leg-2 PASS<details class="small"><summary>per leg (1)</summary>
+<table><tr><td class="mono">leg-2</td><td><span class="badge PASS">PASS</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;PASS&#34;, &#34;measured&#34;: {&#34;itm&#34;: false, &#34;extrinsic&#34;: 3.525}}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-2&#34;: {&#34;itm&#34;: false, &#34;extrinsic&#34;: 3.525}}</td><td class="mono small">{&#34;min_put_extrinsic&#34;: 0.05}</td></tr>
+
+<tr><td class="mono">R10_IV_VS_HISTORY</td><td class="small">soft</td><td><span class="badge UNKNOWN">UNKNOWN</span></td>
+<td>IV30 current or history unavailable</td>
+<td class="mono small">-</td><td class="mono small">{&#34;iv_rank_high&#34;: 0.8, &#34;iv_rank_low&#34;: 0.2, &#34;min_obs&#34;: 20}</td></tr>
+
+<tr><td class="mono">R11_CONCENTRATION</td><td class="small">soft</td><td><span class="badge PASS">PASS</span></td>
+<td>same-underlying $385.0, total $385.0, positions 1 (placeholder limits pending Eugene)</td>
+<td class="mono small">{&#34;same_underlying_usd&#34;: 385.0, &#34;total_usd&#34;: 385.0, &#34;count&#34;: 1}</td><td class="mono small">{&#34;max_underlying_risk_usd&#34;: 1000, &#34;max_total_open_risk_usd&#34;: 2000, &#34;max_open_positions&#34;: 5}</td></tr>
+
+</table>
+</div></details>
+</div>
+
+<div class="card" id="tkt-wdc-bps-360-350">
+  <h2 style="margin-top:0"><span class="badge VETO">VETO</span>
+    WDC · bear put debit spread <span class="mono small mute">tkt-wdc-bps-360-350</span></h2>
+  <p class="small">HYPOTHETICAL - paper only, not an order · bearish · Memory/storage selloff after Chinese CXMT chip news; UBS price-target cut on HDD supply; Finviz ta_toplosers</p>
+  <div class="grid g2">
+  <div>
+    <table><tr><th>leg</th><th>side</th><th>type</th><th class="num">strike</th><th>expiry</th><th>contract</th></tr>
+    <tr><td>leg-1</td><td>buy ×1</td><td>put</td><td class="num">360.00</td><td>2026-10-30</td><td class="mono">WDC261030P00360000</td></tr><tr><td>leg-2</td><td>sell ×1</td><td>put</td><td class="num">350.00</td><td>2026-10-30</td><td class="mono">WDC261030P00350000</td></tr></table>
+  </div>
+  <div><table>
+    <tr><th>limit (debit)</th><td><b>2.90</b>
+      <span class="small mute">raw 2.9469 → down to 0.05 tick</span>
+      <div class="small mute">re-quoted live after 09:45 ET with each leg spread &lt;= 10% of mid; reference mid 2.875, cap = mid x 1.025</div></td></tr>
+    <tr><th>qty</th><td>1</td></tr>
+    <tr><th>max loss</th><td>$290.00 <span class="small mute">1 x 2.90 x 100 at limit; $287.50 at ref mid 2.875</span></td></tr>
+    <tr><th>max profit</th><td>$710.00 <span class="small mute">(10 width - 2.90) x 100 x 1</span></td></tr>
+    <tr><th>breakevens</th><td>357.1 <span class="small mute">@2.9</span> · 357.125 <span class="small mute">@2.875</span></td></tr>
+    <tr><th>hold window</th><td class="small">2026-10-13 09:45 ET (15:45 Berlin) → 2026-10-27 16:00 ET (21:00 Berlin)</td></tr>
+  </table></div>
+  </div>
+  <details class="small"><summary>entry / exit / stop / target rules</summary>
+  <table>
+  <tr><td>entry</td><td>After 09:45 ET, only if WDC &lt; 386.94 (prev close), live net mid debit &lt;= 2.90 and each leg spread &lt;= 10% of mid</td><td class="mono">time_ny gte 09:45 · underlying_last lt 386.94 · net_debit_mid lte 2.9 (raw 2.9469, down 0.05) · leg_spread_pct_of_mid lte 10.0</td></tr>
+  
+  <tr><td>exit</td><td>Time stop: close by 2026-10-27</td><td class="mono">date_ny gte 2026-10-27</td></tr>
+  
+  <tr><td>stop</td><td>Exit if WDC closes above 390 or spread value &lt;= 1.45 (~50% of debit)</td><td class="mono">underlying_close gt 390.0 · position_value lte 1.45 (raw 1.4375, up 0.05)</td></tr>
+  
+  <tr><td>target</td><td>Close at spread value 5.70 or WDC &lt;= 350</td><td class="mono">position_value gte 5.7 (raw 5.75, down 0.1) · underlying_last lte 350.0</td></tr>
+  </table>
+  <p class="mute">Pricing (run-premarket): ref mid 2.875, natural 3.8, stale — UNPRICEABLE premarket: prior-session option quotes; tick rounding (standard WDC): limit 2.9469 -&gt; 2.90 (down to 0.05 tick); stop 1.4375 -&gt; 1.45 (up to 0.05 tick); target 5.7500 -&gt; 5.70 (down to 0.10 tick)</p>
+  </details>
+
+  <h3>Risk Officer</h3>
+  <div class="small">Reviews by run:
+    <a class="pill" href="#rv-rv-premarket-wdc-bps-360-350">run-premarket · VETO</a><a class="pill" href="#rv-rv-open-0940-wdc-bps-360-350">run-open-0940 · VETO</a></div>
+  <div id="rvslot-tkt-wdc-bps-360-350">
+<div class="review" id="rv-rv-open-0940-wdc-bps-360-350">
+<p style="margin:6px 0"><span class="badge VETO">VETO</span>
+  <span class="mono small">rv-open-0940-wdc-bps-360-350</span> · run <b>run-open-0940</b> · evaluated 2026-10-13 09:40 ET (15:40 Berlin)
+  · approval required: yes</p>
+<p class="small">Blocking: <span class="pill">R01_QUOTE_FRESHNESS</span><span class="pill">R02_BID_ASK_WIDTH</span><span class="pill">R07_EARNINGS_IN_WINDOW</span></p>
+<p class="small">Flags: <span class="pill">R08_MACRO_EVENTS</span><span class="pill">R10_IV_VS_HISTORY</span></p>
+<table>
+<tr><th style="width:190px">rule</th><th>severity</th><th>result</th><th>reason</th><th>measured</th><th>threshold</th></tr>
+
+<tr><td class="mono">R01_QUOTE_FRESHNESS</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>underlying.last age 108.0 min; leg-1.bid stale; leg-1.ask stale; leg-2.bid stale; leg-2.ask stale</td>
+<td class="mono small">{&#34;market_open&#34;: true, &#34;max_age_min&#34;: 1060.0}</td><td class="mono small">{&#34;quote_max_age_seconds&#34;: 900}</td></tr>
+
+<tr><td class="mono">R02_BID_ASK_WIDTH</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>leg-1 0.1005 VETO, leg-2 0.1201 VETO<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 0.1005}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 0.1201}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 0.1005, &#34;leg-2&#34;: 0.1201}</td><td class="mono small">{&#34;max_spread_pct_of_mid&#34;: 0.1}</td></tr>
+
+<tr><td class="mono">R03_OPEN_INTEREST</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>leg-1 OI 531 PASS, leg-2 OI 620 PASS<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge PASS">PASS</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;PASS&#34;, &#34;measured&#34;: 531}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge PASS">PASS</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;PASS&#34;, &#34;measured&#34;: 620}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 531, &#34;leg-2&#34;: 620}</td><td class="mono small">{&#34;min_open_interest&#34;: 500}</td></tr>
+
+<tr><td class="mono">R04_MAX_LOSS</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>max loss $290.00 at limit vs $500 (placeholder pending Eugene)</td>
+<td class="mono small">{&#34;unlimited&#34;: false, &#34;max_loss_usd&#34;: 290.0}</td><td class="mono small">{&#34;per_trade_max_loss_usd&#34;: 500}</td></tr>
+
+<tr><td class="mono">R05_NET_PRICE_VS_LIMIT</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>net debit 2.875 vs limit 2.9</td>
+<td class="mono small">{&#34;net&#34;: 2.875}</td><td class="mono small">{&#34;limit&#34;: 2.9, &#34;price_type&#34;: &#34;debit&#34;, &#34;basis&#34;: &#34;mid&#34;}</td></tr>
+
+<tr><td class="mono">R06_MIN_DTE</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>17 DTE (NY date 2026-10-13)</td>
+<td class="mono small">{&#34;dte&#34;: 17}</td><td class="mono small">{&#34;min_dte&#34;: 7}</td></tr>
+
+<tr><td class="mono">R07_EARNINGS_IN_WINDOW</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>ev-wdc-earn-q1fy27 in window, not intended</td>
+<td class="mono small">{&#34;events_in_window&#34;: [&#34;ev-wdc-earn-q1fy27&#34;], &#34;window&#34;: [&#34;2026-10-13T09:45:00-04:00&#34;, &#34;2026-10-27T16:00:00-04:00&#34;]}</td><td class="mono small">{&#34;intended_event_ids&#34;: []}</td></tr>
+
+<tr><td class="mono">R08_MACRO_EVENTS</td><td class="small">soft</td><td><span class="badge FLAG">FLAG</span></td>
+<td>CPI ev-cpi-2026-10-14 in window; PPI ev-ppi-2026-10-15 in window</td>
+<td class="mono small">{&#34;events_in_window&#34;: [&#34;ev-cpi-2026-10-14&#34;, &#34;ev-ppi-2026-10-15&#34;]}</td><td class="mono small">{&#34;macro_event_kinds&#34;: [&#34;CPI&#34;, &#34;PPI&#34;, &#34;FOMC&#34;, &#34;NFP&#34;]}</td></tr>
+
+<tr><td class="mono">R09_EARLY_ASSIGNMENT</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>leg-2 PASS<details class="small"><summary>per leg (1)</summary>
+<table><tr><td class="mono">leg-2</td><td><span class="badge PASS">PASS</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;PASS&#34;, &#34;measured&#34;: {&#34;itm&#34;: false, &#34;extrinsic&#34;: 7.075}}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-2&#34;: {&#34;itm&#34;: false, &#34;extrinsic&#34;: 7.075}}</td><td class="mono small">{&#34;min_put_extrinsic&#34;: 0.05}</td></tr>
+
+<tr><td class="mono">R10_IV_VS_HISTORY</td><td class="small">soft</td><td><span class="badge UNKNOWN">UNKNOWN</span></td>
+<td>IV30 current or history unavailable</td>
+<td class="mono small">-</td><td class="mono small">{&#34;iv_rank_high&#34;: 0.8, &#34;iv_rank_low&#34;: 0.2, &#34;min_obs&#34;: 20}</td></tr>
+
+<tr><td class="mono">R11_CONCENTRATION</td><td class="small">soft</td><td><span class="badge PASS">PASS</span></td>
+<td>same-underlying $290.0, total $290.0, positions 1 (placeholder limits pending Eugene)</td>
+<td class="mono small">{&#34;same_underlying_usd&#34;: 290.0, &#34;total_usd&#34;: 290.0, &#34;count&#34;: 1}</td><td class="mono small">{&#34;max_underlying_risk_usd&#34;: 1000, &#34;max_total_open_risk_usd&#34;: 2000, &#34;max_open_positions&#34;: 5}</td></tr>
+
+</table>
+</div></div>
+  <details><summary>earlier review · run-premarket · VETO</summary>
+<div class="review" id="rv-rv-premarket-wdc-bps-360-350">
+<p style="margin:6px 0"><span class="badge VETO">VETO</span>
+  <span class="mono small">rv-premarket-wdc-bps-360-350</span> · run <b>run-premarket</b> · evaluated 2026-10-13 07:52 ET (13:52 Berlin)
+  · approval required: yes</p>
+<p class="small">Blocking: <span class="pill">R01_QUOTE_FRESHNESS</span><span class="pill">R02_BID_ASK_WIDTH</span><span class="pill">R07_EARNINGS_IN_WINDOW</span></p>
+<p class="small">Flags: <span class="pill">R08_MACRO_EVENTS</span><span class="pill">R10_IV_VS_HISTORY</span></p>
+<table>
+<tr><th style="width:190px">rule</th><th>severity</th><th>result</th><th>reason</th><th>measured</th><th>threshold</th></tr>
+
+<tr><td class="mono">R01_QUOTE_FRESHNESS</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>US regular session closed at evaluated_at (America/New_York); quotes cannot be live</td>
+<td class="mono small">{&#34;market_open&#34;: false, &#34;evaluated_at_ny&#34;: &#34;2026-10-13T07:52:00-04:00&#34;}</td><td class="mono small">{&#34;quote_max_age_seconds&#34;: 900}</td></tr>
+
+<tr><td class="mono">R02_BID_ASK_WIDTH</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>leg-1 0.1005 VETO, leg-2 0.1201 VETO<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 0.1005}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 0.1201}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 0.1005, &#34;leg-2&#34;: 0.1201}</td><td class="mono small">{&#34;max_spread_pct_of_mid&#34;: 0.1}</td></tr>
+
+<tr><td class="mono">R03_OPEN_INTEREST</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>leg-1 OI 531 PASS, leg-2 OI 620 PASS<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge PASS">PASS</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;PASS&#34;, &#34;measured&#34;: 531}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge PASS">PASS</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;PASS&#34;, &#34;measured&#34;: 620}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 531, &#34;leg-2&#34;: 620}</td><td class="mono small">{&#34;min_open_interest&#34;: 500}</td></tr>
+
+<tr><td class="mono">R04_MAX_LOSS</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>max loss $290.00 at limit vs $500 (placeholder pending Eugene)</td>
+<td class="mono small">{&#34;unlimited&#34;: false, &#34;max_loss_usd&#34;: 290.0}</td><td class="mono small">{&#34;per_trade_max_loss_usd&#34;: 500}</td></tr>
+
+<tr><td class="mono">R05_NET_PRICE_VS_LIMIT</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>net debit 2.875 vs limit 2.9</td>
+<td class="mono small">{&#34;net&#34;: 2.875}</td><td class="mono small">{&#34;limit&#34;: 2.9, &#34;price_type&#34;: &#34;debit&#34;, &#34;basis&#34;: &#34;mid&#34;}</td></tr>
+
+<tr><td class="mono">R06_MIN_DTE</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>17 DTE (NY date 2026-10-13)</td>
+<td class="mono small">{&#34;dte&#34;: 17}</td><td class="mono small">{&#34;min_dte&#34;: 7}</td></tr>
+
+<tr><td class="mono">R07_EARNINGS_IN_WINDOW</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>ev-wdc-earn-q1fy27 in window, not intended</td>
+<td class="mono small">{&#34;events_in_window&#34;: [&#34;ev-wdc-earn-q1fy27&#34;], &#34;window&#34;: [&#34;2026-10-13T09:45:00-04:00&#34;, &#34;2026-10-27T16:00:00-04:00&#34;]}</td><td class="mono small">{&#34;intended_event_ids&#34;: []}</td></tr>
+
+<tr><td class="mono">R08_MACRO_EVENTS</td><td class="small">soft</td><td><span class="badge FLAG">FLAG</span></td>
+<td>CPI ev-cpi-2026-10-14 in window; PPI ev-ppi-2026-10-15 in window</td>
+<td class="mono small">{&#34;events_in_window&#34;: [&#34;ev-cpi-2026-10-14&#34;, &#34;ev-ppi-2026-10-15&#34;]}</td><td class="mono small">{&#34;macro_event_kinds&#34;: [&#34;CPI&#34;, &#34;PPI&#34;, &#34;FOMC&#34;, &#34;NFP&#34;]}</td></tr>
+
+<tr><td class="mono">R09_EARLY_ASSIGNMENT</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>leg-2 PASS<details class="small"><summary>per leg (1)</summary>
+<table><tr><td class="mono">leg-2</td><td><span class="badge PASS">PASS</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;PASS&#34;, &#34;measured&#34;: {&#34;itm&#34;: false, &#34;extrinsic&#34;: 7.075}}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-2&#34;: {&#34;itm&#34;: false, &#34;extrinsic&#34;: 7.075}}</td><td class="mono small">{&#34;min_put_extrinsic&#34;: 0.05}</td></tr>
+
+<tr><td class="mono">R10_IV_VS_HISTORY</td><td class="small">soft</td><td><span class="badge UNKNOWN">UNKNOWN</span></td>
+<td>IV30 current or history unavailable</td>
+<td class="mono small">-</td><td class="mono small">{&#34;iv_rank_high&#34;: 0.8, &#34;iv_rank_low&#34;: 0.2, &#34;min_obs&#34;: 20}</td></tr>
+
+<tr><td class="mono">R11_CONCENTRATION</td><td class="small">soft</td><td><span class="badge PASS">PASS</span></td>
+<td>same-underlying $290.0, total $290.0, positions 1 (placeholder limits pending Eugene)</td>
+<td class="mono small">{&#34;same_underlying_usd&#34;: 290.0, &#34;total_usd&#34;: 290.0, &#34;count&#34;: 1}</td><td class="mono small">{&#34;max_underlying_risk_usd&#34;: 1000, &#34;max_total_open_risk_usd&#34;: 2000, &#34;max_open_positions&#34;: 5}</td></tr>
+
+</table>
+</div></details>
+</div>
+
+<div class="card" id="tkt-wdc-bcs-365-375">
+  <h2 style="margin-top:0"><span class="badge VETO">VETO</span>
+    WDC · bull call debit spread <span class="mono small mute">tkt-wdc-bcs-365-375</span></h2>
+  <p class="small">HYPOTHETICAL - paper only, not an order · bullish · Memory/storage selloff after Chinese CXMT chip news; UBS price-target cut on HDD supply; Finviz ta_toplosers</p>
+  <div class="grid g2">
+  <div>
+    <table><tr><th>leg</th><th>side</th><th>type</th><th class="num">strike</th><th>expiry</th><th>contract</th></tr>
+    <tr><td>leg-1</td><td>buy ×1</td><td>call</td><td class="num">365.00</td><td>2026-10-30</td><td class="mono">WDC261030C00365000</td></tr><tr><td>leg-2</td><td>sell ×1</td><td>call</td><td class="num">375.00</td><td>2026-10-30</td><td class="mono">WDC261030C00375000</td></tr></table>
+  </div>
+  <div><table>
+    <tr><th>limit (debit)</th><td><b>3.90</b>
+      <span class="small mute">raw 3.9975 → down to 0.1 tick</span>
+      <div class="small mute">re-quoted live after 09:45 ET with each leg spread &lt;= 10% of mid; reference mid 3.9, cap = mid x 1.025</div></td></tr>
+    <tr><th>qty</th><td>1</td></tr>
+    <tr><th>max loss</th><td>$390.00 <span class="small mute">1 x 3.90 x 100 at limit; $390.00 at ref mid 3.9</span></td></tr>
+    <tr><th>max profit</th><td>$610.00 <span class="small mute">(10 width - 3.90) x 100 x 1</span></td></tr>
+    <tr><th>breakevens</th><td>368.9 <span class="small mute">@3.9</span> · 368.9 <span class="small mute">@3.9</span></td></tr>
+    <tr><th>hold window</th><td class="small">2026-10-13 09:45 ET (15:45 Berlin) → 2026-10-27 16:00 ET (21:00 Berlin)</td></tr>
+  </table></div>
+  </div>
+  <details class="small"><summary>entry / exit / stop / target rules</summary>
+  <table>
+  <tr><td>entry</td><td>After 09:45 ET, only if WDC &gt; 386.94 (prev close), live net mid debit &lt;= 3.90 and each leg spread &lt;= 10% of mid</td><td class="mono">time_ny gte 09:45 · underlying_last gt 386.94 · net_debit_mid lte 3.9 (raw 3.9975, down 0.1) · leg_spread_pct_of_mid lte 10.0</td></tr>
+  
+  <tr><td>exit</td><td>Time stop: close by 2026-10-27</td><td class="mono">date_ny gte 2026-10-27</td></tr>
+  
+  <tr><td>stop</td><td>Exit if WDC closes below 385 or spread value &lt;= 1.95 (~50% of debit)</td><td class="mono">underlying_close lt 385.0 · position_value lte 1.95 (raw 1.95, up 0.05)</td></tr>
+  
+  <tr><td>target</td><td>Close at spread value 7.80 or WDC &gt;= 375</td><td class="mono">position_value gte 7.8 (raw 7.8, down 0.1) · underlying_last gte 375.0</td></tr>
+  </table>
+  <p class="mute">Pricing (run-premarket): ref mid 3.9, natural 7.7, stale — UNPRICEABLE premarket: prior-session option quotes; tick rounding (standard WDC): limit 3.9975 -&gt; 3.90 (down to 0.10 tick); stop 1.9500 -&gt; 1.95 (up to 0.05 tick); target 7.8000 -&gt; 7.80 (down to 0.10 tick)</p>
+  </details>
+
+  <h3>Risk Officer</h3>
+  <div class="small">Reviews by run:
+    <a class="pill" href="#rv-rv-premarket-wdc-bcs-365-375">run-premarket · VETO</a><a class="pill" href="#rv-rv-open-0940-wdc-bcs-365-375">run-open-0940 · VETO</a></div>
+  <div id="rvslot-tkt-wdc-bcs-365-375">
+<div class="review" id="rv-rv-open-0940-wdc-bcs-365-375">
+<p style="margin:6px 0"><span class="badge VETO">VETO</span>
+  <span class="mono small">rv-open-0940-wdc-bcs-365-375</span> · run <b>run-open-0940</b> · evaluated 2026-10-13 09:40 ET (15:40 Berlin)
+  · approval required: yes</p>
+<p class="small">Blocking: <span class="pill">R01_QUOTE_FRESHNESS</span><span class="pill">R02_BID_ASK_WIDTH</span><span class="pill">R03_OPEN_INTEREST</span><span class="pill">R07_EARNINGS_IN_WINDOW</span><span class="pill">R09_EARLY_ASSIGNMENT</span></p>
+<p class="small">Flags: <span class="pill">R08_MACRO_EVENTS</span><span class="pill">R10_IV_VS_HISTORY</span></p>
+<table>
+<tr><th style="width:190px">rule</th><th>severity</th><th>result</th><th>reason</th><th>measured</th><th>threshold</th></tr>
+
+<tr><td class="mono">R01_QUOTE_FRESHNESS</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>underlying.last age 108.0 min; leg-1.bid stale; leg-1.ask stale; leg-2.bid stale; leg-2.ask stale</td>
+<td class="mono small">{&#34;market_open&#34;: true, &#34;max_age_min&#34;: 1060.0}</td><td class="mono small">{&#34;quote_max_age_seconds&#34;: 900}</td></tr>
+
+<tr><td class="mono">R02_BID_ASK_WIDTH</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>leg-1 0.186 VETO, leg-2 0.0564 PASS<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 0.186}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge PASS">PASS</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;PASS&#34;, &#34;measured&#34;: 0.0564}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 0.186, &#34;leg-2&#34;: 0.0564}</td><td class="mono small">{&#34;max_spread_pct_of_mid&#34;: 0.1}</td></tr>
+
+<tr><td class="mono">R03_OPEN_INTEREST</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>leg-1 OI 12 VETO, leg-2 OI 14 VETO<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 12}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 14}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 12, &#34;leg-2&#34;: 14}</td><td class="mono small">{&#34;min_open_interest&#34;: 500}</td></tr>
+
+<tr><td class="mono">R04_MAX_LOSS</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>max loss $390.00 at limit vs $500 (placeholder pending Eugene)</td>
+<td class="mono small">{&#34;unlimited&#34;: false, &#34;max_loss_usd&#34;: 390.0}</td><td class="mono small">{&#34;per_trade_max_loss_usd&#34;: 500}</td></tr>
+
+<tr><td class="mono">R05_NET_PRICE_VS_LIMIT</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>net debit 3.90 vs limit 3.9</td>
+<td class="mono small">{&#34;net&#34;: 3.9}</td><td class="mono small">{&#34;limit&#34;: 3.9, &#34;price_type&#34;: &#34;debit&#34;, &#34;basis&#34;: &#34;mid&#34;}</td></tr>
+
+<tr><td class="mono">R06_MIN_DTE</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>17 DTE (NY date 2026-10-13)</td>
+<td class="mono small">{&#34;dte&#34;: 17}</td><td class="mono small">{&#34;min_dte&#34;: 7}</td></tr>
+
+<tr><td class="mono">R07_EARNINGS_IN_WINDOW</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>ev-wdc-earn-q1fy27 in window, not intended</td>
+<td class="mono small">{&#34;events_in_window&#34;: [&#34;ev-wdc-earn-q1fy27&#34;], &#34;window&#34;: [&#34;2026-10-13T09:45:00-04:00&#34;, &#34;2026-10-27T16:00:00-04:00&#34;]}</td><td class="mono small">{&#34;intended_event_ids&#34;: []}</td></tr>
+
+<tr><td class="mono">R08_MACRO_EVENTS</td><td class="small">soft</td><td><span class="badge FLAG">FLAG</span></td>
+<td>CPI ev-cpi-2026-10-14 in window; PPI ev-ppi-2026-10-15 in window</td>
+<td class="mono small">{&#34;events_in_window&#34;: [&#34;ev-cpi-2026-10-14&#34;, &#34;ev-ppi-2026-10-15&#34;]}</td><td class="mono small">{&#34;macro_event_kinds&#34;: [&#34;CPI&#34;, &#34;PPI&#34;, &#34;FOMC&#34;, &#34;NFP&#34;]}</td></tr>
+
+<tr><td class="mono">R09_EARLY_ASSIGNMENT</td><td class="small">hard</td><td><span class="badge UNKNOWN">UNKNOWN</span></td>
+<td>leg-2 UNKNOWN (ex_dividend coverage missing)<details class="small"><summary>per leg (1)</summary>
+<table><tr><td class="mono">leg-2</td><td><span class="badge UNKNOWN">UNKNOWN</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;UNKNOWN&#34;, &#34;measured&#34;: {&#34;exdiv_in_window&#34;: []}, &#34;reason&#34;: &#34;ex_dividend coverage missing&#34;}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-2&#34;: {&#34;exdiv_in_window&#34;: []}}</td><td class="mono small">{&#34;min_put_extrinsic&#34;: 0.05}</td></tr>
+
+<tr><td class="mono">R10_IV_VS_HISTORY</td><td class="small">soft</td><td><span class="badge UNKNOWN">UNKNOWN</span></td>
+<td>IV30 current or history unavailable</td>
+<td class="mono small">-</td><td class="mono small">{&#34;iv_rank_high&#34;: 0.8, &#34;iv_rank_low&#34;: 0.2, &#34;min_obs&#34;: 20}</td></tr>
+
+<tr><td class="mono">R11_CONCENTRATION</td><td class="small">soft</td><td><span class="badge PASS">PASS</span></td>
+<td>same-underlying $390.0, total $390.0, positions 1 (placeholder limits pending Eugene)</td>
+<td class="mono small">{&#34;same_underlying_usd&#34;: 390.0, &#34;total_usd&#34;: 390.0, &#34;count&#34;: 1}</td><td class="mono small">{&#34;max_underlying_risk_usd&#34;: 1000, &#34;max_total_open_risk_usd&#34;: 2000, &#34;max_open_positions&#34;: 5}</td></tr>
+
+</table>
+</div></div>
+  <details><summary>earlier review · run-premarket · VETO</summary>
+<div class="review" id="rv-rv-premarket-wdc-bcs-365-375">
+<p style="margin:6px 0"><span class="badge VETO">VETO</span>
+  <span class="mono small">rv-premarket-wdc-bcs-365-375</span> · run <b>run-premarket</b> · evaluated 2026-10-13 07:52 ET (13:52 Berlin)
+  · approval required: yes</p>
+<p class="small">Blocking: <span class="pill">R01_QUOTE_FRESHNESS</span><span class="pill">R02_BID_ASK_WIDTH</span><span class="pill">R03_OPEN_INTEREST</span><span class="pill">R07_EARNINGS_IN_WINDOW</span><span class="pill">R09_EARLY_ASSIGNMENT</span></p>
+<p class="small">Flags: <span class="pill">R08_MACRO_EVENTS</span><span class="pill">R10_IV_VS_HISTORY</span></p>
+<table>
+<tr><th style="width:190px">rule</th><th>severity</th><th>result</th><th>reason</th><th>measured</th><th>threshold</th></tr>
+
+<tr><td class="mono">R01_QUOTE_FRESHNESS</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>US regular session closed at evaluated_at (America/New_York); quotes cannot be live</td>
+<td class="mono small">{&#34;market_open&#34;: false, &#34;evaluated_at_ny&#34;: &#34;2026-10-13T07:52:00-04:00&#34;}</td><td class="mono small">{&#34;quote_max_age_seconds&#34;: 900}</td></tr>
+
+<tr><td class="mono">R02_BID_ASK_WIDTH</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>leg-1 0.186 VETO, leg-2 0.0564 PASS<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 0.186}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge PASS">PASS</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;PASS&#34;, &#34;measured&#34;: 0.0564}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 0.186, &#34;leg-2&#34;: 0.0564}</td><td class="mono small">{&#34;max_spread_pct_of_mid&#34;: 0.1}</td></tr>
+
+<tr><td class="mono">R03_OPEN_INTEREST</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>leg-1 OI 12 VETO, leg-2 OI 14 VETO<details class="small"><summary>per leg (2)</summary>
+<table><tr><td class="mono">leg-1</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-1&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 12}</td></tr><tr><td class="mono">leg-2</td><td><span class="badge VETO">VETO</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;VETO&#34;, &#34;measured&#34;: 14}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-1&#34;: 12, &#34;leg-2&#34;: 14}</td><td class="mono small">{&#34;min_open_interest&#34;: 500}</td></tr>
+
+<tr><td class="mono">R04_MAX_LOSS</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>max loss $390.00 at limit vs $500 (placeholder pending Eugene)</td>
+<td class="mono small">{&#34;unlimited&#34;: false, &#34;max_loss_usd&#34;: 390.0}</td><td class="mono small">{&#34;per_trade_max_loss_usd&#34;: 500}</td></tr>
+
+<tr><td class="mono">R05_NET_PRICE_VS_LIMIT</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>net debit 3.90 vs limit 3.9</td>
+<td class="mono small">{&#34;net&#34;: 3.9}</td><td class="mono small">{&#34;limit&#34;: 3.9, &#34;price_type&#34;: &#34;debit&#34;, &#34;basis&#34;: &#34;mid&#34;}</td></tr>
+
+<tr><td class="mono">R06_MIN_DTE</td><td class="small">hard</td><td><span class="badge PASS">PASS</span></td>
+<td>17 DTE (NY date 2026-10-13)</td>
+<td class="mono small">{&#34;dte&#34;: 17}</td><td class="mono small">{&#34;min_dte&#34;: 7}</td></tr>
+
+<tr><td class="mono">R07_EARNINGS_IN_WINDOW</td><td class="small">hard</td><td><span class="badge VETO">VETO</span></td>
+<td>ev-wdc-earn-q1fy27 in window, not intended</td>
+<td class="mono small">{&#34;events_in_window&#34;: [&#34;ev-wdc-earn-q1fy27&#34;], &#34;window&#34;: [&#34;2026-10-13T09:45:00-04:00&#34;, &#34;2026-10-27T16:00:00-04:00&#34;]}</td><td class="mono small">{&#34;intended_event_ids&#34;: []}</td></tr>
+
+<tr><td class="mono">R08_MACRO_EVENTS</td><td class="small">soft</td><td><span class="badge FLAG">FLAG</span></td>
+<td>CPI ev-cpi-2026-10-14 in window; PPI ev-ppi-2026-10-15 in window</td>
+<td class="mono small">{&#34;events_in_window&#34;: [&#34;ev-cpi-2026-10-14&#34;, &#34;ev-ppi-2026-10-15&#34;]}</td><td class="mono small">{&#34;macro_event_kinds&#34;: [&#34;CPI&#34;, &#34;PPI&#34;, &#34;FOMC&#34;, &#34;NFP&#34;]}</td></tr>
+
+<tr><td class="mono">R09_EARLY_ASSIGNMENT</td><td class="small">hard</td><td><span class="badge UNKNOWN">UNKNOWN</span></td>
+<td>leg-2 UNKNOWN (ex_dividend coverage missing)<details class="small"><summary>per leg (1)</summary>
+<table><tr><td class="mono">leg-2</td><td><span class="badge UNKNOWN">UNKNOWN</span></td><td class="mono">{&#34;leg_id&#34;: &#34;leg-2&#34;, &#34;result&#34;: &#34;UNKNOWN&#34;, &#34;measured&#34;: {&#34;exdiv_in_window&#34;: []}, &#34;reason&#34;: &#34;ex_dividend coverage missing&#34;}</td></tr></table></details></td>
+<td class="mono small">{&#34;leg-2&#34;: {&#34;exdiv_in_window&#34;: []}}</td><td class="mono small">{&#34;min_put_extrinsic&#34;: 0.05}</td></tr>
+
+<tr><td class="mono">R10_IV_VS_HISTORY</td><td class="small">soft</td><td><span class="badge UNKNOWN">UNKNOWN</span></td>
+<td>IV30 current or history unavailable</td>
+<td class="mono small">-</td><td class="mono small">{&#34;iv_rank_high&#34;: 0.8, &#34;iv_rank_low&#34;: 0.2, &#34;min_obs&#34;: 20}</td></tr>
+
+<tr><td class="mono">R11_CONCENTRATION</td><td class="small">soft</td><td><span class="badge PASS">PASS</span></td>
+<td>same-underlying $390.0, total $390.0, positions 1 (placeholder limits pending Eugene)</td>
+<td class="mono small">{&#34;same_underlying_usd&#34;: 390.0, &#34;total_usd&#34;: 390.0, &#34;count&#34;: 1}</td><td class="mono small">{&#34;max_underlying_risk_usd&#34;: 1000, &#34;max_total_open_risk_usd&#34;: 2000, &#34;max_open_positions&#34;: 5}</td></tr>
+
+</table>
+</div></details>
+</div>
+
+</main>
+<footer>read-only view of <span class="mono">out</span> · GET only · bound to 127.0.0.1 · Owner: Moodle (UX) / Poodle (code)</footer>
+</body>
+</html>

@@ -1,0 +1,146 @@
+--- a/session.schema.json
++++ b/session.schema.json
+@@ -3,5 +3,5 @@
+   "$id": "https://poodle.local/trading/spec/session.schema.json",
+   "title": "Paper US options trading session record",
+-  "description": "Canonical per-session record for a PAPER-ONLY US equity options workflow (scan -> candidates -> tickets -> risk review -> approval -> simulated fill -> watch -> close). No broker, no live orders: 'executed' always means a simulated paper fill. Sourced market data is ALWAYS wrapped in a Field object (value + source_id + as_of + status). Identifiers, keys, and decisions (ticket legs, limit prices, verdicts) are plain values because they are authored by the system/user, not observed. Cross-object invariants that JSON Schema cannot express are listed in x-invariants and enforced by validate_session.py.",
++  "description": "Canonical per-session record for a PAPER-ONLY US equity options workflow (scan -> candidates -> tickets -> risk review -> approval -> simulated fill -> watch -> close). No broker, no live orders: 'executed' always means a simulated paper fill. Sourced market data is ALWAYS wrapped in a Field object (value + source_id + as_of + status). Identifiers, keys, and decisions (ticket legs, limit prices, verdicts) are plain values because they are authored by the system/user, not observed. Cross-object invariants that JSON Schema cannot express are listed in x-invariants and enforced by validate_session.py. | v1.1 PROPOSAL (Poodle, spec_patches/v1.1/CHANGES.md)",
+   "$comment": "MARKET HOURS: all US market-hours, DTE, expiry, hold-window, and 'during market hours' logic MUST be computed in America/New_York (IANA zone via zoneinfo), never by a fixed offset from Europe/Berlin. US and EU DST transitions differ: e.g. 2026-10-25 (EU ends DST) to 2026-11-01 (US ends DST) the NY-Berlin gap is 5h, so the 09:30 ET open is 14:30 Berlin, not 15:30; likewise in March (US starts 2nd Sunday, EU last Sunday). Berlin times are display-only.",
+   "x-market-hours": {
+@@ -47,5 +47,8 @@
+   "properties": {
+     "schema_version": {
+-      "const": "1.0.0"
++      "enum": [
++        "1.0.0",
++        "1.1.0"
++      ]
+     },
+     "session": {
+@@ -219,6 +222,8 @@
+               "postopen",
+               "close",
+-              "afterhours"
+-            ]
++              "afterhours",
++              "closed"
++            ],
++            "description": "NY clock. closed = before 04:00 or after the regular close (16:00, 13:00 on early-close days) on a trading day, or a weekend / NYSE holiday"
+           },
+           "started": {
+@@ -1744,4 +1749,38 @@
+         }
+       }
++    },
++    "premarket_scans": {
++      "description": "One premarket scan per run (run_id unique). premarket_scan, if present, is the latest of these (kept for v1 readers).",
++      "type": "array",
++      "items": {
++        "$ref": "#/properties/premarket_scan"
++      }
++    },
++    "global_snapshots": {
++      "description": "One global snapshot per run (run_id unique). global_snapshot, if present, is the latest of these (kept for v1 readers).",
++      "type": "array",
++      "items": {
++        "$ref": "#/properties/global_snapshot"
++      }
++    },
++    "trace_ref": {
++      "type": "object",
++      "additionalProperties": false,
++      "required": [
++        "path",
++        "sha256"
++      ],
++      "description": "Hand-off trace written next to this record (not embedded).",
++      "properties": {
++        "path": {
++          "type": "string",
++          "pattern": "^[^/].*\\.trace\\.json$",
++          "description": "relative to this record's directory"
++        },
++        "sha256": {
++          "type": "string",
++          "pattern": "^[0-9a-f]{64}$"
++        }
++      }
+     }
+   },
+@@ -2187,5 +2226,6 @@
+         },
+         "open_interest": {
+-          "$ref": "#/$defs/NumberField"
++          "$ref": "#/$defs/IntegerField",
++          "description": "OCC open interest (contracts, integer)"
+         },
+         "volume": {
+@@ -2292,4 +2332,22 @@
+           "type": "string",
+           "description": "human-readable precondition, e.g. re-quoted live after 09:30 ET"
++        },
++        "raw_amount": {
++          "type": "number",
++          "minimum": 0,
++          "description": "unrounded price before tick rounding"
++        },
++        "tick_size": {
++          "type": "number",
++          "exclusiveMinimum": 0
++        },
++        "rounding": {
++          "enum": [
++            "down",
++            "up",
++            "nearest",
++            "none"
++          ],
++          "description": "direction applied to raw_amount (debit limit: down)"
+         }
+       }
+@@ -2388,4 +2446,20 @@
+         "unit": {
+           "type": "string"
++        },
++        "raw_value": {
++          "type": "number",
++          "description": "unrounded threshold before tick rounding"
++        },
++        "tick_size": {
++          "type": "number",
++          "exclusiveMinimum": 0
++        },
++        "rounding": {
++          "enum": [
++            "down",
++            "up",
++            "nearest",
++            "none"
++          ]
+         }
+       }
+@@ -2421,4 +2495,24 @@
+         }
+       }
++    },
++    "IntegerField": {
++      "$ref": "#/$defs/Field",
++      "properties": {
++        "value": {
++          "type": [
++            "integer",
++            "null"
++          ]
++        },
++        "conflicts": {
++          "items": {
++            "properties": {
++              "value": {
++                "type": "integer"
++              }
++            }
++          }
++        }
++      }
+     }
+   }

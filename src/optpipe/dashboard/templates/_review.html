@@ -1,0 +1,17 @@
+{% set o = rv.overall %}
+<div class="review" id="rv-{{ rv.review_id }}">
+<p style="margin:6px 0"><span class="badge {{ o.verdict }}">{{ o.verdict }}</span>
+  <span class="mono small">{{ rv.review_id }}</span> · run <b>{{ rv.run_id }}</b> · evaluated {{ rv.evaluated_at|pair }}
+  · approval required: {{ 'yes' if o.approval_required else 'no' }}</p>
+{% if o.blocking_rule_ids %}<p class="small">Blocking: {% for r in o.blocking_rule_ids %}<span class="pill">{{ r }}</span>{% endfor %}</p>{% endif %}
+{% if o.flag_rule_ids %}<p class="small">Flags: {% for r in o.flag_rule_ids %}<span class="pill">{{ r }}</span>{% endfor %}</p>{% endif %}
+<table>
+<tr><th style="width:190px">rule</th><th>severity</th><th>result</th><th>reason</th><th>measured</th><th>threshold</th></tr>
+{% for r in rv.results %}
+<tr><td class="mono">{{ r.rule_id }}</td><td class="small">{{ r.severity }}</td><td><span class="badge {{ r.result }}">{{ r.result }}</span></td>
+<td>{{ r.reason }}{% if r.per_leg %}<details class="small"><summary>per leg ({{ r.per_leg|length }})</summary>
+<table>{% for l in r.per_leg %}<tr><td class="mono">{{ l.leg_id }}</td><td><span class="badge {{ l.result }}">{{ l.result }}</span></td><td class="mono">{{ l|compact }}</td></tr>{% endfor %}</table></details>{% endif %}</td>
+<td class="mono small">{{ r.measured|compact }}</td><td class="mono small">{{ r.threshold|compact }}</td></tr>
+{% endfor %}
+</table>
+</div>

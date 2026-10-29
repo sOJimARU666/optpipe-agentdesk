@@ -7,6 +7,7 @@ hand-off is written to a separate trace file. PAPER ONLY: nothing here talks to 
 from __future__ import annotations
 
 import copy
+import os
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -17,16 +18,22 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field
 
 from .agent import Agent
-from .config import Settings
+from .config import REPO_ROOT, Settings, repo_path
 from .discovery import DiscoveryAgent
 from .discovery.agent import SETTINGS_SRC
 from .models.contracts import (DiscoveryInput, ManualCandidate, ManualCoverage, ManualEvent, ManualSource,
                                PlannerInput, PlannerParams, ResearchInput, RiskInput, WatcherInput)
 from .models.schema_v1 import SessionRecordV1
+from .models.schema_v1_1 import SessionRecordV11
+from .records.compat import from_v1, to_v1
 from .models.session import HandoffTrace, RunTrace, SessionTrace
 from .planner import PlannerAgent
 from .providers.base import Fetcher
+from .providers.cache import CachedFetcher
 from .providers.fetchers import FixtureFetcher, HttpFetcher
+from .providers.macro import LiveMacroCalendars, ReplayMacroCalendars
+from .providers.treasury import LiveTreasuryRates, ReplayTreasuryRates
+from .research.iv import IvHistoryStore
 from .providers.finviz import FinvizScreener
 from .providers.global_snapshot import RecordGlobalSnapshot, UnavailableGlobalSnapshot
 from .providers.nasdaq import NasdaqProvider
@@ -38,7 +45,8 @@ from .risk.engine import Calendar
 from .risk.ruleset import Ruleset, load_ruleset
 from .spec import SpecFiles, discover
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"   # internal superset (spec_patches/v1.1); written to disk as strict v1 via compat.to_v1
+V1_1_SCHEMA = REPO_ROOT / "spec_patches" / "v1.1" / "session.schema.json"
 MODE = "paper"   # the only mode the schema allows; there is no live mode anywhere in this package
 
 
@@ -68,19 +76,30 @@ def load_inputs(path: str | Path | None) -> SessionInputs:
     return SessionInputs.model_validate(yaml.safe_load(Path(path).read_text()) or {})
 
 
+PREMARKET_START = "04:00"
+
+
 def phase_for(t: datetime, cal: Calendar) -> str:
-    """Schema run phase from the NY clock (market logic is always in America/New_York)."""
+    """Run phase from the NY clock (market logic is always in America/New_York).
+
+    closed    weekend / NYSE holiday, before 04:00, or at/after the regular close
+              (16:00; 13:00 on early-close days)                      [Doodle's ruling, v1.1]
+    premarket 04:00 .. open-1h | preopen open-1h .. open | open open .. open+15m | intraday .. close
+    v1 has no "closed": records/compat.to_v1 writes it as "afterhours" and keeps the true phase in the summary.
+    """
     n = t.astimezone(NY)
     if not cal.is_trading_day(n.date()):
-        return "afterhours"
+        return "closed"
     o, c = ny_at(n.date(), cal.open), cal.close_dt(n.date())
+    if n < ny_at(n.date(), PREMARKET_START) or n >= c:
+        return "closed"
     if n < o - timedelta(hours=1):
         return "premarket"
     if n < o:
         return "preopen"
     if n < o + timedelta(minutes=15):
         return "open"
-    return "intraday" if n < c else "afterhours"
+    return "intraday"
 
 
 @dataclass
@@ -89,6 +108,17 @@ class Pipeline:
     fetcher: Fetcher
     data_mode: Literal["fixtures", "live"]
     global_provider: Any
+    macro: Any = None            # MacroCalendarProvider
+    rates: Any = None            # RateProvider
+    iv_store: Optional[IvHistoryStore] = None
+
+
+def state_dir(settings: Settings) -> Path:
+    return repo_path(os.environ.get("OPTPIPE_STATE_DIR", settings.iv.state_dir))
+
+
+def cache_dir(settings: Settings) -> Path:
+    return repo_path(os.environ.get("OPTPIPE_CACHE_DIR", settings.sources.cache_dir))
 
 
 def resolve_record_path(ref: str, base: Path, spec: Optional[SpecFiles]) -> Optional[Path]:
@@ -100,20 +130,52 @@ def resolve_record_path(ref: str, base: Path, spec: Optional[SpecFiles]) -> Opti
 def build_pipeline(settings: Settings, fixtures_dir: Optional[Path], inputs: SessionInputs,
                    as_of: datetime) -> Pipeline:
     spec = discover(settings.spec_path)
+    sc = settings.sources
     if fixtures_dir is not None:
         fetcher: Fetcher = FixtureFetcher(fixtures_dir, fetched_at=as_of)
         ref = inputs.global_snapshot_record
         p = resolve_record_path(ref, fixtures_dir, spec) if ref else None
         gp = RecordGlobalSnapshot(p) if p else UnavailableGlobalSnapshot(settings.discovery.global_indexes)
-        return Pipeline(settings, fetcher, "fixtures", gp)
-    # live: read-only public GETs (Finviz, Nasdaq). Global snapshot has no live provider yet.
-    return Pipeline(settings, HttpFetcher(settings.http.user_agent, settings.http.timeout_s), "live",
-                    UnavailableGlobalSnapshot(settings.discovery.global_indexes))
+        replay = Path(fixtures_dir) / sc.replay_file
+        macro = ReplayMacroCalendars(replay) if replay.exists() else None
+        rates = ReplayTreasuryRates(replay, sc.treasury_tenor) if replay.exists() else None
+        return Pipeline(settings, fetcher, "fixtures", gp, macro, rates,
+                        IvHistoryStore(state_dir(settings) / "fixtures" / "iv_history"))
+    # live: read-only public GETs (Finviz, Nasdaq, Fed, BLS, Treasury). Global snapshot has no live provider yet.
+    http = HttpFetcher(settings.http.user_agent, settings.http.timeout_s)
+    cached = CachedFetcher(http, cache_dir(settings), sc.cache_ttl_hours)
+    return Pipeline(settings, http, "live", UnavailableGlobalSnapshot(settings.discovery.global_indexes),
+                    LiveMacroCalendars(cached, sc.fomc_url, sc.bls_urls),
+                    LiveTreasuryRates(cached, sc.treasury_url, sc.treasury_tenor),
+                    IvHistoryStore(state_dir(settings) / "live" / "iv_history"))
 
 
 def _merge_by(old: list[dict], new: list[dict], key: str) -> list[dict]:
     ids = {x[key] for x in old}
     return old + [x for x in new if x[key] not in ids]
+
+
+def _rename_sources(new: dict, old_sources: list[dict], as_of: datetime) -> dict:
+    old = {x["id"]: x["fetched_at"] for x in old_sources}
+    ren: dict[str, str] = {}
+    for src in new["sources"]:
+        sid = src["id"]
+        if sid in old and old[sid] != src["fetched_at"]:
+            t = datetime.fromisoformat(src["fetched_at"]).astimezone(NY)
+            cand = f"{sid}-{t:%H%M}"
+            if cand in old:
+                cand = f"{sid}-{t:%H%M%S}"
+            ren[sid] = cand
+    if not ren:
+        return new
+
+    def walk(o):
+        if isinstance(o, dict):
+            return {k: walk(v) for k, v in o.items()}
+        if isinstance(o, list):
+            return [walk(v) for v in o]
+        return ren.get(o, o) if isinstance(o, str) else o
+    return walk(new)
 
 
 class Orchestrator:
@@ -161,7 +223,9 @@ class Orchestrator:
             f"watchlist: {s.watchlist or 'PLACEHOLDER (empty)'}; sectors: {s.sectors or 'PLACEHOLDER (empty)'}",
             *self.rule_notes,
             "PLACEHOLDER: NYSE 2026 holidays/early closes in spec risk_rules.yaml are unverified",
-            "PLACEHOLDER: no FOMC/NFP calendar source; their coverage is recorded as missing",
+            ("macro calendars: " + ("hand-made replay snapshot from real captures (fixtures)"
+                                    if self.p.data_mode == "fixtures" else "Fed + BLS schedule pages (live GET, cached)")
+             if self.p.macro is not None else "macro calendars: none configured; FOMC/CPI/PPI/NFP coverage missing"),
         ]
         if s.risk_overrides:
             notes.append(f"risk config overrides: {s.risk_overrides}")
@@ -214,7 +278,9 @@ class Orchestrator:
         notes += disc.notes
 
         source_times = {x["id"]: datetime.fromisoformat(x["fetched_at"]) for x in [settings_src, *manual_sources]}
-        research = ResearchAgent(self.nasdaq, self.nasdaq, self.nasdaq)
+        research = ResearchAgent(self.nasdaq, self.nasdaq, self.nasdaq, macro=self.p.macro, rates=self.p.rates,
+                                 iv_store=self.p.iv_store, data_mode=self.p.data_mode,
+                                 iv_target_days=s.iv.target_days, iv_min_history=s.iv.min_history_points)
         res = self._step(research, ResearchInput(
             as_of=as_of, run_id=run_id, picks=disc.picks, events=inputs.events, coverage=inputs.coverage,
             source_times=source_times, strike_window_pct=s.research.strike_window_pct))
@@ -233,7 +299,7 @@ class Orchestrator:
         rec = self._assemble(existing, as_of, run_id, phase, inputs, disc, res, plan, dump,
                              self._market_status([p.symbol for p in disc.picks], as_of))
 
-        risk_out = self._step(self.risk, RiskInput(record=SessionRecordV1.model_validate(rec), run_id=run_id,
+        risk_out = self._step(self.risk, RiskInput(record=SessionRecordV11.model_validate(rec), run_id=run_id,
                                                    evaluated_at=as_of))
         reviews = [r.model_dump(mode="json", exclude_unset=True) for r in risk_out.risk_reviews]
         for rv, src in zip(reviews, risk_out.risk_reviews):     # keep explicit nulls the schema requires
@@ -246,7 +312,8 @@ class Orchestrator:
 
         rec["idea_log"], recommendation = apply_reviews(rec["idea_log"], reviews, as_of)
         rec["data_quality"] = {**quality_index(rec), "notes": [recommendation, *notes][:50]}
-        SessionRecordV1.model_validate(rec)
+        SessionRecordV11.model_validate(rec)
+        SessionRecordV1.model_validate(to_v1(rec))
 
         validation = self.validate(rec)
         trace = RunTrace(run_id=run_id, as_of=as_of, data_mode=self.p.data_mode, steps=self.steps,
@@ -254,45 +321,62 @@ class Orchestrator:
         return rec, trace, notes
 
     def _assemble(self, existing, as_of, run_id, phase, inputs, disc, res, plan, dump, market_status) -> dict:
-        new_sources = [*dump(disc.sources), *dump(res.sources)]
+        one = lambda m: m.model_dump(mode="json", exclude_unset=True)  # noqa: E731
+        new = {"sources": [*dump(disc.sources), *dump(res.sources)],
+               "premarket_scans": {**one(disc.premarket_scan), "run_id": run_id},
+               "global_snapshots": {**one(disc.global_snapshot), "run_id": run_id},
+               "event_calendar": one(res.event_calendar), "candidates": dump(res.candidates),
+               "tickets": dump(plan.tickets), "idea_log": dump(plan.idea_log)}
         run = {"run_id": run_id, "phase": phase, "started": tspair(as_of), "market_status": market_status,
                "summary": self.run_spec.summary or f"{phase} run ({self.p.data_mode})"}
         if existing is None:
             rec: dict[str, Any] = {
                 "schema_version": SCHEMA_VERSION, "session": self._session_block(as_of, None),
-                "sources": [], "runs": [], "premarket_scan": disc.premarket_scan.model_dump(mode="json", exclude_unset=True),
-                "global_snapshot": disc.global_snapshot.model_dump(mode="json", exclude_unset=True),
+                "sources": [], "runs": [], "premarket_scans": [], "global_snapshots": [],
                 "event_calendar": {"events": [], "coverage": []}, "candidates": [], "tickets": [],
                 "risk_reviews": [], "approvals": [], "paper_positions": [], "watcher_rules": [], "alerts": [],
                 "idea_log": [], "data_quality": {"missing": [], "stale": [], "conflicting": []}}
         else:
-            rec = copy.deepcopy(existing)
+            rec = from_v1(existing)
             rec["session"] = {**self._session_block(as_of, existing["session"]["created"]),
                               "notes": existing["session"].get("notes") or []}
-            # premarket_scan / global_snapshot are single sections in schema v1: the first run keeps them.
-        rec["sources"] = _merge_by(rec["sources"], new_sources, "id")
+            # A re-fetch of the same page in a later run is a different source: give it a time-suffixed id
+            # (the first run keeps the plain id, matching Doodle's example), so INV-01/INV-09 hold per run.
+            new = _rename_sources(new, rec["sources"], as_of)
+        rec["sources"] = _merge_by(rec["sources"], new["sources"], "id")
         rec["runs"].append(run)
-        ev = res.event_calendar.model_dump(mode="json", exclude_unset=True)
+        # Per-run scan + global snapshot keyed by run_id (Doodle's ruling); the singular v1 sections = latest run.
+        for plural, single in (("premarket_scans", "premarket_scan"), ("global_snapshots", "global_snapshot")):
+            rec[plural] = [x for x in rec.get(plural, []) if x["run_id"] != run_id] + [new[plural]]
+            rec[single] = new[plural]
+        ev = new["event_calendar"]
         rec["event_calendar"]["events"] = _merge_by(rec["event_calendar"]["events"], ev["events"], "event_id")
         newcov = {(c["kind"], c["underlying"]): c for c in ev["coverage"]}
         rec["event_calendar"]["coverage"] = [newcov.pop((c["kind"], c["underlying"]), c)
                                              for c in rec["event_calendar"]["coverage"]] + list(newcov.values())
         by_id = {c["candidate_id"]: c for c in rec["candidates"]}
-        for c in dump(res.candidates):
+        for c in new["candidates"]:
             if c["candidate_id"] in by_id:
                 by_id[c["candidate_id"]]["snapshots"] += c["snapshots"]
             else:
                 rec["candidates"].append(c)
-        rec["tickets"] = _merge_by(rec["tickets"], dump(plan.tickets), "ticket_id")
-        rec["idea_log"] = _merge_by(rec["idea_log"], dump(plan.idea_log), "idea_id")
+        rec["tickets"] = _merge_by(rec["tickets"], new["tickets"], "ticket_id")
+        rec["idea_log"] = _merge_by(rec["idea_log"], new["idea_log"], "idea_id")
         return rec
 
     def validate(self, rec: dict) -> dict:
+        """errors: the written v1 record against Doodle's validator + schema (canonical).
+        v1_1_errors: the internal record against the same validator bound to the v1.1 proposal schema."""
         mod = self.spec.load_module("session_validator") if self.spec else None
         if mod is None:
             return {"validator": None, "errors": [], "note": "spec validate_session.py not found; pydantic only"}
-        errs = list(mod.validate(copy.deepcopy(rec)))
-        return {"validator": str(self.spec.path("session_validator")), "errors": errs}
+        out = {"validator": str(self.spec.path("session_validator")),
+               "errors": list(mod.validate(to_v1(rec)))}
+        m11 = self.spec.validator_for_schema(V1_1_SCHEMA)
+        if m11 is not None:
+            out["v1_1_schema"] = str(V1_1_SCHEMA.relative_to(REPO_ROOT))
+            out["v1_1_errors"] = list(m11.validate(copy.deepcopy(rec)))
+        return out
 
 
 def run_session(settings: Settings, inputs: SessionInputs, as_of: datetime, fixtures_dir: Optional[Path],

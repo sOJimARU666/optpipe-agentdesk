@@ -1,0 +1,44 @@
+# HAND-MADE replay snapshot - NOT an actual 2026-10-13 fetch.
+# Used by fixture runs (no network). It states what the macro-calendar / Treasury fetches would have
+# returned at `fetched_at`, built from REAL captures taken on 2026-10-29 (see tests/fixtures/sources/):
+#   * fed_fomccalendars.htm      - curl GET of the Fed calendar page (lists 2026 and 2027 meetings)
+#   * bls_{cpi,ppi,empsit}.md    - bls.gov schedule pages. Direct GET got HTTP 403 "Access Denied";
+#                                  these are the rendered-fetch tool's markdown, trimmed to the table.
+#                                  On 2026-10-29 they list releases from Nov 2026 onward only, so the
+#                                  releases between Oct 13 and Oct 29 are added below as extra_events.
+#   * treasury_bill_rates_2026.csv - home.treasury.gov Daily Treasury Bill Rates CSV for 2026.
+# Owner: Poodle (code) - extra events per Doodle's notes; verify before relying on them.
+label: "HAND-MADE replay snapshot (not an actual 2026-10-13 fetch; built from real 2026-10-29 captures)"
+fetched_at: "2026-10-13T07:50:00-04:00"
+
+calendars:
+  - kind: FOMC
+    url: https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
+    capture: ../sources/fed_fomccalendars.htm
+    capture_note: "fed_fomccalendars.htm, curl GET 2026-10-29 (Europe/Berlin)"
+  - kind: CPI
+    url: https://www.bls.gov/schedule/news_release/cpi.htm
+    capture: ../sources/bls_cpi.md
+    capture_note: "bls_cpi.md, rendered fetch 2026-10-29 (direct GET: HTTP 403)"
+    extra_events:
+      - {date: 2026-10-14, time: "08:30", description: "Consumer Price Index (September 2026 data)",
+         basis: "from Doodle's session notes (BLS CPI schedule, seen 2026-10-13 09:09 ET); already released by 2026-10-29 so absent from the capture"}
+  - kind: PPI
+    url: https://www.bls.gov/schedule/news_release/ppi.htm
+    capture: ../sources/bls_ppi.md
+    capture_note: "bls_ppi.md, rendered fetch 2026-10-29 (direct GET: HTTP 403)"
+    extra_events:
+      - {date: 2026-10-15, time: "08:30", description: "Producer Price Index (September 2026 data)",
+         basis: "date noted by Doodle next to CPI without its own citation; absent from the 2026-10-29 capture (past)"}
+  - kind: NFP
+    url: https://www.bls.gov/schedule/news_release/empsit.htm
+    capture: ../sources/bls_empsit.md
+    capture_note: "bls_empsit.md, rendered fetch 2026-10-29 (direct GET: HTTP 403)"
+    coverage_note: >-
+      no NFP release between 2026-10-13 and 2026-11-06: the 2026-10-02 Employment Situation release says the
+      October report is scheduled for 2026-11-06 (bls_empsit_2026-10-02_header.md)
+
+rates:
+  url: "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2026/all?type=daily_treasury_bill_rates&field_tdr_date_value=2026&page&_format=csv"
+  capture: ../sources/treasury_bill_rates_2026.csv
+  capture_note: "treasury_bill_rates_2026.csv, GET 2026-10-29; only rows dated before the run date are used"

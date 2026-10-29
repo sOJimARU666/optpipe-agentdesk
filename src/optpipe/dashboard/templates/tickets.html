@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block main %}
+<h1>Tickets · {{ s.date }} <span class="hyp">HYPOTHETICAL - paper only, not an order</span></h1>
+<p class="mute small">Each ticket shows the Risk Officer verdict of the latest run and every rule with its reason. Earlier runs' reviews load on demand.</p>
+{% for x in tickets %}{% set t = x.t %}{% set lv = x.latest %}
+<div class="card" id="{{ t.ticket_id }}">
+  <h2 style="margin-top:0">{% if lv %}<span class="badge {{ lv.overall.verdict }}">{{ lv.overall.verdict }}</span>{% endif %}
+    {{ t.underlying }} · {{ t.strategy|replace('_',' ') }} <span class="mono small mute">{{ t.ticket_id }}</span></h2>
+  <p class="small">{{ t.label }} · {{ t.direction }} · {{ t.thesis }}</p>
+  <div class="grid g2">
+  <div>
+    <table><tr><th>leg</th><th>side</th><th>type</th><th class="num">strike</th><th>expiry</th><th>contract</th></tr>
+    {% for l in t.legs %}<tr><td>{{ l.leg_id }}</td><td>{{ l.side }} ×{{ l.ratio }}</td><td>{{ l.type }}</td><td class="num">{{ '%.2f'|format(l.strike) }}</td><td>{{ l.expiry }}</td><td class="mono">{{ l.contract_id }}</td></tr>{% endfor %}</table>
+  </div>
+  <div><table>
+    <tr><th>limit ({{ t.limit_price.price_type }})</th><td><b>{{ '%.2f'|format(t.limit_price.amount) }}</b>
+      {% if t.limit_price.raw_amount is defined and t.limit_price.raw_amount is not none %}<span class="small mute">raw {{ '%.4f'|format(t.limit_price.raw_amount) }} → {{ t.limit_price.rounding }} to {{ t.limit_price.tick_size }} tick</span>{% endif %}
+      <div class="small mute">{{ t.limit_price.valid_only_if }}</div></td></tr>
+    <tr><th>qty</th><td>{{ t.quantity }}</td></tr>
+    <tr><th>max loss</th><td>{% if t.max_loss.unlimited %}<span class="bad">unlimited</span>{% else %}${{ '%.2f'|format(t.max_loss.amount_usd) }}{% endif %} <span class="small mute">{{ t.max_loss.basis }}</span></td></tr>
+    <tr><th>max profit</th><td>{% if t.max_profit.unlimited %}unlimited{% else %}${{ '%.2f'|format(t.max_profit.amount_usd) }}{% endif %} <span class="small mute">{{ t.max_profit.basis }}</span></td></tr>
+    <tr><th>breakevens</th><td>{% for b in t.breakevens %}{{ b.underlying_price }} <span class="small mute">@{{ b.at_price }}</span>{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
+    <tr><th>hold window</th><td class="small">{{ t.hold_window.start|pair }} → {{ t.hold_window.end|pair }}</td></tr>
+  </table></div>
+  </div>
+  <details class="small"><summary>entry / exit / stop / target rules</summary>
+  <table>{% for kind in ('entry_rules','exit_rules','stop_rules','target_rules') %}{% for r in t[kind] %}
+  <tr><td>{{ kind|replace('_rules','') }}</td><td>{{ r.text }}</td><td class="mono">{% for c in r.conditions %}{{ c.metric }} {{ c.op }} {{ c.value }}{% if c.raw_value is defined %} (raw {{ c.raw_value|round(4) }}, {{ c.rounding }} {{ c.tick_size }}){% endif %}{% if not loop.last %} · {% endif %}{% endfor %}</td></tr>
+  {% endfor %}{% endfor %}</table>
+  {% if t.pricing %}<p class="mute">Pricing ({{ t.pricing.run_id }}): ref mid {{ t.pricing.reference_mid }}, natural {{ t.pricing.natural }}, {{ t.pricing.status }} — {{ t.pricing.note }}</p>{% endif %}
+  </details>
+
+  <h3>Risk Officer</h3>
+  {% if x.reviews|length > 1 %}<div class="small">Reviews by run:
+    {% for rv in x.reviews %}{% if export %}<a class="pill" href="#rv-{{ rv.review_id }}">{{ rv.run_id }} · {{ rv.overall.verdict }}</a>{% else %}<a class="pill {{ 'on' if rv is sameas lv }}" href="#rv-{{ rv.review_id }}"
+      hx-get="/s/{{ s.date }}/review/{{ rv.review_id }}" hx-target="#rvslot-{{ t.ticket_id }}" hx-swap="innerHTML">{{ rv.run_id }} · {{ rv.overall.verdict }}</a>{% endif %}{% endfor %}</div>{% endif %}
+  <div id="rvslot-{{ t.ticket_id }}">{% if lv %}{% with rv=lv %}{% include "_review.html" %}{% endwith %}{% else %}<p class="mute">Not reviewed.</p>{% endif %}</div>
+  {% if export %}{% for rv in x.reviews if rv is not sameas lv %}<details><summary>earlier review · {{ rv.run_id }} · {{ rv.overall.verdict }}</summary>{% include "_review.html" %}</details>{% endfor %}{% endif %}
+</div>
+{% else %}<div class="card mute">No tickets in this session.</div>{% endfor %}
+{% endblock %}

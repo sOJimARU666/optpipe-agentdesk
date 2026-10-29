@@ -9,10 +9,14 @@ dependencies = [
   "requests>=2.31",
   "beautifulsoup4>=4.12",
   "lxml>=5",
+  "fastapi>=0.110",
+  "jinja2>=3.1",
+  "uvicorn>=0.29",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "jsonschema>=4", "datamodel-code-generator>=0.25"]
+dev = ["pytest>=8", "jsonschema>=4", "datamodel-code-generator>=0.25", "httpx>=0.27"]
+docs = ["playwright>=1.40"]
 
 [project.scripts]
 optpipe = "optpipe.cli:main"
@@ -24,6 +28,10 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+"optpipe.dashboard" = ["templates/*.html", "static/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]

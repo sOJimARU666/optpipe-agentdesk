@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>optpipe · {{ page|capitalize }}{% if date %} · {{ date }}{% endif %}</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1d2330;--mute:#6b7385;--line:#e3e6ec;--accent:#3557d4;
+--pass:#1f8a4c;--flag:#b7791f;--unknown:#6b5bd2;--veto:#c53030;--stale:#a0671a;--missing:#9aa1ae}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.paper{background:#1d2330;color:#fff;padding:6px 20px;font-size:12px;letter-spacing:.04em;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.paper b{color:#ffd166}
+header{background:#fff;border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+header .brand{font-weight:700;font-size:16px}header nav a{margin-right:14px;padding:6px 2px;color:var(--mute);font-weight:500}
+header nav a.on{color:var(--ink);border-bottom:2px solid var(--accent)}
+header .meta{margin-left:auto;color:var(--mute);font-size:12px}
+main{padding:18px 20px;max-width:1280px;margin:0 auto}
+h1{font-size:20px;margin:4px 0 14px}h2{font-size:16px;margin:22px 0 8px}h3{font-size:14px;margin:12px 0 6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.grid{display:grid;gap:14px}.g2{grid-template-columns:repeat(auto-fit,minmax(380px,1fr))}.g4{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:600;font-size:12px;background:#fafbfc}td.num{text-align:right;font-variant-numeric:tabular-nums}
+.mute{color:var(--mute)}.small{font-size:12px}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.03em;color:#fff;vertical-align:middle}
+.PASS{background:var(--pass)}.FLAG{background:var(--flag)}.UNKNOWN{background:var(--unknown)}.VETO{background:var(--veto)}
+.st-ok{}.st-stale{color:var(--stale)}.st-missing,.st-unusable{color:var(--missing)}.st-conflicting{color:var(--veto)}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:1px 9px;margin:2px 4px 2px 0;font-size:12px;background:#fafbfc}
+.pill.on{border-color:var(--accent);color:var(--accent);font-weight:600}
+.kpi{font-size:22px;font-weight:700}.kpi-l{color:var(--mute);font-size:12px}
+.hyp{display:inline-block;background:#fff4d6;color:#7a5200;border:1px solid #f0d58a;border-radius:6px;padding:1px 8px;font-size:11px;font-weight:700}
+details>summary{cursor:pointer;color:var(--accent)}
+.ok{color:var(--pass)}.bad{color:var(--veto)}
+footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
+{% block css %}{% endblock %}
+</style>
+{% if not export %}<script src="/static/htmx.min.js" defer></script>{% endif %}
+</head>
+<body>
+<div class="paper"><span><b>PAPER ONLY</b> · research records, HYPOTHETICAL tickets · no broker, no orders</span>
+<span>all market logic in America/New_York · times shown ET and Europe/Berlin</span></div>
+<header>
+  <span class="brand">optpipe</span>
+  <nav>
+    {% if date %}<a href="{{ nav.today }}" class="{{ 'on' if page=='today' }}">Today</a>
+    <a href="{{ nav.tickets }}" class="{{ 'on' if page=='tickets' }}">Tickets</a>
+    <a href="{{ nav.timeline }}" class="{{ 'on' if page=='timeline' }}">Agent timeline</a>{% endif %}
+    <a href="{{ nav.history }}" class="{{ 'on' if page=='history' }}">History</a>
+  </nav>
+  <span class="meta">{% if s %}session <b>{{ s.date }}</b> · {{ s.origin }} ·
+    trace {% if s.integrity.ok %}<span class="ok" title="sha256 {{ s.integrity.trace_sha256 }}">✓ sha256 verified</span>{% else %}<span class="bad" title="{{ s.integrity.problems|join('; ') }}">✗ check failed</span>{% endif %}{% endif %}</span>
+</header>
+<main>{% block main %}{% endblock %}</main>
+<footer>read-only view of <span class="mono">{{ out_dir }}</span> · GET only · bound to 127.0.0.1 · Owner: Moodle (UX) / Poodle (code)</footer>
+</body>
+</html>

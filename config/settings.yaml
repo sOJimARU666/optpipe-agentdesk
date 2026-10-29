@@ -48,12 +48,35 @@ planner:
   target_multiple_of_debit: 2.0
   entry_slippage_pct: 2.5
   time_stop_days_before_expiry: 3
+  # Tick-size rounding (Doodle's ruling): penny-pilot names tick 0.01 below $3 / 0.05 from $3;
+  # all others 0.05 / 0.10. Limit rounds DOWN, stop UP, target DOWN; raw + rounded are both kept.
+  # PLACEHOLDER list - verify against the current Cboe/OCC penny program list before relying on it.
+  penny_pilot: [SPY, QQQ, IWM, JPM]
+  tick_threshold: 3.0
+
+# Macro calendars (R08) and the risk-free rate for derived IV. Read-only GETs in --live mode, cached under
+# cache_dir with a TTL; fixture runs read <fixtures>/macro_calendars.yaml instead (no network).
+# bls.gov answers scripted GETs with HTTP 403 (seen 2026-10-29), so live BLS coverage will usually be missing.
+sources:
+  cache_dir: var/cache
+  cache_ttl_hours: 12
+  fomc_url: https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
+  bls_urls:
+    CPI: https://www.bls.gov/schedule/news_release/cpi.htm
+    NFP: https://www.bls.gov/schedule/news_release/empsit.htm
+    PPI: https://www.bls.gov/schedule/news_release/ppi.htm
+  treasury_tenor: "13 WEEKS COUPON EQUIVALENT"   # home.treasury.gov Daily Treasury Bill Rates
+
+# Derived IV (Black-Scholes from chain mids). R10 needs min_history_points daily observations.
+iv:
+  min_history_points: 20
+  target_days: 30
+  state_dir: var/state
 
 # Overrides on top of Doodle's spec/risk_rules.yaml `config` (the spec file itself is never edited).
 # Each override is recorded in every risk review's `config_overrides`. The spec's own PLACEHOLDERS,
 # all pending Eugene:
 #   per_trade_max_loss_usd: 500      max_underlying_risk_usd: 1000
 #   max_total_open_risk_usd: 2000    max_open_positions: 5
-# Also unconfirmed in the spec: NYSE 2026 holidays/early closes (market_hours), and there is no
-# FOMC/NFP calendar source, so those coverages stay `missing` (R08 cannot fully PASS).
+# Also unconfirmed in the spec: NYSE 2026 holidays/early closes (market_hours).
 risk_overrides: {}

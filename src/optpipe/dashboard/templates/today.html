@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% from "_field.html" import f %}
+{% block main %}
+{% set run = (s.runs|selectattr('run_id','equalto',run_id)|list|first) if run_id else none %}
+<h1>Today · {{ s.date }}</h1>
+<div class="card">
+  <div class="small mute">Runs in this session ({{ s.runs|length }}):</div>
+  {% for r in s.runs %}<a class="pill {{ 'on' if r.run_id==run_id }}" href="{{ run_links[r.run_id] }}">{{ r.run_id }} · {{ r.phase }} · {{ r.started|pair }}</a>{% endfor %}
+  {% if run %}<p class="small" style="margin:8px 0 0">{{ run.summary }} · market status {{ f(run.market_status) }}</p>{% endif %}
+</div>
+
+<div class="grid g4">
+  <div class="card"><div class="kpi">{{ cands|length }}</div><div class="kpi-l">candidates</div></div>
+  <div class="card"><div class="kpi">{{ s.record.tickets|length }}</div><div class="kpi-l">hypothetical tickets</div></div>
+  <div class="card"><div class="kpi">{{ events|length }}</div><div class="kpi-l">calendar events ({{ coverage|length }} coverage rows)</div></div>
+  <div class="card"><div class="kpi small" style="font-size:15px">{% for k,v in dq.items() %}{{ k }} {{ v }}{% if not loop.last %} · {% endif %}{% endfor %}</div><div class="kpi-l">data-quality index (Field paths)</div></div>
+</div>
+
+<div class="grid g2">
+<div class="card">
+  <h2 style="margin-top:0">Global snapshot</h2>
+  {% if glob %}
+  <table><tr><th>instrument</th><th>region</th><th class="num">level</th><th class="num">chg %</th><th>session</th></tr>
+  {% for i in glob.instruments %}<tr><td>{{ i.name }} <span class="mute small">{{ i.symbol }}</span></td><td class="small">{{ i.region }}</td>
+  <td class="num">{{ f(i.level, 2) }}</td><td class="num">{{ f(i.change_pct, 2) }}</td><td class="small">{{ i.session_state }}</td></tr>{% endfor %}</table>
+  {% for t in glob.themes %}<p class="small">Theme: {{ f(t) }}</p>{% endfor %}
+  {% else %}<p class="mute">No global snapshot for this run.</p>{% endif %}
+</div>
+<div class="card">
+  <h2 style="margin-top:0">Premarket scan</h2>
+  {% if scan %}
+  <table><tr><th>screen</th><th>status</th><th class="num">rows</th><th>notes</th></tr>
+  {% for sc in scan.screens %}<tr><td>{{ sc.name }}</td><td class="st-{{ sc.status }}">{{ sc.status }}</td><td class="num">{{ sc.rows|length }}</td>
+  <td class="small">{{ sc.status_reason or '' }}{% if sc.rows %}<div class="mono">{% for r in sc.rows[:8] %}{{ r.ticker }}{% if not loop.last %}, {% endif %}{% endfor %}{% if sc.rows|length > 8 %} …{% endif %}</div>{% endif %}</td></tr>{% endfor %}</table>
+  {% for e in scan.earnings_reports %}<p class="small"><b>{{ e.ticker }}</b> {{ e.fiscal_period }}: EPS {{ f(e.eps_actual, 2) }} vs est {{ f(e.eps_estimate, 2) }}</p>{% endfor %}
+  {% else %}<p class="mute">No scan for this run.</p>{% endif %}
+</div>
+</div>
+
+<h2>Candidates</h2>
+<div class="grid g2">
+{% for x in cands %}{% set c = x.c %}{% set sn = x.snap %}
+<div class="card">
+  <h3 style="margin-top:0">{{ c.underlying }} <span class="mute small">{{ c.company_name }} · {{ c.exchange }}</span></h3>
+  {% if sn %}
+  <table>
+    <tr><th>last</th><th>bid / ask</th><th>prev close</th><th>IV30</th><th>IV30 history</th></tr>
+    <tr><td>{{ f(sn.quote.last, 2) }}</td><td>{{ f(sn.quote.bid, 2) }} / {{ f(sn.quote.ask, 2) }}</td><td>{{ f(sn.quote.prev_close, 2) }}</td>
+    <td>{{ f(sn.iv.iv30_current) }}</td><td>{% if sn.iv.iv30_history.value %}{{ sn.iv.iv30_history.value|length }} obs{% else %}<span class="st-missing" title="{{ sn.iv.iv30_history|ftitle }}">none yet</span>{% endif %}</td></tr>
+  </table>
+  <p class="small mute">{{ sn.option_chain_slices|length }} chain slices · {{ sn.option_chain_slices|map(attribute='contracts')|map('length')|sum }} contracts · IV method: {{ sn.iv.iv30_current.method or 'n/a' }}</p>
+  {% endif %}
+  {% for k in c.catalysts %}<div class="small">• {{ f(k) }}</div>{% endfor %}
+</div>
+{% endfor %}
+</div>
+
+<h2>Event calendar <span class="mute small">(macro events come from the Fed / BLS calendars; coverage drives R07–R09)</span></h2>
+<div class="grid g2">
+<div class="card"><table><tr><th>event</th><th>kind</th><th>scheduled</th><th>timing</th></tr>
+{% for e in events|sort(attribute='scheduled_at.value') %}<tr><td class="mono">{{ e.event_id }}</td><td>{{ e.kind }}{% if e.underlying %} · {{ e.underlying }}{% endif %}</td>
+<td>{{ f(e.scheduled_at) }}</td><td class="small">{{ e.timing }}</td></tr>{% endfor %}</table></div>
+<div class="card"><table><tr><th>coverage</th><th>checked through</th><th>source</th></tr>
+{% for c in coverage %}<tr><td>{{ c.kind }}{% if c.underlying %} · {{ c.underlying }}{% endif %}</td><td>{{ f(c.checked_through) }}</td><td class="mono small">{{ c.checked_through.source_id or '-' }}</td></tr>{% endfor %}</table></div>
+</div>
+{% endblock %}

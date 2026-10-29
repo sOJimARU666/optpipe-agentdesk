@@ -5,18 +5,28 @@ not give is a `missing` Field with a note.
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from typing import Any, Optional
 
 from ..agent import Agent
 from ..models.common import Event as PEvent, OptionChain, QuoteBasis, UnderlyingQuote
 from ..models.contracts import ManualCoverage, ManualEvent, Pick, ResearchInput, ResearchOutput
 from ..providers.base import DataUnavailable, EventProvider, OptionChainProvider, QuoteProvider
+from ..providers.macro import MACRO_KINDS, CalendarSnapshot, MacroCalendarProvider, visible
+from ..providers.treasury import RatePoint, RateProvider
 from ..records.fields import F, MISS, NY, derived, ny_at, occ_symbol, slug
+from .iv import BS_NOTE, ExpiryIv, IvHistoryStore, atm_iv, implied_vol, interpolate_iv30, year_fraction
 
 MAX_SLICE_DTE = 60          # keep chain slices within ~2 months (record size)
 PRIOR_NOTE = "prior-session close quote; options do not trade premarket"
 GREEK_NOTE = "not provided by Nasdaq chain"
+MACRO_HORIZON_DAYS = 120    # macro events kept in the record; coverage is capped to the same horizon
+
+
+def fetched_t(contracts: list[dict]) -> datetime:
+    """Quote instant of a slice (latest contract as_of)."""
+    ts = [datetime.fromisoformat(c["bid"]["as_of"]) for c in contracts if c["bid"].get("as_of")]
+    return max(ts)
 
 
 def _cap(t: Optional[datetime], fetched: datetime) -> datetime:
@@ -30,12 +40,33 @@ class ResearchAgent(Agent[ResearchInput, ResearchOutput]):
     input_model = ResearchInput
     output_model = ResearchOutput
 
-    def __init__(self, quotes: QuoteProvider, chains: OptionChainProvider, events: Optional[EventProvider] = None):
+    def __init__(self, quotes: QuoteProvider, chains: OptionChainProvider, events: Optional[EventProvider] = None,
+                 macro: Optional[MacroCalendarProvider] = None, rates: Optional[RateProvider] = None,
+                 iv_store: Optional[IvHistoryStore] = None, data_mode: str = "fixtures",
+                 iv_target_days: int = 30, iv_min_history: int = 20):
         self.quotes, self.chains, self.events = quotes, chains, events
+        self.macro, self.rates, self.iv_store, self.data_mode = macro, rates, iv_store, data_mode
+        self.iv_target_days, self.iv_min_history = iv_target_days, iv_min_history
+        self.rate: Optional[RatePoint] = None
 
     def run(self, inp: ResearchInput) -> ResearchOutput:
         cands, sources, notes, bias = [], {}, [], {}
         provider_events: list[PEvent] = []
+        self.rate = None
+        if self.rates is not None:
+            try:
+                self.rate = self.rates.get_rate(inp.as_of)
+                sources[self.rate.source["id"]] = self.rate.source
+                notes.append(f"risk-free rate for derived IV: {self.rate.formula} ({self.rate.source['id']})")
+            except DataUnavailable as e:
+                notes.append(f"risk-free rate unavailable ({e}); contract IV stays missing")
+        macro_snaps: list[CalendarSnapshot] = []
+        if self.macro is not None:
+            got, n1 = self.macro.get_calendars(inp.as_of)
+            macro_snaps, n2 = visible(got, inp.as_of)
+            notes += n1 + n2
+            for m in macro_snaps:
+                sources[m.source["id"]] = m.source
         for p in inp.picks:
             cid = f"cand-{slug(p.symbol)}"
             bias[cid] = p.bias
@@ -48,15 +79,26 @@ class ResearchAgent(Agent[ResearchInput, ResearchOutput]):
                           "catalysts": [F(c.text, c.source_id, inp.source_times.get(c.source_id, inp.as_of), c.status)
                                         for c in p.catalysts],
                           "snapshots": [snap]})
-        events = self._events(inp, provider_events, sources)
+        events, ev_notes = self._events(inp, provider_events, sources, macro_snaps)
+        notes += ev_notes
         for c in cands:
             c["related_event_ids"] = [e["event_id"] for e in events if e.get("underlying") == c["underlying"]]
             if c["company_name"] is None:
                 del c["company_name"]
             if c["exchange"] is None:
                 del c["exchange"]
-        coverage = [self._coverage(c, inp.source_times.get(c.source_id or "", inp.as_of)) for c in inp.coverage]
+        coverage = self._macro_coverage(macro_snaps, inp.as_of)
         have = {(c["kind"], c["underlying"]) for c in coverage}
+        for c in inp.coverage:
+            if (c.kind, c.underlying) in have:
+                notes.append(f"manual {c.kind} coverage superseded by the {c.kind} calendar source")
+                continue
+            coverage.append(self._coverage(c, inp.source_times.get(c.source_id or "", inp.as_of)))
+        have = {(c["kind"], c["underlying"]) for c in coverage}
+        for kind in MACRO_KINDS:
+            if (kind, None) not in have:
+                coverage.append({"kind": kind, "underlying": None,
+                                 "checked_through": MISS(note=f"no {kind} calendar obtained for this run")})
         for p in inp.picks:                       # be explicit about what was NOT checked
             for kind in ("earnings", "ex_dividend"):
                 if (kind, p.symbol) not in have:
@@ -98,14 +140,54 @@ class ResearchAgent(Agent[ResearchInput, ResearchOutput]):
             sources.append({"id": chain_id, "url": chain.source or "urn:poodle:unknown",
                             "fetched_at": fetched.isoformat(), "kind": "option_chain_api", "publisher": "Nasdaq",
                             "realtime": chain.quote_basis == QuoteBasis.REALTIME})
-            slices = self._slices(chain, q, chain_id, fetched, inp)
+            slices, per_exp, spot_note = self._slices(chain, q, chain_id, fetched, inp, self.rate)
+            iv, iv_src, n = self._iv30(p.symbol, slices, per_exp, chain_id, inp, spot_note)
+            sources += iv_src
+            notes += n
         except DataUnavailable as e:
             notes.append(f"{p.symbol}: option chain unavailable ({e})")
-        snap = {"run_id": inp.run_id, "quote": quote, "volume": volume,
-                "iv": {"iv30_current": MISS(note="IV not in Nasdaq chain"),
-                       "iv30_history": MISS(note="no IV history source")},
-                "option_chain_slices": slices}
+            iv = None
+        if iv is None:
+            iv = {"iv30_current": MISS(note="no option chain"), "iv30_history": MISS(note="no option chain")}
+        snap = {"run_id": inp.run_id, "quote": quote, "volume": volume, "iv": iv, "option_chain_slices": slices}
         return snap, sources, pev, notes
+
+    # ---- derived IV ----
+    def _iv30(self, symbol: str, slices: list[dict], per_exp: list[ExpiryIv], sid: str, inp: ResearchInput,
+              spot_note: str):
+        notes: list[str] = []
+        srcs: list[dict] = []
+        first = next((c["iv"] for s in slices for c in s["contracts"] if c["iv"]["status"] in ("ok", "stale")), None)
+        value, how = interpolate_iv30(per_exp, self.iv_target_days) if per_exp else (None, "no usable contract IV")
+        if value is None or first is None:
+            cur = MISS(sid, f"IV30 not derivable: {how if self.rate else 'no risk-free rate'}")
+        else:
+            rid = self.rate.source["id"] if self.rate else "n/a"
+            cur = derived(round(value, 6), sid, datetime.fromisoformat(first["as_of"]), first["status"],
+                          f"ATM IV per expiry (call/put mean, linear in strike at spot) -> {how}",
+                          note=f"{BS_NOTE}; spot {spot_note}; r from {rid}")
+        obs_date = datetime.fromisoformat(first["as_of"]).astimezone(NY).date() if first else None
+        if self.iv_store is None or obs_date is None:
+            hist = MISS(note="no IV history store configured" if self.iv_store is None else "no current IV")
+        else:
+            h = self.iv_store.history(symbol, obs_date, inp.as_of)
+            hid = f"src-optpipe-iv-history-{slug(symbol)}"
+            if not h:
+                hist = MISS(note=f"0 daily IV30 observations before {obs_date.isoformat()} "
+                                 f"(R10 needs {self.iv_min_history}); history starts accumulating with this run")
+            else:
+                srcs.append({"id": hid, "url": f"urn:optpipe:state:{self.data_mode}/iv_history/{symbol.upper()}.jsonl",
+                             "kind": "derived", "fetched_at": inp.as_of.isoformat(), "publisher": "optpipe",
+                             "title": f"Derived daily IV30 history for {symbol.upper()}"})
+                short = len(h) < self.iv_min_history
+                hist = derived([v for _, v in h], hid, inp.as_of, "ok",
+                               "daily IV30 (this pipeline's derived iv30_current), last per NY date, 30 calendar days",
+                               note=f"{len(h)} observations {h[0][0].isoformat()}..{h[-1][0].isoformat()}"
+                                    + (f" (< {self.iv_min_history}: R10 UNKNOWN)" if short else ""))
+            if value is not None:
+                self.iv_store.record(symbol, obs_date, value, inp.as_of, inp.run_id, self.data_mode)
+                notes.append(f"{symbol}: IV30 {value:.4f} ({obs_date.isoformat()}) recorded to IV history")
+        return {"iv30_current": cur, "iv30_history": hist}, srcs, notes
 
     @staticmethod
     def _quote(q: UnderlyingQuote, sid: str, fetched: datetime):
@@ -122,15 +204,19 @@ class ResearchAgent(Agent[ResearchInput, ResearchOutput]):
         return quote, vol
 
     @staticmethod
-    def _slices(chain: OptionChain, q: Optional[UnderlyingQuote], sid: str, fetched: datetime, inp: ResearchInput):
+    def _slices(chain: OptionChain, q: Optional[UnderlyingQuote], sid: str, fetched: datetime, inp: ResearchInput,
+                rate: Optional[RatePoint] = None):
         today = inp.as_of.astimezone(NY).date()
         spot = q.last if q and q.last else None
         prior = chain.quote_basis == QuoteBasis.PRIOR_CLOSE
-        out = []
+        # IV must use the spot that matches the option quotes: prior-session quotes -> prior close.
+        iv_spot, spot_note = (q.prev_close, "prior close (option quotes are prior-session)") if prior and q \
+            and q.prev_close else (spot, "underlying last")
+        out, per_exp = [], []
         for exp in chain.expiries:
             if not (0 <= (exp - today).days <= MAX_SLICE_DTE):
                 continue
-            contracts = []
+            contracts, pts = [], []
             for oq in sorted((x for x in chain.quotes if x.expiry == exp), key=lambda x: (x.right.value, x.strike)):
                 if spot and abs(oq.strike - spot) / spot * 100 > inp.strike_window_pct:
                     continue
@@ -144,22 +230,64 @@ class ResearchAgent(Agent[ResearchInput, ResearchOutput]):
                 c = {"contract_id": occ_symbol(chain.underlying, exp, oq.right.value, oq.strike),
                      "type": "call" if oq.right.value == "C" else "put", "strike": oq.strike, "expiry": exp.isoformat(),
                      "style": "american", "multiplier": 100, "bid": bid, "ask": ask, "mid": mid,
-                     "last": F(oq.last, sid, t, st, note=note), "iv": MISS(sid, GREEK_NOTE),
+                     "last": F(oq.last, sid, t, st, note=note),
+                     "iv": ResearchAgent._contract_iv(oq, exp, iv_spot, rate, t, sid, st, pts),
                      "open_interest": F(oq.open_interest, sid, t, "ok", note="OCC open interest as of prior close"),
                      "volume": F(oq.volume, sid, t, st, note=note),
                      "greeks": {"delta": g, "gamma": g, "theta": g, "vega": g}}
                 contracts.append(c)
+            if pts and iv_spot:
+                a = atm_iv(iv_spot, pts)
+                if a is not None:
+                    per_exp.append(ExpiryIv(exp, year_fraction(fetched_t(contracts), ny_at(exp, "16:00")), a))
             if contracts:
                 s = {"expiry": exp.isoformat(), "source_id": sid, "contracts": contracts}
                 if chain.note:
                     s["slice_note"] = f"chain lastTrade: {chain.note}" + ("; quotes are prior-session" if prior else "")
                 out.append(s)
-        return out
+        return out, per_exp, spot_note
+
+    @staticmethod
+    def _contract_iv(oq, exp: date, spot: Optional[float], rate: Optional[RatePoint], t: datetime, sid: str,
+                     st: str, pts: list) -> dict:
+        if rate is None:
+            return MISS(sid, "no risk-free rate for derived IV")
+        if spot is None or oq.bid is None or oq.ask is None or oq.ask <= 0:
+            return MISS(sid, "derived IV needs spot, bid and ask")
+        mid = (oq.bid + oq.ask) / 2
+        tt = year_fraction(t, ny_at(exp, "16:00"))
+        iv = implied_vol(oq.right.value, mid, spot, oq.strike, tt, rate.rate)
+        if iv is None:
+            return MISS(sid, "no Black-Scholes solution for the mid (outside no-arbitrage bounds)")
+        pts.append((oq.strike, oq.right.value, iv))
+        return derived(round(iv, 6), sid, t, st,
+                       f"Black-Scholes IV from mid {mid:.4f}, S={spot}, K={oq.strike}, T={tt:.5f}y, r={rate.rate:.6f}",
+                       note=f"{BS_NOTE}; r: {rate.source['id']}")
 
     # ---- events / coverage ----
     @staticmethod
-    def _events(inp: ResearchInput, provider_events: list[PEvent], sources: dict) -> list[dict]:
-        out = [ResearchAgent._manual_event(e, inp.source_times.get(e.source_id, inp.as_of)) for e in inp.events]
+    def _events(inp: ResearchInput, provider_events: list[PEvent], sources: dict,
+                macro: Optional[list[CalendarSnapshot]] = None) -> tuple[list[dict], list[str]]:
+        notes: list[str] = []
+        horizon = inp.as_of.astimezone(NY).date() + timedelta(days=MACRO_HORIZON_DAYS)
+        out: list[dict] = []
+        for m in macro or []:
+            sid, t = m.source["id"], m.fetched_at
+            for e in m.events:
+                if e.at.date() > horizon:
+                    continue
+                d = {"event_id": f"ev-{e.kind.lower()}-{e.at.date().isoformat()}", "kind": e.kind,
+                     "underlying": None,
+                     "scheduled_at": F(e.at.isoformat(), sid, t, "ok", note=e.note), "timing": "at_time",
+                     "description": e.description}
+                out.append(d)
+        provided = {(e["kind"], e["scheduled_at"]["value"][:10]) for e in out}
+        for e in inp.events:
+            ev = ResearchAgent._manual_event(e, inp.source_times.get(e.source_id, inp.as_of))
+            if e.underlying is None and (e.kind, ev["scheduled_at"]["value"][:10]) in provided:
+                notes.append(f"manual event {e.event_id} superseded by the {e.kind} calendar source")
+                continue
+            out.append(ev)
         seen = {(e["kind"], e.get("underlying"), e["scheduled_at"]["value"][:10]) for e in out}
         hhmm = inp.as_of.astimezone(NY).strftime("%H%M")
         for e in provider_events:
@@ -174,6 +302,22 @@ class ResearchAgent(Agent[ResearchInput, ResearchOutput]):
                                          else MISS(note="provider event without a recorded source")),
                         "timing": "unknown", "description": e.description})
             seen.add((kind, e.symbol, e.date.isoformat()))
+        return out, notes
+
+    @staticmethod
+    def _macro_coverage(snaps: list[CalendarSnapshot], as_of: datetime) -> list[dict]:
+        horizon = as_of.astimezone(NY).date() + timedelta(days=MACRO_HORIZON_DAYS)
+        out = []
+        for m in snaps:
+            if m.checked_through is None:
+                continue
+            ct, formula = m.checked_through, m.formula
+            if ct > horizon:
+                ct, formula = horizon, f"min({formula}; {m.checked_through.isoformat()}, as_of + {MACRO_HORIZON_DAYS}d " \
+                                       f"record horizon)"
+            out.append({"kind": m.kind, "underlying": None,
+                        "checked_through": derived(ct.isoformat(), m.source["id"], m.fetched_at, "ok", formula,
+                                                   note="; ".join(m.notes) or None)})
         return out
 
     @staticmethod
@@ -201,7 +345,8 @@ class ResearchAgent(Agent[ResearchInput, ResearchOutput]):
 
     def summarize_input(self, inp: ResearchInput) -> dict[str, Any]:
         return {"picks": [p.symbol for p in inp.picks], "manual_events": len(inp.events),
-                "coverage_items": len(inp.coverage)}
+                "coverage_items": len(inp.coverage), "macro_calendars": self.macro is not None,
+                "rates": self.rates is not None, "iv_history": self.iv_store is not None}
 
     def summarize_output(self, out: ResearchOutput) -> dict[str, Any]:
         return {"candidates": [c.underlying for c in out.candidates],

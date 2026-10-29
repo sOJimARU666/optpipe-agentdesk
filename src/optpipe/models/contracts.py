@@ -1,8 +1,8 @@
 """Stage input/output contracts: the hand-off boundaries between agents.
 
 Discovery -> Research -> Planner -> RiskOfficer -> Watcher
-Owner: Moodle (boundaries). Stage outputs are sections of Doodle's session.schema.json v1.0.0
-(typed by models/schema_v1.py, generated from the spec), so the orchestrator assembles the
+Owner: Moodle (boundaries). Stage outputs are sections of the v1.1 superset of Doodle's
+session.schema.json v1.0.0 (typed by models/schema_v1_1.py; records/compat.to_v1 writes strict v1), so the orchestrator assembles the
 session record from stage outputs without re-mapping.
 """
 from __future__ import annotations
@@ -13,8 +13,8 @@ from typing import Optional
 from pydantic import AwareDatetime, Field
 
 from .common import Bias, Model
-from .schema_v1 import (Candidate, EventCalendar, GlobalSnapshot, IdeaLogItem, PremarketScan, RiskReview,
-                        SessionRecordV1, Source, Ticket, WatcherRule)
+from .schema_v1_1 import (Candidate, EventCalendar, GlobalSnapshot, IdeaLogItem, PremarketScan, RiskReview,
+                        SessionRecordV11, Source, Ticket, WatcherRule)
 
 HYPOTHETICAL_LABEL = "HYPOTHETICAL - paper only, not an order"   # schema const on every ticket
 
@@ -125,6 +125,8 @@ class PlannerParams(Model):
     time_stop_days_before_expiry: int = 3
     entry_not_before: str = "09:45"
     max_leg_spread_pct: float = 10.0
+    penny_pilot: list[str] = Field(default_factory=lambda: ["SPY", "QQQ", "IWM", "JPM"])
+    tick_threshold: float = 3.0
 
 
 class PlannerInput(Model):
@@ -145,7 +147,7 @@ class PlannerOutput(Model):
 # ---------------- Risk Officer ----------------
 class RiskInput(Model):
     """The draft record (everything up to tickets) plus when/for which run to review."""
-    record: SessionRecordV1
+    record: SessionRecordV11
     run_id: str
     evaluated_at: AwareDatetime
 

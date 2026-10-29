@@ -52,6 +52,28 @@ class ResearchCfg(_M):
     strike_window_pct: float = 10
 
 
+class SourcesCfg(_M):
+    """Macro calendars + risk-free rate (read-only GETs, cached). Owner: Doodle (which) / Poodle (code)."""
+    cache_dir: str = "var/cache"                 # relative to the repo root unless absolute
+    cache_ttl_hours: float = 12
+    fomc_url: str = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
+    bls_urls: dict[str, str] = Field(default_factory=lambda: {
+        "CPI": "https://www.bls.gov/schedule/news_release/cpi.htm",
+        "NFP": "https://www.bls.gov/schedule/news_release/empsit.htm",
+        "PPI": "https://www.bls.gov/schedule/news_release/ppi.htm"})
+    treasury_url: str = ("https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
+                         "daily-treasury-rates.csv/{year}/all?type=daily_treasury_bill_rates"
+                         "&field_tdr_date_value={year}&page&_format=csv")
+    treasury_tenor: str = "13 WEEKS COUPON EQUIVALENT"
+    replay_file: str = "macro_calendars.yaml"     # fixture-mode calendar/rate snapshot inside the fixture dir
+
+
+class IvCfg(_M):
+    min_history_points: int = 20                  # R10 stays a soft UNKNOWN below this
+    target_days: int = 30
+    state_dir: str = "var/state"                  # per data_mode: <state_dir>/<data_mode>/iv_history/<SYM>.jsonl
+
+
 class PlannerCfg(_M):
     max_risk_per_trade_usd: float | None = None   # None -> Risk Officer's per_trade_max_loss_usd
     preferred_dte_min: int = 14
@@ -62,6 +84,8 @@ class PlannerCfg(_M):
     target_multiple_of_debit: float = 2.0
     entry_slippage_pct: float = 2.5
     time_stop_days_before_expiry: int = 3
+    penny_pilot: list[str] = Field(default_factory=lambda: ["SPY", "QQQ", "IWM", "JPM"])
+    tick_threshold: float = 3.0
 
 
 class Settings(_M):
@@ -78,11 +102,18 @@ class Settings(_M):
     providers: ProvidersCfg = Field(default_factory=ProvidersCfg)
     research: ResearchCfg = Field(default_factory=ResearchCfg)
     planner: PlannerCfg
+    sources: SourcesCfg = Field(default_factory=SourcesCfg)
+    iv: IvCfg = Field(default_factory=IvCfg)
     risk_overrides: dict = Field(default_factory=dict)   # applied on top of spec risk_rules.yaml config
 
     @property
     def spec_path(self) -> Path:
         return Path(os.environ.get("OPTIONS_SPEC_DIR", self.spec_dir))
+
+
+def repo_path(p: str | Path) -> Path:
+    q = Path(p)
+    return q if q.is_absolute() else REPO_ROOT / q
 
 
 def load_settings(path: str | Path | None = None) -> Settings:

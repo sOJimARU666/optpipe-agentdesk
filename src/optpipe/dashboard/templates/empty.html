@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block main %}
+<div class="card"><h1>No sessions yet</h1>
+<p>No <span class="mono">session-&lt;date&gt;.json</span> in <span class="mono">{{ out_dir }}</span>.</p>
+<p>Create one offline from the fixtures: <span class="mono">optpipe run --out {{ out_dir }}</span></p></div>
+{% endblock %}

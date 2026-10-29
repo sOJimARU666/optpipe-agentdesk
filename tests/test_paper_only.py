@@ -53,7 +53,7 @@ def test_http_is_read_only_get():
     for p, tree in _trees():
         for n in ast.walk(tree):
             if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) and n.func.attr in WRITE_HTTP \
-                    and isinstance(n.func.value, ast.Name) and n.func.value.id in {"requests", "httpx", "session", "s"}:
+                    and isinstance(n.func.value, ast.Name) and n.func.value.id in {"requests", "httpx", "session", "s", "app", "router"}:
                 pytest.fail(f"{p}:{n.lineno} write HTTP call {n.func.value.id}.{n.func.attr}")
         for n in ast.walk(tree):
             if isinstance(n, (ast.Import, ast.ImportFrom)):
@@ -61,6 +61,21 @@ def test_http_is_read_only_get():
                 if any(m.split(".")[0] in {"requests", "httpx", "urllib3", "aiohttp", "websocket", "websockets"}
                        for m in mods):
                     assert p.name == "fetchers.py", f"{p} imports a network client"
+
+
+def test_dashboard_is_get_only():
+    """No write route decorators (@app.post/put/patch/delete/api_route/websocket) and no forms or hx-post in templates."""
+    bad_dec = WRITE_HTTP | {"api_route", "websocket", "add_api_route", "add_api_websocket_route"}
+    for p, tree in _trees():
+        for n in ast.walk(tree):
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                for d in n.decorator_list:
+                    f = d.func if isinstance(d, ast.Call) else d
+                    assert not (isinstance(f, ast.Attribute) and f.attr in bad_dec), f"{p}:{n.lineno} @{f.attr}"
+    for t in (PKG / "dashboard" / "templates").glob("*.html"):
+        html = t.read_text().lower()
+        for needle in ("<form", "hx-post", "hx-put", "hx-patch", "hx-delete", 'method="post"'):
+            assert needle not in html, f"{t.name} contains {needle}"
 
 
 def test_no_broker_or_execution_packages():

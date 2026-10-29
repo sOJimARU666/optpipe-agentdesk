@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>optpipe · Today · 2026-10-13</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1d2330;--mute:#6b7385;--line:#e3e6ec;--accent:#3557d4;
+--pass:#1f8a4c;--flag:#b7791f;--unknown:#6b5bd2;--veto:#c53030;--stale:#a0671a;--missing:#9aa1ae}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
+.paper{background:#1d2330;color:#fff;padding:6px 20px;font-size:12px;letter-spacing:.04em;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.paper b{color:#ffd166}
+header{background:#fff;border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+header .brand{font-weight:700;font-size:16px}header nav a{margin-right:14px;padding:6px 2px;color:var(--mute);font-weight:500}
+header nav a.on{color:var(--ink);border-bottom:2px solid var(--accent)}
+header .meta{margin-left:auto;color:var(--mute);font-size:12px}
+main{padding:18px 20px;max-width:1280px;margin:0 auto}
+h1{font-size:20px;margin:4px 0 14px}h2{font-size:16px;margin:22px 0 8px}h3{font-size:14px;margin:12px 0 6px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.grid{display:grid;gap:14px}.g2{grid-template-columns:repeat(auto-fit,minmax(380px,1fr))}.g4{grid-template-columns:repeat(auto-fit,minmax(170px,1fr))}
+table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--mute);font-weight:600;font-size:12px;background:#fafbfc}td.num{text-align:right;font-variant-numeric:tabular-nums}
+.mute{color:var(--mute)}.small{font-size:12px}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
+.badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:700;letter-spacing:.03em;color:#fff;vertical-align:middle}
+.PASS{background:var(--pass)}.FLAG{background:var(--flag)}.UNKNOWN{background:var(--unknown)}.VETO{background:var(--veto)}
+.st-ok{}.st-stale{color:var(--stale)}.st-missing,.st-unusable{color:var(--missing)}.st-conflicting{color:var(--veto)}
+.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:1px 9px;margin:2px 4px 2px 0;font-size:12px;background:#fafbfc}
+.pill.on{border-color:var(--accent);color:var(--accent);font-weight:600}
+.kpi{font-size:22px;font-weight:700}.kpi-l{color:var(--mute);font-size:12px}
+.hyp{display:inline-block;background:#fff4d6;color:#7a5200;border:1px solid #f0d58a;border-radius:6px;padding:1px 8px;font-size:11px;font-weight:700}
+details>summary{cursor:pointer;color:var(--accent)}
+.ok{color:var(--pass)}.bad{color:var(--veto)}
+footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
+
+</style>
+
+</head>
+<body>
+<div class="paper"><span><b>PAPER ONLY</b> · research records, HYPOTHETICAL tickets · no broker, no orders</span>
+<span>all market logic in America/New_York · times shown ET and Europe/Berlin</span></div>
+<header>
+  <span class="brand">optpipe</span>
+  <nav>
+    <a href="today.html" class="on">Today</a>
+    <a href="tickets.html" class="">Tickets</a>
+    <a href="timeline.html" class="">Agent timeline</a>
+    <a href="history.html" class="">History</a>
+  </nav>
+  <span class="meta">session <b>2026-10-13</b> · v1.1 preview ·
+    trace <span class="ok" title="sha256 712f14b27af2b03374a419e4e5561f8c861b4e34dc2670640d8fabe6c07c2711">✓ sha256 verified</span></span>
+</header>
+<main>
+
+<h1>Today · 2026-10-13</h1>
+<div class="card">
+  <div class="small mute">Runs in this session (2):</div>
+  <a class="pill " href="today.html">run-premarket · premarket · 2026-10-13 07:52 ET (13:52 Berlin)</a><a class="pill on" href="today.html">run-open-0940 · open · 2026-10-13 09:40 ET (15:40 Berlin)</a>
+  <p class="small" style="margin:8px 0 0">open run (fixtures) · market status <span class="st-ok" title="status: ok | source: src-nasdaq-jpm-info-0940 | as_of: 2026-10-13T09:40:00-04:00">Pre-Market</span></p>
+</div>
+
+<div class="grid g4">
+  <div class="card"><div class="kpi">4</div><div class="kpi-l">candidates</div></div>
+  <div class="card"><div class="kpi">4</div><div class="kpi-l">hypothetical tickets</div></div>
+  <div class="card"><div class="kpi">18</div><div class="kpi-l">calendar events (12 coverage rows)</div></div>
+  <div class="card"><div class="kpi small" style="font-size:15px">missing 1911 · stale 2601 · conflicting 15</div><div class="kpi-l">data-quality index (Field paths)</div></div>
+</div>
+
+<div class="grid g2">
+<div class="card">
+  <h2 style="margin-top:0">Global snapshot</h2>
+  
+  <table><tr><th>instrument</th><th>region</th><th class="num">level</th><th class="num">chg %</th><th>session</th></tr>
+  <tr><td>Nikkei 225 <span class="mute small">N225</span></td><td class="small">asia_pacific</td>
+  <td class="num"><span class="st-ok" title="status: ok | source: src-mainichi | as_of: 2026-10-13T07:52:00-04:00">67,777.52</span></td><td class="num"><span class="st-ok" title="status: ok | source: src-mainichi | as_of: 2026-10-13T07:52:00-04:00">-1.82</span></td><td class="small">close</td></tr><tr><td>TOPIX <span class="mute small">TOPIX</span></td><td class="small">asia_pacific</td>
+  <td class="num"><span class="st-ok" title="status: ok | source: src-mainichi | as_of: 2026-10-13T07:52:00-04:00 | note: source attribution inferred from the sample&#39;s block-level source list">4,110.67</span></td><td class="num"><span class="st-ok" title="status: ok | source: src-mainichi | as_of: 2026-10-13T07:52:00-04:00 | note: source attribution inferred from the sample&#39;s block-level source list">0.14</span></td><td class="small">close</td></tr><tr><td>KOSPI <span class="mute small">KOSPI</span></td><td class="small">asia_pacific</td>
+  <td class="num"><span class="st-conflicting" title="status: conflicting | source: - | as_of: -">-<sup class="small"> conflicting</sup></span></td><td class="num"><span class="st-conflicting" title="status: conflicting | source: - | as_of: -">-<sup class="small"> conflicting</sup></span></td><td class="small">close</td></tr><tr><td>Hang Seng <span class="mute small">HSI</span></td><td class="small">asia_pacific</td>
+  <td class="num"><span class="st-ok" title="status: ok | source: src-ilsole | as_of: 2026-10-13T07:52:00-04:00">24,033.51</span></td><td class="num"><span class="st-conflicting" title="status: conflicting | source: - | as_of: -">-<sup class="small"> conflicting</sup></span></td><td class="small">close</td></tr><tr><td>Shanghai Composite <span class="mute small">SHCOMP</span></td><td class="small">asia_pacific</td>
+  <td class="num"><span class="st-ok" title="status: ok | source: src-ilsole | as_of: 2026-10-13T07:52:00-04:00">3,754.82</span></td><td class="num"><span class="st-conflicting" title="status: conflicting | source: - | as_of: -">-<sup class="small"> conflicting</sup></span></td><td class="small">close</td></tr><tr><td>Taiex <span class="mute small">TAIEX</span></td><td class="small">asia_pacific</td>
+  <td class="num"><span class="st-missing" title="status: missing | source: - | as_of: -">-<sup class="small"> missing</sup></span></td><td class="num"><span class="st-ok" title="status: ok | source: src-ilsole | as_of: 2026-10-13T07:52:00-04:00 | note: source attribution inferred from the sample&#39;s block-level source list">-1.9</span></td><td class="small">close</td></tr><tr><td>ASX 200 <span class="mute small">AS51</span></td><td class="small">asia_pacific</td>
+  <td class="num"><span class="st-ok" title="status: ok | source: src-ilsole | as_of: 2026-10-13T07:52:00-04:00 | note: source attribution inferred from the sample&#39;s block-level source list">8,767.4</span></td><td class="num"><span class="st-ok" title="status: ok | source: src-ilsole | as_of: 2026-10-13T07:52:00-04:00 | note: source attribution inferred from the sample&#39;s block-level source list">-0.2</span></td><td class="small">close</td></tr><tr><td>STOXX 600 <span class="mute small">SXXP</span></td><td class="small">europe</td>
+  <td class="num"><span class="st-ok" title="status: ok | source: src-eme | as_of: 2026-10-13T07:14:00+00:00">638.44</span></td><td class="num"><span class="st-ok" title="status: ok | source: src-eme | as_of: 2026-10-13T07:14:00+00:00">0.44</span></td><td class="small">early</td></tr><tr><td>DAX <span class="mute small">DAX</span></td><td class="small">europe</td>
+  <td class="num"><span class="st-missing" title="status: missing | source: - | as_of: -">-<sup class="small"> missing</sup></span></td><td class="num"><span class="st-ok" title="status: ok | source: src-alliance | as_of: 2026-10-13T07:52:00-04:00 | note: source attribution inferred from the sample&#39;s block-level source list">0.2</span></td><td class="small">early</td></tr><tr><td>CAC 40 <span class="mute small">CAC</span></td><td class="small">europe</td>
+  <td class="num"><span class="st-missing" title="status: missing | source: - | as_of: -">-<sup class="small"> missing</sup></span></td><td class="num"><span class="st-ok" title="status: ok | source: src-alliance | as_of: 2026-10-13T07:52:00-04:00 | note: source attribution inferred from the sample&#39;s block-level source list">0.3</span></td><td class="small">early</td></tr><tr><td>FTSE 100 <span class="mute small">UKX</span></td><td class="small">europe</td>
+  <td class="num"><span class="st-missing" title="status: missing | source: - | as_of: -">-<sup class="small"> missing</sup></span></td><td class="num"><span class="st-ok" title="status: ok | source: src-alliance | as_of: 2026-10-13T07:52:00-04:00 | note: approximate (~+1%); source attribution inferred from the sample&#39;s block-level source list">1</span></td><td class="small">early</td></tr></table>
+  <p class="small">Theme: <span class="st-ok" title="status: ok | source: src-eme | as_of: 2026-10-13T07:52:00-04:00">AI/memory-chip selloff (CXMT news), lower oil, bank earnings</span></p>
+  
+</div>
+<div class="card">
+  <h2 style="margin-top:0">Premarket scan</h2>
+  
+  <table><tr><th>screen</th><th>status</th><th class="num">rows</th><th>notes</th></tr>
+  <tr><td>ta_unusualvolume</td><td class="st-missing">missing</td><td class="num">0</td>
+  <td class="small">no result table in page (no rows matched or layout changed)</td></tr><tr><td>ta_topgainers</td><td class="st-missing">missing</td><td class="num">0</td>
+  <td class="small">no result table in page (no rows matched or layout changed)</td></tr><tr><td>ta_toplosers</td><td class="st-stale">stale</td><td class="num">7</td>
+  <td class="small"><div class="mono">SNDX, S, FUN, WDC, BNTX, SKHY, STX</div></td></tr><tr><td>ta_newhigh</td><td class="st-stale">stale</td><td class="num">5</td>
+  <td class="small"><div class="mono">ZIM, V, FRO, DHT, OSCR</div></td></tr><tr><td>ta_newlow</td><td class="st-stale">stale</td><td class="num">10</td>
+  <td class="small"><div class="mono">NAMS, FUN, OKLO, QNT, ACAD, CBRS, XE, BIDU …</div></td></tr></table>
+  <p class="small"><b>JPM</b> Q3 2026: EPS <span class="st-ok" title="status: ok | source: src-sec-jpm-q3 | as_of: 2026-10-13T07:52:00-04:00 | note: diluted">5.57</span> vs est <span class="st-ok" title="status: ok | source: src-newsquawk-jpm | as_of: 2026-10-13T07:52:00-04:00">5.93</span></p>
+  
+</div>
+</div>
+
+<h2>Candidates</h2>
+<div class="grid g2">
+
+<div class="card">
+  <h3 style="margin-top:0">JPM <span class="mute small">JPMorgan Chase &amp; Co. · NYSE</span></h3>
+  
+  <table>
+    <tr><th>last</th><th>bid / ask</th><th>prev close</th><th>IV30</th><th>IV30 history</th></tr>
+    <tr><td><span class="st-ok" title="status: ok | source: src-nasdaq-jpm-info-0940 | as_of: 2026-10-13T07:52:00-04:00">336.91</span></td><td><span class="st-ok" title="status: ok | source: src-nasdaq-jpm-info-0940 | as_of: 2026-10-13T07:52:00-04:00">336.68</span> / <span class="st-ok" title="status: ok | source: src-nasdaq-jpm-info-0940 | as_of: 2026-10-13T07:52:00-04:00">337.5</span></td><td><span class="st-ok" title="status: ok | source: src-nasdaq-jpm-info-0940 | as_of: 2026-10-12T16:00:00-04:00">334.3</span></td>
+    <td><span class="st-stale" title="status: stale | source: src-nasdaq-jpm-chain-0940 | as_of: 2026-10-12T16:00:00-04:00 | method: derived | formula: ATM IV per expiry (call/put mean, linear in strike at spot) -&gt; flat extrapolation from 2026-11-06 (no expiry on the other side of 30d) | note: Black-Scholes European, no dividends; American early exercise/dividends ignored; spot prior close (option quotes are prior-session); r from src-treasury-bill-rates">0.2519<sup class="small"> stale</sup></span></td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: 0 daily IV30 observations before 2026-10-12 (R10 needs 20); history starts accumulating with this run">none yet</span></td></tr>
+  </table>
+  <p class="small mute">3 chain slices · 122 contracts · IV method: derived</p>
+  
+  <div class="small">• <span class="st-ok" title="status: ok | source: src-newsquawk-jpm | as_of: 2026-10-13T07:52:00-04:00">Q3 EPS 5.57 vs 5.93 est and revenue 50.2bn vs 51.23bn (miss); NII 27.0bn beat</span></div><div class="small">• <span class="st-ok" title="status: ok | source: src-nasdaq-jpm-info-0752 | as_of: 2026-10-13T07:52:00-04:00">Premarket reversal from about -3.7% to positive</span></div>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">WDC <span class="mute small">Western Digital Corp. · NASDAQ</span></h3>
+  
+  <table>
+    <tr><th>last</th><th>bid / ask</th><th>prev close</th><th>IV30</th><th>IV30 history</th></tr>
+    <tr><td><span class="st-ok" title="status: ok | source: src-nasdaq-wdc-info-0940 | as_of: 2026-10-13T07:52:00-04:00">363.4</span></td><td><span class="st-ok" title="status: ok | source: src-nasdaq-wdc-info-0940 | as_of: 2026-10-13T07:52:00-04:00">363.2</span> / <span class="st-ok" title="status: ok | source: src-nasdaq-wdc-info-0940 | as_of: 2026-10-13T07:52:00-04:00">363.5</span></td><td><span class="st-ok" title="status: ok | source: src-nasdaq-wdc-info-0940 | as_of: 2026-10-12T16:00:00-04:00">386.94</span></td>
+    <td><span class="st-stale" title="status: stale | source: src-nasdaq-wdc-chain-0940 | as_of: 2026-10-12T16:00:00-04:00 | method: derived | formula: ATM IV per expiry (call/put mean, linear in strike at spot) -&gt; flat extrapolation from 2026-11-06 (no expiry on the other side of 30d) | note: Black-Scholes European, no dividends; American early exercise/dividends ignored; spot prior close (option quotes are prior-session); r from src-treasury-bill-rates">0.6239<sup class="small"> stale</sup></span></td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: 0 daily IV30 observations before 2026-10-12 (R10 needs 20); history starts accumulating with this run">none yet</span></td></tr>
+  </table>
+  <p class="small mute">3 chain slices · 88 contracts · IV method: derived</p>
+  
+  <div class="small">• <span class="st-ok" title="status: ok | source: src-investing-wdc | as_of: 2026-10-13T07:52:00-04:00">Memory/storage selloff after Chinese CXMT chip news</span></div><div class="small">• <span class="st-ok" title="status: ok | source: src-finviz-wdc-news | as_of: 2026-10-13T07:52:00-04:00">UBS price-target cut on HDD supply</span></div><div class="small">• <span class="st-stale" title="status: stale | source: src-finviz-toplosers | as_of: 2026-10-13T07:52:00-04:00">Finviz ta_toplosers<sup class="small"> stale</sup></span></div>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">SNDX <span class="mute small"> · </span></h3>
+  
+  <table>
+    <tr><th>last</th><th>bid / ask</th><th>prev close</th><th>IV30</th><th>IV30 history</th></tr>
+    <tr><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: quote provider unavailable">-<sup class="small"> missing</sup></span></td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: quote provider unavailable">-<sup class="small"> missing</sup></span> / <span class="st-missing" title="status: missing | source: - | as_of: - | note: quote provider unavailable">-<sup class="small"> missing</sup></span></td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: quote provider unavailable">-<sup class="small"> missing</sup></span></td>
+    <td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no option chain">-<sup class="small"> missing</sup></span></td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no option chain">none yet</span></td></tr>
+  </table>
+  <p class="small mute">0 chain slices · 0 contracts · IV method: n/a</p>
+  
+  <div class="small">• <span class="st-stale" title="status: stale | source: src-finviz-toplosers | as_of: 2026-10-13T07:52:00-04:00">Finviz ta_toplosers: 14.81 -10.51%<sup class="small"> stale</sup></span></div>
+</div>
+
+<div class="card">
+  <h3 style="margin-top:0">S <span class="mute small"> · </span></h3>
+  
+  <table>
+    <tr><th>last</th><th>bid / ask</th><th>prev close</th><th>IV30</th><th>IV30 history</th></tr>
+    <tr><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: quote provider unavailable">-<sup class="small"> missing</sup></span></td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: quote provider unavailable">-<sup class="small"> missing</sup></span> / <span class="st-missing" title="status: missing | source: - | as_of: - | note: quote provider unavailable">-<sup class="small"> missing</sup></span></td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: quote provider unavailable">-<sup class="small"> missing</sup></span></td>
+    <td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no option chain">-<sup class="small"> missing</sup></span></td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no option chain">none yet</span></td></tr>
+  </table>
+  <p class="small mute">0 chain slices · 0 contracts · IV method: n/a</p>
+  
+  <div class="small">• <span class="st-stale" title="status: stale | source: src-finviz-toplosers | as_of: 2026-10-13T07:52:00-04:00">Finviz ta_toplosers: 23.56 -8.18%<sup class="small"> stale</sup></span></div>
+</div>
+
+</div>
+
+<h2>Event calendar <span class="mute small">(macro events come from the Fed / BLS calendars; coverage drives R07–R09)</span></h2>
+<div class="grid g2">
+<div class="card"><table><tr><th>event</th><th>kind</th><th>scheduled</th><th>timing</th></tr>
+<tr><td class="mono">ev-jpm-exdiv-2026-10-06</td><td>ex_dividend · JPM</td>
+<td><span class="st-ok" title="status: ok | source: src-jpm-ir-dividend | as_of: 2026-10-13T09:09:00-04:00">2026-10-06T00:00:00-04:00</span></td><td class="small">unknown</td></tr><tr><td class="mono">ev-jpm-earn-q3</td><td>earnings · JPM</td>
+<td><span class="st-ok" title="status: ok | source: src-sec-jpm-q3 | as_of: 2026-10-13T07:52:00-04:00">2026-10-13T00:00:00-04:00</span></td><td class="small">bmo</td></tr><tr><td class="mono">ev-cpi-2026-10-14</td><td>CPI</td>
+<td><span class="st-ok" title="status: ok | source: src-bls-cpi-schedule | as_of: 2026-10-13T07:50:00-04:00 | note: from Doodle&#39;s session notes (BLS CPI schedule, seen 2026-10-13 09:09 ET); already released by 2026-10-29 so absent from the capture">2026-10-14T08:30:00-04:00</span></td><td class="small">at_time</td></tr><tr><td class="mono">ev-ppi-2026-10-15</td><td>PPI</td>
+<td><span class="st-ok" title="status: ok | source: src-bls-ppi-schedule | as_of: 2026-10-13T07:50:00-04:00 | note: date noted by Doodle next to CPI without its own citation; absent from the 2026-10-29 capture (past)">2026-10-15T08:30:00-04:00</span></td><td class="small">at_time</td></tr><tr><td class="mono">ev-wdc-earn-q1fy27</td><td>earnings · WDC</td>
+<td><span class="st-ok" title="status: ok | source: src-wd-ir | as_of: 2026-10-13T07:52:00-04:00">2026-10-22T00:00:00-04:00</span></td><td class="small">amc</td></tr><tr><td class="mono">ev-fomc-2026-10-28</td><td>FOMC</td>
+<td><span class="st-ok" title="status: ok | source: src-fed-fomc | as_of: 2026-10-13T07:50:00-04:00 | note: statement time 14:00 ET is customary; the Fed calendar page lists meeting dates only">2026-10-28T14:00:00-04:00</span></td><td class="small">at_time</td></tr><tr><td class="mono">ev-nfp-2026-11-06</td><td>NFP</td>
+<td><span class="st-ok" title="status: ok | source: src-bls-nfp-schedule | as_of: 2026-10-13T07:50:00-04:00">2026-11-06T08:30:00-05:00</span></td><td class="small">at_time</td></tr><tr><td class="mono">ev-cpi-2026-11-10</td><td>CPI</td>
+<td><span class="st-ok" title="status: ok | source: src-bls-cpi-schedule | as_of: 2026-10-13T07:50:00-04:00">2026-11-10T08:30:00-05:00</span></td><td class="small">at_time</td></tr><tr><td class="mono">ev-ppi-2026-11-13</td><td>PPI</td>
+<td><span class="st-ok" title="status: ok | source: src-bls-ppi-schedule | as_of: 2026-10-13T07:50:00-04:00">2026-11-13T08:30:00-05:00</span></td><td class="small">at_time</td></tr><tr><td class="mono">ev-nfp-2026-12-04</td><td>NFP</td>
+<td><span class="st-ok" title="status: ok | source: src-bls-nfp-schedule | as_of: 2026-10-13T07:50:00-04:00">2026-12-04T08:30:00-05:00</span></td><td class="small">at_time</td></tr><tr><td class="mono">ev-fomc-2026-12-09</td><td>FOMC</td>
+<td><span class="st-ok" title="status: ok | source: src-fed-fomc | as_of: 2026-10-13T07:50:00-04:00 | note: statement time 14:00 ET is customary; the Fed calendar page lists meeting dates only">2026-12-09T14:00:00-05:00</span></td><td class="small">at_time</td></tr><tr><td class="mono">ev-cpi-2026-12-10</td><td>CPI</td>
+<td><span class="st-ok" title="status: ok | source: src-bls-cpi-schedule | as_of: 2026-10-13T07:50:00-04:00">2026-12-10T08:30:00-05:00</span></td><td class="small">at_time</td></tr><tr><td class="mono">ev-ppi-2026-12-15</td><td>PPI</td>
+<td><span class="st-ok" title="status: ok | source: src-bls-ppi-schedule | as_of: 2026-10-13T07:50:00-04:00">2026-12-15T08:30:00-05:00</span></td><td class="small">at_time</td></tr><tr><td class="mono">ev-nfp-2027-01-08</td><td>NFP</td>
+<td><span class="st-ok" title="status: ok | source: src-bls-nfp-schedule | as_of: 2026-10-13T07:50:00-04:00">2027-01-08T08:30:00-05:00</span></td><td class="small">at_time</td></tr><tr><td class="mono">ev-cpi-2027-01-13</td><td>CPI</td>
+<td><span class="st-ok" title="status: ok | source: src-bls-cpi-schedule | as_of: 2026-10-13T07:50:00-04:00">2027-01-13T08:30:00-05:00</span></td><td class="small">at_time</td></tr><tr><td class="mono">ev-ppi-2027-01-14</td><td>PPI</td>
+<td><span class="st-ok" title="status: ok | source: src-bls-ppi-schedule | as_of: 2026-10-13T07:50:00-04:00">2027-01-14T08:30:00-05:00</span></td><td class="small">at_time</td></tr><tr><td class="mono">ev-fomc-2027-01-27</td><td>FOMC</td>
+<td><span class="st-ok" title="status: ok | source: src-fed-fomc | as_of: 2026-10-13T07:50:00-04:00 | note: statement time 14:00 ET is customary; the Fed calendar page lists meeting dates only">2027-01-27T14:00:00-05:00</span></td><td class="small">at_time</td></tr><tr><td class="mono">ev-nfp-2027-02-05</td><td>NFP</td>
+<td><span class="st-ok" title="status: ok | source: src-bls-nfp-schedule | as_of: 2026-10-13T07:50:00-04:00">2027-02-05T08:30:00-05:00</span></td><td class="small">at_time</td></tr></table></div>
+<div class="card"><table><tr><th>coverage</th><th>checked through</th><th>source</th></tr>
+<tr><td>FOMC</td><td><span class="st-ok" title="status: ok | source: src-fed-fomc | as_of: 2026-10-13T07:50:00-04:00 | method: derived | formula: min(Dec 31 of the last year listed on the calendar page (2027); 2027-12-31, as_of + 120d record horizon) | note: FOMC coverage excludes unscheduled meetings/notation votes (not knowable in advance)">2027-02-10</span></td><td class="mono small">src-fed-fomc</td></tr><tr><td>CPI</td><td><span class="st-ok" title="status: ok | source: src-bls-cpi-schedule | as_of: 2026-10-13T07:50:00-04:00 | method: derived | formula: min(last release date listed in the BLS schedule; releases before the fetch date are in the past; 2027-12-10, as_of + 120d record horizon)">2027-02-10</span></td><td class="mono small">src-bls-cpi-schedule</td></tr><tr><td>PPI</td><td><span class="st-ok" title="status: ok | source: src-bls-ppi-schedule | as_of: 2026-10-13T07:50:00-04:00 | method: derived | formula: min(last release date listed in the BLS schedule; releases before the fetch date are in the past; 2027-12-15, as_of + 120d record horizon)">2027-02-10</span></td><td class="mono small">src-bls-ppi-schedule</td></tr><tr><td>NFP</td><td><span class="st-ok" title="status: ok | source: src-bls-nfp-schedule | as_of: 2026-10-13T07:50:00-04:00 | method: derived | formula: min(last release date listed in the BLS schedule; releases before the fetch date are in the past; 2027-12-03, as_of + 120d record horizon) | note: no NFP release between 2026-10-13 and 2026-11-06: the 2026-10-02 Employment Situation release says the October report is scheduled for 2026-11-06 (bls_empsit_2026-10-02_header.md)">2027-02-10</span></td><td class="mono small">src-bls-nfp-schedule</td></tr><tr><td>earnings · JPM</td><td><span class="st-ok" title="status: ok | source: src-sec-jpm-q3 | as_of: 2026-10-13T07:52:00-04:00 | method: derived | formula: Q3 reported 2026-10-13; quarterly cadence -&gt; next report not before January 2027">2026-12-31</span></td><td class="mono small">src-sec-jpm-q3</td></tr><tr><td>earnings · WDC</td><td><span class="st-ok" title="status: ok | source: src-wd-ir | as_of: 2026-10-13T07:52:00-04:00 | method: derived | formula: next report announced for 2026-10-22; following one ~3 months later">2026-12-31</span></td><td class="mono small">src-wd-ir</td></tr><tr><td>ex_dividend · JPM</td><td><span class="st-ok" title="status: ok | source: src-jpm-ir-dividend | as_of: 2026-10-13T09:09:00-04:00 | method: derived | formula: ex-date 2026-10-06 passed; next quarterly ex-date expected January 2027">2026-12-31</span></td><td class="mono small">src-jpm-ir-dividend</td></tr><tr><td>ex_dividend · WDC</td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: not checked">-<sup class="small"> missing</sup></span></td><td class="mono small">-</td></tr><tr><td>earnings · SNDX</td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no calendar source configured for this symbol">-<sup class="small"> missing</sup></span></td><td class="mono small">-</td></tr><tr><td>ex_dividend · SNDX</td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no calendar source configured for this symbol">-<sup class="small"> missing</sup></span></td><td class="mono small">-</td></tr><tr><td>earnings · S</td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no calendar source configured for this symbol">-<sup class="small"> missing</sup></span></td><td class="mono small">-</td></tr><tr><td>ex_dividend · S</td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no calendar source configured for this symbol">-<sup class="small"> missing</sup></span></td><td class="mono small">-</td></tr></table></div>
+</div>
+</main>
+<footer>read-only view of <span class="mono">out</span> · GET only · bound to 127.0.0.1 · Owner: Moodle (UX) / Poodle (code)</footer>
+</body>
+</html>

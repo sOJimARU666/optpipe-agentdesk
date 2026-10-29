@@ -5,14 +5,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from ..models.schema_v1 import SessionRecordV1
+from pydantic import BaseModel
 from .review_input import ReviewInput
 
 _MISSING = {"value": None, "status": "missing", "as_of": None}
 
 
-def review_input_from_session(sess: SessionRecordV1 | dict, ticket_id: str, run_id: str, evaluated_at: str) -> ReviewInput:
-    s: dict[str, Any] = sess.model_dump(mode="json", exclude_unset=True) if isinstance(sess, SessionRecordV1) else sess
+def review_input_from_session(sess: BaseModel | dict, ticket_id: str, run_id: str, evaluated_at: str) -> ReviewInput:
+    s: dict[str, Any] = sess.model_dump(mode="json", exclude_unset=True) if isinstance(sess, BaseModel) else sess
+    if s.get("schema_version") != "1.0.0":      # v1.1 superset -> the v1 view the ruleset is defined on
+        from ..records.compat import to_v1
+        s = to_v1(s)
     t = datetime.fromisoformat(evaluated_at)
     fetched = {x["id"]: datetime.fromisoformat(x["fetched_at"]) for x in s["sources"]}
 

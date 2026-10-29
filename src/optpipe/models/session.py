@@ -37,7 +37,16 @@ class RunTrace(Model):
     validation: dict[str, Any] = Field(default_factory=dict)
 
 
+class FileRef(Model):
+    path: str                       # relative to the trace file's directory
+    sha256: str
+    schema_version: Optional[str] = None
+
+
 class SessionTrace(Model):
     session_id: str
-    trace_version: str = "optpipe-trace/1"
+    trace_version: str = "optpipe-trace/1.1"
     runs: list[RunTrace] = Field(default_factory=list)
+    # sha256 of the canonical v1 record this trace belongs to (the trace cannot hash itself; the trace's own
+    # sha256 goes to the CLI output, the .sha256 sidecar and trace_ref in the v1.1 preview record)
+    session_ref: Optional[FileRef] = None

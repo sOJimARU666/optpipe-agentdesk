@@ -1,0 +1,7 @@
+<div class="step-detail">
+<h3 style="margin-top:0">#{{ st.seq }} {{ st.agent }} <span class="mute small">{{ st.stage }} · {{ st.owner }}</span></h3>
+<p class="small">started {{ st.started_at|berlin }} (wall clock) · {{ '%.1f'|format(st.duration_ms or 0) }} ms{% if st.verdict %} · verdict <b>{{ st.verdict }}</b>{% endif %}</p>
+{% if st.error %}<p class="bad">error: {{ st.error }}</p>{% endif %}
+<div class="grid g2"><div><b class="small">inputs</b><pre class="mono io">{{ st.inputs_summary|tojson(indent=2) }}</pre></div>
+<div><b class="small">outputs</b><pre class="mono io">{{ st.outputs_summary|tojson(indent=2) }}</pre></div></div>
+</div>

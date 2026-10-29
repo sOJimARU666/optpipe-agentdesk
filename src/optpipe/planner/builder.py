@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Optional
 
+from .ticks import TickRule
 from ..models.contracts import HYPOTHETICAL_LABEL, PlannerParams
 from ..records.fields import NY, ny_at, slug, tspair
 
@@ -94,14 +95,24 @@ def build_vertical(cand: dict, strategy: str, p: PlannerParams, as_of: datetime,
         idea.reason = f"non-positive reference debit {mid:.3f}"
         return idea
     width = abs(long_k - short_k)
-    limit = r2(mid * (1 + p.entry_slippage_pct / 100))
+    ticks = TickRule.from_list(p.penny_pilot, threshold=p.tick_threshold)
+    lim_r = ticks.round(sym, mid * (1 + p.entry_slippage_pct / 100), "down")     # debit cap: never pay more
+    limit = lim_r.value
+    if limit <= 0:
+        idea.reason = f"limit {lim_r.raw:.4f} rounds to zero on a {lim_r.tick:g} tick"
+        return idea
     qty = int(p.max_risk_per_trade_usd // (limit * 100))
     if qty < 1:
         idea.reason = f"1 spread at {limit:.2f} risks ${limit * 100:.0f} > max risk ${p.max_risk_per_trade_usd:g}"
         return idea
     pstatus = worst(lc["bid"]["status"], lc["ask"]["status"], sc["bid"]["status"], sc["ask"]["status"])
     time_stop = expiry - timedelta(days=p.time_stop_days_before_expiry)
-    stop_v, target_v = r2(mid * p.stop_fraction_of_debit), r2(min(mid * p.target_multiple_of_debit, width * 0.9))
+    stop_r = ticks.round(sym, mid * p.stop_fraction_of_debit, "up")                      # exit no later
+    target_r = ticks.round(sym, min(mid * p.target_multiple_of_debit, width * 0.9), "down")  # take profit no later
+    stop_v, target_v = stop_r.value, target_r.value
+    raw_of = lambda r: {"raw_value": r.raw, "tick_size": r.tick, "rounding": r.direction}  # noqa: E731
+    tick_note = (f"tick rounding ({'penny-pilot' if sym.upper() in ticks.penny_pilot else 'standard'} {sym}): "
+                 f"limit {lim_r.text()}; stop {stop_r.text()}; target {target_r.text()}")
     ref = prev if prev is not None else spot
     bull = strategy == BULL
     u_stop = _round_strike(ref, p.strike_step, up=not bull)
@@ -122,12 +133,14 @@ def build_vertical(cand: dict, strategy: str, p: PlannerParams, as_of: datetime,
             {"leg_id": "leg-2", "contract_id": sc["contract_id"], "type": typ, "side": "sell", "strike": short_k,
              "expiry": sl["expiry"], "ratio": 1, "multiplier": 100}],
         "quantity": qty,
-        "limit_price": {"amount": limit, "price_type": "debit",
+        "limit_price": {"amount": limit, "raw_amount": lim_r.raw, "tick_size": lim_r.tick, "rounding": "down",
+                        "price_type": "debit",
                         "valid_only_if": (f"re-quoted live after {p.entry_not_before} ET with each leg spread <= "
                                           f"{p.max_leg_spread_pct:g}% of mid; reference mid {mid:g}, cap = mid x "
                                           f"{1 + p.entry_slippage_pct / 100:g}")},
         "pricing": {"run_id": run_id, "reference_mid": mid, "natural": natural, "status": pstatus,
-                    **({"note": "UNPRICEABLE premarket: prior-session option quotes"} if pstatus != "ok" else {})},
+                    "note": "; ".join([*(["UNPRICEABLE premarket: prior-session option quotes"]
+                                          if pstatus != "ok" else []), tick_note])},
         "risk_basis": f"Per-trade max loss ${p.max_risk_per_trade_usd:g} is a PLACEHOLDER pending Eugene",
         "hold_window": {"start": tspair(start), "end": tspair(ny_at(time_stop, "16:00"))},
         "entry_rules": [{"rule_id": "entry-1", "combine": "all",
@@ -135,7 +148,7 @@ def build_vertical(cand: dict, strategy: str, p: PlannerParams, as_of: datetime,
                                   f"live net mid debit <= {ccy(limit)} and each leg spread <= {p.max_leg_spread_pct:g}% of mid"),
                          "conditions": [{"metric": "time_ny", "op": "gte", "value": p.entry_not_before},
                                         {"metric": "underlying_last", "op": cmp_, "value": ref},
-                                        {"metric": "net_debit_mid", "op": "lte", "value": limit},
+                                        {"metric": "net_debit_mid", "op": "lte", "value": limit, **raw_of(lim_r)},
                                         {"metric": "leg_spread_pct_of_mid", "op": "lte",
                                          "value": p.max_leg_spread_pct, "unit": "pct"}]}],
         "exit_rules": [{"rule_id": "exit-time", "text": f"Time stop: close by {time_stop.isoformat()}",
@@ -144,10 +157,10 @@ def build_vertical(cand: dict, strategy: str, p: PlannerParams, as_of: datetime,
                         "text": (f"Exit if {sym} closes {'below' if bull else 'above'} {u_stop:g} or spread value <= "
                                  f"{ccy(stop_v)} (~{p.stop_fraction_of_debit:.0%} of debit)"),
                         "conditions": [{"metric": "underlying_close", "op": "lt" if bull else "gt", "value": u_stop},
-                                       {"metric": "position_value", "op": "lte", "value": stop_v}]}],
+                                       {"metric": "position_value", "op": "lte", "value": stop_v, **raw_of(stop_r)}]}],
         "target_rules": [{"rule_id": "target-1", "combine": "any",
                           "text": f"Close at spread value {ccy(target_v)} or {sym} {'>=' if bull else '<='} {short_k:g}",
-                          "conditions": [{"metric": "position_value", "op": "gte", "value": target_v},
+                          "conditions": [{"metric": "position_value", "op": "gte", "value": target_v, **raw_of(target_r)},
                                          {"metric": "underlying_last", "op": "gte" if bull else "lte", "value": short_k}]}],
         "max_loss": {"amount_usd": r2(qty * limit * 100), "unlimited": False, "at_price": limit,
                      "basis": f"{qty} x {ccy(limit)} x 100 at limit; ${qty * mid * 100:.2f} at ref mid {mid:g}"},

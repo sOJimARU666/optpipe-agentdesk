@@ -1,0 +1,1 @@
+{%- macro f(x, digits=4) -%}<span class="st-{{ x.status if x is mapping and x.status else 'ok' }}" title="{{ x|ftitle }}">{{ x|fval(digits) }}{% if x is mapping and x.status and x.status != 'ok' %}<sup class="small"> {{ x.status }}</sup>{% endif %}</span>{%- endmacro -%}

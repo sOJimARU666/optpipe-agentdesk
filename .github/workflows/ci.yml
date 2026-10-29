@@ -1,0 +1,43 @@
+# Local-only CI definition (this repo has no remote and is never pushed - Eugene's rule).
+# PAPER ONLY: nothing here talks to a broker; all tests run offline from fixtures.
+name: ci
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+env:
+  # Doodle's locked spec is the source of truth and is NOT vendored here. It is not public:
+  # provide it at this path (TODO for Eugene: e.g. a private checkout step or a runner with the folder mounted).
+  OPTIONS_SPEC_DIR: ${{ github.workspace }}/spec
+  PYTHONDONTWRITEBYTECODE: "1"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Spec present
+        run: test -f "$OPTIONS_SPEC_DIR/session.schema.json" || { echo "::error::Doodle's spec not found at $OPTIONS_SPEC_DIR"; exit 1; }
+      - name: Install
+        run: pip install -e '.[dev]'
+      - name: Paper-only scan (structural - no broker, no order path, GET-only HTTP and dashboard)
+        run: python -m pytest tests/test_paper_only.py -p no:cacheprovider
+      - name: Generated models match the schemas
+        run: python scripts/gen_models.py --check
+      - name: spec_patches/v1.1 matches the locked spec + ruling 5
+        run: python scripts/make_spec_patch.py --check
+      - name: Test suite (offline)
+        run: python -m pytest -p no:cacheprovider
+      - name: Doodle's spec tests
+        working-directory: ${{ env.OPTIONS_SPEC_DIR }}
+        run: |
+          pip install pyyaml jsonschema pytest
+          python -m pytest -q -p no:cacheprovider
+      - name: CLI fixture run validates (v1 with Doodle's validator)
+        run: |
+          optpipe run --out "$RUNNER_TEMP/out"
+          optpipe validate "$RUNNER_TEMP/out/session-2026-10-13.json"

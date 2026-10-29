@@ -13,7 +13,7 @@ class FetchResult:
     text: str
     url: str
     fetched_at: datetime
-    kind: str            # "live" | "fixture"
+    kind: str            # "live" | "fixture" | "cache"
 
 
 class DataUnavailable(Exception):

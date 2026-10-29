@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block css %}
+.lane{display:grid;grid-template-columns:210px 1fr 110px;align-items:center;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line)}
+.lane .who{font-weight:600}.lane .who small{display:block;color:var(--mute);font-weight:400}
+.track{position:relative;height:26px;background:#f1f3f7;border-radius:6px}
+.bar{position:absolute;top:3px;height:20px;border-radius:5px;color:#fff;font-size:11px;line-height:20px;padding:0 6px;white-space:nowrap;overflow:visible;cursor:pointer}
+.s-discovery{background:#3557d4}.s-research{background:#0f8b8d}.s-planner{background:#8a5cd1}.s-risk_officer{background:#c2410c}.s-watcher{background:#64748b}.s-approval{background:#1f8a4c}
+.flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:0;margin:10px 0}
+.node{border:1px solid var(--line);border-radius:8px;padding:8px 10px;min-width:150px;max-width:220px;background:#fff}
+.node .t{font-weight:700;font-size:13px}.node .stage{font-size:11px;color:#fff;border-radius:4px;padding:0 5px;display:inline-block}
+.arrow{display:flex;align-items:center;padding:0 4px;color:var(--mute);font-size:18px}
+.io{background:#f7f8fa;border:1px solid var(--line);border-radius:6px;padding:8px;max-height:340px;overflow:auto;white-space:pre-wrap}
+.detail{min-height:60px}
+{% endblock %}
+{% block main %}
+<h1>Agent timeline · {{ s.date }}</h1>
+<p class="mute small">From <span class="mono">{{ s.files.trace or 'no trace' }}</span>{% if s.integrity.trace_sha256 %} · sha256 <span class="mono">{{ s.integrity.trace_sha256[:16] }}…</span>
+  ({% if s.integrity.sidecar_ok %}<span class="ok">sidecar ✓</span>{% else %}<span class="bad">sidecar ✗</span>{% endif %}{% if s.integrity.trace_ref_ok is not none %}, {% if s.integrity.trace_ref_ok %}<span class="ok">v1.1 trace_ref ✓</span>{% else %}<span class="bad">trace_ref ✗</span>{% endif %}{% endif %}{% if s.integrity.session_ref_ok is not none %}, {% if s.integrity.session_ref_ok %}<span class="ok">session_ref ✓</span>{% else %}<span class="bad">session_ref ✗</span>{% endif %}{% endif %}){% endif %}.
+  Market time is the run's <i>as_of</i> (ET); bar positions are wall-clock compute time of each agent.</p>
+{% for R in runs %}{% set run = R.run %}
+<div class="card">
+  <h2 style="margin-top:0">{{ run.run_id }} <span class="mute small">{{ R.rec_run.phase }} · as_of {{ run.as_of }} ({{ run.as_of|berlin }}) · data mode {{ run.data_mode }} · {{ '%.0f'|format(R.total_ms) }} ms total</span></h2>
+  <p><b>{{ run.recommendation }}</b> {% for v,n in R.verdicts.items() %}<span class="badge {{ v }}">{{ n }} {{ v }}</span> {% endfor %}
+   · validation {% if not R.validation.errors and not R.validation.v1_1_errors %}<span class="ok">v1 ✓ v1.1 ✓</span>{% else %}<span class="bad">{{ (R.validation.errors or [])|length }} v1 / {{ (R.validation.v1_1_errors or [])|length }} v1.1 errors</span>{% endif %}</p>
+
+  <div class="flow">
+  {% for st in R.steps %}
+    <div class="node"><span class="stage s-{{ st.stage }}">{{ st.stage }}</span>
+      <div class="t">{{ st.agent }}</div>
+      <div class="small mute">{{ st.owner }}</div>
+      <div class="small">{% for k,v in (st.outputs_summary or {}).items() %}{% if loop.index <= 4 %}<div><b>{{ k }}</b>: {% if v is mapping and v.verdict %}<span class="badge {{ v.verdict }}">{{ v.verdict }}</span> {{ (v.blocking or [])|length }} blocking · {{ (v.flags or [])|length }} flags{% elif v is sequence and v is not string %}{{ v|length }}{% if v and v|length <= 4 and v[0] is string %} ({{ v|join(', ') }}){% endif %}{% else %}{{ v|compact|truncate(48) }}{% endif %}</div>{% endif %}{% endfor %}</div>
+    </div>
+    {% if not loop.last %}<div class="arrow">→</div>{% endif %}
+  {% endfor %}
+  </div>
+
+  {% for st in R.steps %}
+  <div class="lane">
+    <div class="who">#{{ st.seq }} {{ st.agent }}<small>{{ st.stage }}{% if st.verdict %} · {{ st.verdict }}{% endif %}</small></div>
+    <div class="track"><div class="bar s-{{ st.stage }}" style="left:{{ st.left_pct }}%;width:{{ st.width_pct }}%"
+      {% if not export %}hx-get="/s/{{ s.date }}/step/{{ run.run_id }}/{{ st.seq }}" hx-target="#detail-{{ run.run_id }}" hx-swap="innerHTML"{% endif %}
+      title="{{ st.agent }}: {{ '%.1f'|format(st.duration_ms or 0) }} ms">{{ '%.0f'|format(st.duration_ms or 0) }} ms</div></div>
+    <div class="small mute" title="{{ st.started_at|berlin }}">{{ st.started_at|clock }}</div>
+  </div>
+  {% endfor %}
+
+  {% if export %}
+  {% for st in R.steps %}<details><summary>#{{ st.seq }} {{ st.agent }} inputs / outputs</summary>{% include "_step.html" %}</details>{% endfor %}
+  {% else %}
+  <div class="detail" id="detail-{{ run.run_id }}"><p class="mute small">Click a bar to see the agent's inputs and outputs.</p></div>
+  {% endif %}
+  {% if run.notes %}<details class="small"><summary>run notes ({{ run.notes|length }})</summary><ul>{% for n in run.notes %}<li>{{ n }}</li>{% endfor %}</ul></details>{% endif %}
+</div>
+{% else %}<div class="card mute">No trace for this session.</div>{% endfor %}
+{% endblock %}

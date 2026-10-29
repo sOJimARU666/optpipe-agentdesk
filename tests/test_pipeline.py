@@ -69,7 +69,14 @@ def test_jpm_premarket_review_matches_doodle_example(rec, example):
     mine = next(r for r in rec["risk_reviews"] if r["ticket_id"] == "tkt-jpm-bcs-340-350")
     ex = next(r for r in example["risk_reviews"]
               if r["ticket_id"] == "tkt-jpm-bcs-340-350" and r["run_id"] == "run-premarket")
-    assert [(r["rule_id"], r["result"]) for r in mine["results"]] == [(r["rule_id"], r["result"]) for r in ex["results"]]
+    # One deliberate difference: Doodle's example has R08 UNKNOWN because no FOMC/NFP calendar was known
+    # (and the CPI page was opened at 09:09, after the run). With the macro-calendar sources (replay
+    # snapshot fetched 07:50) every macro coverage reaches past the window, and CPI 10-14 / PPI 10-15
+    # fall inside it -> FLAG.
+    expected = [(r["rule_id"], "FLAG" if r["rule_id"] == "R08_MACRO_EVENTS" else r["result"]) for r in ex["results"]]
+    assert dict(expected)["R08_MACRO_EVENTS"] == "FLAG" and \
+        next(r for r in ex["results"] if r["rule_id"] == "R08_MACRO_EVENTS")["result"] == "UNKNOWN"
+    assert [(r["rule_id"], r["result"]) for r in mine["results"]] == expected
     assert mine["overall"]["verdict"] == ex["overall"]["verdict"] == "VETO"
     for a, b in zip(mine["results"], ex["results"]):
         assert a["threshold"] == b["threshold"], a["rule_id"]
@@ -132,7 +139,7 @@ def test_risk_overrides_recorded_in_reviews(settings, spec):
 
 
 @pytest.mark.parametrize("ny,phase", [("06:00", "premarket"), ("08:45", "preopen"), ("09:30", "open"),
-                                      ("09:50", "intraday"), ("16:30", "afterhours")])
+                                      ("09:50", "intraday"), ("16:30", "closed")])
 def test_phase_from_ny_clock(ny, phase, ruleset_calendar):
     from optpipe.orchestrator import phase_for
     assert phase_for(datetime.fromisoformat(f"2026-10-13T{ny}:00-04:00"), ruleset_calendar) == phase
@@ -144,8 +151,3 @@ def test_phase_same_instant_from_berlin(ruleset_calendar):
     assert phase_for(datetime.fromisoformat("2026-10-13T15:40:00+02:00"), ruleset_calendar) == "open"
 
 
-@pytest.fixture(scope="module")
-def ruleset_calendar(spec):
-    from optpipe.risk import load_ruleset
-    from optpipe.risk.engine import Calendar
-    return Calendar(load_ruleset(spec)[0].config.market_hours)

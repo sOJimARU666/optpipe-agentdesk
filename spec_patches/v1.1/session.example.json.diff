@@ -1,0 +1,85 @@
+--- a/session.example.json
++++ b/session.example.json
+@@ -1533,5 +1533,5 @@
+                   },
+                   "open_interest": {
+-                    "value": 472.0,
++                    "value": 472,
+                     "source_id": "src-nasdaq-jpm-chain-0752",
+                     "as_of": "2026-10-12T16:00:00-04:00",
+@@ -1621,5 +1621,5 @@
+                   },
+                   "open_interest": {
+-                    "value": 773.0,
++                    "value": 773,
+                     "source_id": "src-nasdaq-jpm-chain-0752",
+                     "as_of": "2026-10-12T16:00:00-04:00",
+@@ -1709,5 +1709,5 @@
+                   },
+                   "open_interest": {
+-                    "value": 747.0,
++                    "value": 747,
+                     "source_id": "src-nasdaq-jpm-chain-0752",
+                     "as_of": "2026-10-12T16:00:00-04:00",
+@@ -1797,5 +1797,5 @@
+                   },
+                   "open_interest": {
+-                    "value": 324.0,
++                    "value": 324,
+                     "source_id": "src-nasdaq-jpm-chain-0752",
+                     "as_of": "2026-10-12T16:00:00-04:00",
+@@ -1885,5 +1885,5 @@
+                   },
+                   "open_interest": {
+-                    "value": 428.0,
++                    "value": 428,
+                     "source_id": "src-nasdaq-jpm-chain-0752",
+                     "as_of": "2026-10-12T16:00:00-04:00",
+@@ -1973,5 +1973,5 @@
+                   },
+                   "open_interest": {
+-                    "value": 321.0,
++                    "value": 321,
+                     "source_id": "src-nasdaq-jpm-chain-0752",
+                     "as_of": "2026-10-12T16:00:00-04:00",
+@@ -2522,5 +2522,5 @@
+                   },
+                   "open_interest": {
+-                    "value": 531.0,
++                    "value": 531,
+                     "source_id": "src-nasdaq-wdc-chain-0752",
+                     "as_of": "2026-10-12T16:00:00-04:00",
+@@ -2610,5 +2610,5 @@
+                   },
+                   "open_interest": {
+-                    "value": 620.0,
++                    "value": 620,
+                     "source_id": "src-nasdaq-wdc-chain-0752",
+                     "as_of": "2026-10-12T16:00:00-04:00",
+@@ -3063,21 +3063,21 @@
+           "result": "VETO",
+           "measured": {
+-            "leg-1": 472.0,
+-            "leg-2": 747.0
++            "leg-1": 472,
++            "leg-2": 747
+           },
+           "threshold": {
+             "min_open_interest": 500
+           },
+-          "reason": "leg-1 OI 472.0 VETO, leg-2 OI 747.0 PASS",
++          "reason": "leg-1 OI 472 VETO, leg-2 OI 747 PASS",
+           "per_leg": [
+             {
+               "leg_id": "leg-1",
+               "result": "VETO",
+-              "measured": 472.0
++              "measured": 472
+             },
+             {
+               "leg_id": "leg-2",
+               "result": "PASS",
+-              "measured": 747.0
++              "measured": 747
+             }
+           ]

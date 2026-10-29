@@ -70,11 +70,19 @@ class SpecFiles:
             return None
         return _import(str(p))
 
+    def validator_for_schema(self, schema_path: Path) -> Optional[ModuleType]:
+        """Doodle's validate_session.py (same INV-01..09 invariants) bound to ANOTHER schema file,
+        e.g. the v1.1 proposal in spec_patches/. Separate module instance; the spec file is only read."""
+        p = self.path("session_validator")
+        if not p or not Path(schema_path).exists():
+            return None
+        return _import(str(p), str(Path(schema_path).resolve()))
+
 
 @lru_cache(maxsize=None)
-def _import(path: str) -> ModuleType:
+def _import(path: str, schema_override: str = "") -> ModuleType:
     p = Path(path)
-    name = f"_doodle_spec_{p.stem}"
+    name = f"_doodle_spec_{p.stem}" + (f"_{abs(hash(schema_override))}" if schema_override else "")
     if str(p.parent) not in sys.path:          # validate_session/test modules import siblings by name
         sys.path.append(str(p.parent))
     spec = importlib.util.spec_from_file_location(name, p)
@@ -84,6 +92,9 @@ def _import(path: str) -> ModuleType:
         spec.loader.exec_module(mod)  # type: ignore[union-attr]
     finally:
         sys.dont_write_bytecode = prev
+    if schema_override:
+        import json
+        mod.SCHEMA = json.loads(Path(schema_override).read_text())   # module global used by validate()
     return mod
 
 
