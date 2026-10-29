@@ -1,5 +1,6 @@
 # Pipeline settings. Owner: Moodle (structure) / Eugene (values).
-# Everything marked PLACEHOLDER is unknown until Eugene answers.
+# Demo scenario: broker, style, watchlist and account values are FICTIONAL.
+# Proposed repo: optpipe-agentdesk (not created). Fictional paper account: $25,000.
 mode: paper_only            # the ONLY supported mode. There is no broker integration and no order path.
 
 user:
@@ -7,10 +8,17 @@ user:
   display_timezone: Europe/Berlin
 
 broker:
-  name: UNKNOWN             # PLACEHOLDER - informational only; never connected, never used to send anything
-trade_style: UNKNOWN        # PLACEHOLDER - e.g. "defined-risk debit spreads, 1-4 week holds"
-watchlist: []               # PLACEHOLDER - symbols always researched, e.g. [JPM, WDC]
-sectors: []                 # PLACEHOLDER - e.g. [Financial, Technology]
+  name: Harborline Securities (FICTIONAL)   # demo scenario only; never connected, never used to send anything
+trade_style: "defined-risk debit and credit spreads, 1-4 week holds, max 2% account risk per idea"   # FICTIONAL demo persona
+watchlist: [JPM, WDC, AAPL, MSFT, NVDA, XOM]   # FICTIONAL demo persona
+sectors: [Financial, Technology, Energy]   # FICTIONAL demo persona
+scenario:                    # FICTIONAL demo scenario -> "FICTIONAL DEMO" tag on CLI, Markdown and dashboard
+  name: demo
+  fictional: true
+  repo_name: optpipe-agentdesk   # PROPOSAL only: no GitHub/remote repo is created
+  account_size_usd: 25000        # fictional paper account
+  max_risk_per_idea_pct: 2       # planner max loss per idea = 25000 x 2% = $500 (must equal R04 per_trade_max_loss_usd)
+  risk_profile: demo             # Doodle's risk_rules.yaml profiles.demo (sector caps, R12 structures, R13 7-28 d holds)
 
 # Doodle's spec folder (schema, risk rules, test cases). Loaded read-only from code, never copied.
 # Override with env OPTIONS_SPEC_DIR.

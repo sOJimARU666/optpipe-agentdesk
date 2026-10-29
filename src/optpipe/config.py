@@ -25,6 +25,24 @@ class BrokerCfg(_M):
     name: str = "UNKNOWN"   # informational only
 
 
+class ScenarioCfg(_M):
+    """A named demo/persona scenario. `fictional: true` puts a FICTIONAL DEMO tag on every output.
+    Nothing here is ever created or connected: repo_name is only a proposal (no repo exists)."""
+    name: str
+    fictional: bool = True
+    repo_name: str | None = None            # PROPOSAL only, no GitHub/remote repo is created
+    account_size_usd: float | None = None   # fictional paper account
+    max_risk_per_idea_pct: float | None = None
+    risk_profile: str | None = None         # profile in Doodle's risk_rules.yaml `profiles`
+
+    @property
+    def max_loss_per_idea_usd(self) -> float | None:
+        """Derived: account size x risk % (25,000 x 2% = 500)."""
+        if self.account_size_usd is None or self.max_risk_per_idea_pct is None:
+            return None
+        return round(self.account_size_usd * self.max_risk_per_idea_pct / 100, 2)
+
+
 class MarketCfg(_M):
     timezone: str = "America/New_York"
     open_time: str = "09:30"
@@ -95,6 +113,7 @@ class Settings(_M):
     trade_style: str = "UNKNOWN"
     watchlist: list[str] = Field(default_factory=list)
     sectors: list[str] = Field(default_factory=list)
+    scenario: ScenarioCfg | None = None
     spec_dir: str = "/workspace/trading/spec"
     market: MarketCfg = Field(default_factory=MarketCfg)
     discovery: DiscoveryCfg

@@ -26,6 +26,7 @@ from .models.contracts import (DiscoveryInput, ManualCandidate, ManualCoverage, 
 from .models.schema_v1 import SessionRecordV1
 from .models.schema_v1_1 import SessionRecordV11
 from .records.compat import from_v1, to_v1
+from .scenario import scenario_note
 from .models.session import HandoffTrace, RunTrace, SessionTrace
 from .planner import PlannerAgent
 from .providers.base import Fetcher
@@ -178,16 +179,44 @@ def _rename_sources(new: dict, old_sources: list[dict], as_of: datetime) -> dict
     return walk(new)
 
 
+def scenario_max_loss(s, rules: Ruleset) -> tuple[float, Optional[str]]:
+    """Planner max loss per idea: account size x risk % when the scenario defines both. If that differs from
+    the Risk Officer's per_trade_max_loss_usd (e.g. an explicit risk_overrides), the planner never sizes above
+    R04: it takes the smaller one and the mismatch is noted. tests/test_scenario.py pins the shipped config
+    (25,000 x 2% = 500 = profiles.demo per_trade_max_loss_usd)."""
+    ro = float(rules.config.per_trade_max_loss_usd) if rules.config.per_trade_max_loss_usd is not None else None
+    derived = s.scenario.max_loss_per_idea_usd if s.scenario else None
+    if derived is None:
+        if ro is None:
+            raise ValueError("no max loss per idea: set scenario account/risk % or per_trade_max_loss_usd")
+        return ro, None
+    if ro is not None and abs(derived - ro) > 0.005:
+        return min(derived, ro), (f"WARNING scenario max loss ${derived:g} (= ${s.scenario.account_size_usd:g} x "
+                                  f"{s.scenario.max_risk_per_idea_pct:g}%) != Risk Officer per_trade_max_loss_usd "
+                                  f"${ro:g}; planner sizes to ${min(derived, ro):g}")
+    return derived, None
+
+
 class Orchestrator:
     def __init__(self, pipeline: Pipeline):
         self.p = pipeline
         s = pipeline.settings
         self.spec = discover(s.spec_path)
         self.base_rules, self.rule_notes = load_ruleset(self.spec)
-        self.rules: Ruleset = self.base_rules.with_overrides(s.risk_overrides)
+        # cfg = spec defaults <- scenario's risk profile (Doodle's risk_rules.yaml `profiles`) <- risk_overrides
+        sc = s.scenario
+        self.profile = sc.risk_profile if sc else None
+        self.effective_overrides = {**self.base_rules.profile_overrides(self.profile), **s.risk_overrides}
+        self.rules: Ruleset = self.base_rules.with_profile(self.profile).with_overrides(s.risk_overrides)
         self.nasdaq = NasdaqProvider(pipeline.fetcher)
         self.planner = PlannerAgent()
-        self.risk = RiskOfficerAgent(self.rules, s.risk_overrides or None)
+        self.risk = RiskOfficerAgent(self.rules, self.effective_overrides or None)
+        self.max_loss_per_idea, mismatch = scenario_max_loss(s, self.rules)
+        if mismatch:
+            self.rule_notes = [*self.rule_notes, mismatch]
+        if self.profile:
+            self.rule_notes = [*self.rule_notes, f"risk profile '{self.profile}' from spec risk_rules.yaml "
+                               f"({self.base_rules.profiles[self.profile].get('label', '')})"]
         from .watcher import WatcherAgent
         self.watcher = WatcherAgent()
         self.steps: list[HandoffTrace] = []
@@ -221,6 +250,7 @@ class Orchestrator:
                                                 if self.p.data_mode == "fixtures" else ""),
             f"broker (informational, never connected): {s.broker.name}; trade style: {s.trade_style}",
             f"watchlist: {s.watchlist or 'PLACEHOLDER (empty)'}; sectors: {s.sectors or 'PLACEHOLDER (empty)'}",
+            *[n for n in [scenario_note(s.scenario, s.broker.name, s.trade_style)] if n],
             *self.rule_notes,
             "PLACEHOLDER: NYSE 2026 holidays/early closes in spec risk_rules.yaml are unverified",
             ("macro calendars: " + ("hand-made replay snapshot from real captures (fixtures)"
@@ -287,7 +317,19 @@ class Orchestrator:
         notes += res.notes
 
         pc = s.planner.model_dump()
-        pc["max_risk_per_trade_usd"] = pc["max_risk_per_trade_usd"] or float(self.rules.config.per_trade_max_loss_usd)
+        if not pc["max_risk_per_trade_usd"]:
+            pc["max_risk_per_trade_usd"] = self.max_loss_per_idea
+            sc = s.scenario
+            if sc and sc.max_loss_per_idea_usd is not None and self.max_loss_per_idea == sc.max_loss_per_idea_usd:
+                pc["risk_basis"] = (f"Per-trade max loss ${sc.max_loss_per_idea_usd:g} = {sc.max_risk_per_idea_pct:g}% of the "
+                                    f"{'FICTIONAL ' if sc.fictional else ''}${sc.account_size_usd:,.0f} paper account "
+                                    f"(scenario '{sc.name}', not confirmed by Eugene)")
+        lo, hi = self.rules.config.hold_min_days, self.rules.config.hold_max_days   # R13 DTE window, if any
+        if lo is not None and pc["preferred_dte_min"] < lo:
+            pc["preferred_dte_min"] = lo
+        if hi is not None and pc["preferred_dte_max"] > hi:
+            pc["preferred_dte_max"] = hi
+            notes.append(f"planner DTE window clamped to {pc['preferred_dte_min']}-{hi} d by risk rules hold period (R13)")
         params = PlannerParams(**pc, entry_not_before=s.market.entry_not_before,
                                max_leg_spread_pct=float(self.rules.config.max_spread_pct_of_mid) * 100)
         plan = self._step(self.planner, PlannerInput(

@@ -1,6 +1,8 @@
 """Markdown rendering of a schema-v1 session record (the JSON is the source of truth) + hand-off trace."""
 from __future__ import annotations
 
+from ..scenario import tag_for_record
+
 from datetime import datetime
 from typing import Any, Optional
 
@@ -27,7 +29,11 @@ def render_markdown(rec: dict, trace: Optional[SessionTrace] = None) -> str:
     s = rec["session"]
     L: list[str] = []
     a = L.append
-    a(f"# Paper options session {s['date']} - SIMULATED ONLY (mode: {s['mode']})\n")
+    tag = tag_for_record(rec)
+    a(f"# {tag + ' · ' if tag else ''}Paper options session {s['date']} - SIMULATED ONLY (mode: {s['mode']})\n")
+    if tag:
+        a("> FICTIONAL DEMO: broker, trade style, watchlist and account size are a fictional demo scenario, "
+          "not Eugene's real setup.\n")
     a("> PAPER ONLY. No broker, no live orders. Tickets are HYPOTHETICAL data records. "
       "Every ticket needs Eugene's explicit approval; VETO tickets cannot be approved.\n")
     a("## Session")

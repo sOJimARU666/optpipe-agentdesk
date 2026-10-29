@@ -26,6 +26,8 @@ NAMES = {
     "session_validator": "validate_session.py",
     "reference_tests": "test_risk_reference.py",
     "session_example": "session.example.json",
+    "watcher_rules": "watcher_rules.yaml",          # spec v1.1 (2026-10-29)
+    "watcher_reference": "watcher_reference.py",
 }
 
 
@@ -57,6 +59,10 @@ class SpecFiles:
 
     def risk_rules(self) -> Optional[dict[str, Any]]:
         p = self.path("risk_rules")
+        return yaml.safe_load(p.read_text()) if p else None
+
+    def watcher_rules(self) -> Optional[dict[str, Any]]:
+        p = self.path("watcher_rules")
         return yaml.safe_load(p.read_text()) if p else None
 
     def session_schema(self) -> Optional[dict[str, Any]]:

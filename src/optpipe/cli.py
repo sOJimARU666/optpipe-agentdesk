@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+from .scenario import tag_for_record
+
 import argparse
 import sys
 from datetime import datetime, timezone
@@ -24,7 +26,8 @@ def summary(rec: dict, trace) -> str:
     rt = trace.runs[-1]
     run = rec["runs"][-1]
     t = datetime.fromisoformat(run["started"]["ny"])
-    lines = [f"PAPER ONLY | {rec['session']['id']} | run {run['run_id']} ({run['phase']}, {rt.data_mode}) | "
+    tag = tag_for_record(rec)
+    lines = [f"PAPER ONLY{' | ' + tag if tag else ''} | {rec['session']['id']} | run {run['run_id']} ({run['phase']}, {rt.data_mode}) | "
              f"{t:%H:%M} New York / {t.astimezone(BERLIN):%H:%M %Z} Berlin",
              "candidates: " + ", ".join(c["underlying"] for c in rec["candidates"])]
     reviews = {r["ticket_id"]: r for r in rec["risk_reviews"] if r["run_id"] == run["run_id"]}

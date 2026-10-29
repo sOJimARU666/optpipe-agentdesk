@@ -4,7 +4,7 @@ Regenerate: .venv/bin/python scripts/gen_models.py
 """
 from __future__ import annotations
 
-SCHEMA_SHA256 = "6ac3ec7f6bcadc128554079df89fc05dcc465d0aacaf95a7bf7258ebad749cdd"
+SCHEMA_SHA256 = "1f5d863d7a35edf81930937be93b0b2d439439bea9448fe5b23159692bdb1767"
 SCHEMA_SOURCE = "/workspace/trading/spec/session.schema.json"
 
 from datetime import date as date_aliased
@@ -566,6 +566,13 @@ class PriceType(Enum):
     credit = 'credit'
 
 
+class Rounding(Enum):
+    down = 'down'
+    up = 'up'
+    nearest = 'nearest'
+    none = 'none'
+
+
 class LimitPrice(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -577,6 +584,20 @@ class LimitPrice(BaseModel):
     valid_only_if: str | None = Field(
         None,
         description='human-readable precondition, e.g. re-quoted live after 09:30 ET',
+    )
+    raw_amount: Number | None = Field(
+        None,
+        description='(v1.1) unrounded price before tick rounding; amount = round(raw_amount, tick_size, rounding)',
+        ge=0.0,
+    )
+    tick_size: Number | None = Field(
+        None,
+        description='tick grid used (INV-13: penny-pilot names 0.01 below $3.00 / 0.05 at or above; others 0.05 / 0.10; tier by the raw price)',
+        gt=0.0,
+    )
+    rounding: Rounding | None = Field(
+        None,
+        description='direction applied to the raw value: down = floor, up = ceiling, nearest = half-up, none = no rounding (rounded must equal raw). Required directions (INV-13): debit limit down, stop up, target down.',
     )
 
 
@@ -630,6 +651,19 @@ class Condition(BaseModel):
     op: Op
     value: Number | str | bool
     unit: str | None = None
+    raw_value: Number | None = Field(
+        None,
+        description='(v1.1) unrounded threshold before tick rounding; value = round(raw_value, tick_size, rounding)',
+    )
+    tick_size: Number | None = Field(
+        None,
+        description='tick grid used (INV-13: penny-pilot names 0.01 below $3.00 / 0.05 at or above; others 0.05 / 0.10; tier by the raw price)',
+        gt=0.0,
+    )
+    rounding: Rounding | None = Field(
+        None,
+        description='direction applied to the raw value: down = floor, up = ceiling, nearest = half-up, none = no rounding (rounded must equal raw). Required directions (INV-13): debit limit down, stop up, target down.',
+    )
 
 
 class Combine(Enum):
@@ -674,6 +708,79 @@ class IntegerField(BaseModel):
     )
     unit: str | None = None
     note: str | None = None
+
+
+class Instrument1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    symbol: str
+    name: str | None = None
+    region: Region
+    level: NumberField
+    change_pct: NumberField
+    session_state: SessionState
+
+
+class GlobalSnapshot(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    run_id: Id
+    instruments: list[Instrument1]
+    themes: list[StringField] | None = None
+
+
+class Row(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    rank: int = Field(..., ge=1)
+    ticker: Ticker
+    last: NumberField | None = None
+    change_pct: NumberField | None = None
+    volume: NumberField | None = None
+    relative_volume: NumberField | None = None
+
+
+class Screen1(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    screen_id: Id
+    name: str = Field(..., description='e.g. ta_toplosers')
+    source_id: SourceId
+    filters: str | None = None
+    fetched_at: Timestamp
+    status: Status
+    status_reason: str | None = None
+    parse_notes: str | None = None
+    rows: list[Row]
+
+
+class EarningsReport(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    run_id: Id
+    ticker: Ticker
+    fiscal_period: str
+    reported: BoolField
+    eps_actual: NumberField
+    eps_estimate: NumberField
+    revenue_actual_usd_bn: NumberField
+    revenue_estimate_usd_bn: NumberField
+    premarket_change_pct: NumberField
+    extra_metrics: dict[str, NumberField] | None = None
+
+
+class PremarketScan(BaseModel):
+    model_config = ConfigDict(
+        extra='forbid',
+    )
+    run_id: Id
+    screens: list[Screen1]
+    earnings_reports: list[EarningsReport]
 
 
 class MarketCalendar(BaseModel):
@@ -755,18 +862,6 @@ class Run(BaseModel):
     summary: str | None = None
 
 
-class Row(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    rank: int = Field(..., ge=1)
-    ticker: Ticker
-    last: NumberField | None = None
-    change_pct: NumberField | None = None
-    volume: NumberField | None = None
-    relative_volume: NumberField | None = None
-
-
 class Screen(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
@@ -782,23 +877,7 @@ class Screen(BaseModel):
     rows: list[Row]
 
 
-class EarningsReport(BaseModel):
-    model_config = ConfigDict(
-        extra='forbid',
-    )
-    run_id: Id
-    ticker: Ticker
-    fiscal_period: str
-    reported: BoolField
-    eps_actual: NumberField
-    eps_estimate: NumberField
-    revenue_actual_usd_bn: NumberField
-    revenue_estimate_usd_bn: NumberField
-    premarket_change_pct: NumberField
-    extra_metrics: dict[str, NumberField] | None = None
-
-
-class PremarketScan(BaseModel):
+class PremarketScanModel(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -819,7 +898,7 @@ class Instrument(BaseModel):
     session_state: SessionState
 
 
-class GlobalSnapshot(BaseModel):
+class GlobalSnapshotModel(BaseModel):
     model_config = ConfigDict(
         extra='forbid',
     )
@@ -1260,8 +1339,16 @@ class PaperUSOptionsTradingSessionRecord(BaseModel):
         description='Each pipeline pass within the session (premarket scan, preopen update, post-open requote...). Time-varying records point at a run_id.',
         min_length=1,
     )
-    premarket_scan: PremarketScan
-    global_snapshot: GlobalSnapshot
+    premarket_scan: PremarketScanModel
+    premarket_scans: list[PremarketScan] | None = Field(
+        None,
+        description="(v1.1, 1.1.0 records only) one premarket scan per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'premarket_scan', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+    )
+    global_snapshot: GlobalSnapshotModel
+    global_snapshots: list[GlobalSnapshot] | None = Field(
+        None,
+        description="(v1.1, 1.1.0 records only) one global snapshot per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'global_snapshot', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+    )
     event_calendar: EventCalendar = Field(
         ...,
         description="Scheduled events the risk rules need (earnings, ex-dividend, CPI, PPI, FOMC, NFP). 'coverage' records how far each calendar was actually checked, so 'no event found' (PASS) is distinguishable from 'never checked' (UNKNOWN).",

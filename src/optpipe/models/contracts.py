@@ -115,6 +115,7 @@ class ResearchOutput(Model):
 # ---------------- Planner ----------------
 class PlannerParams(Model):
     max_risk_per_trade_usd: float
+    risk_basis: str | None = None    # where max_risk_per_trade_usd came from (shown on each ticket)
     preferred_dte_min: int = 14
     preferred_dte_max: int = 45
     strike_step: float = 5

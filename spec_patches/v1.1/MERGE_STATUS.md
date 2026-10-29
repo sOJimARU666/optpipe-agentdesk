@@ -7,9 +7,9 @@ The proposal below is diffed against the frozen v1.0.0 files; this table tracks 
 |---|---|---|---|
 | 1 | schema_version accepts 1.0.0 and 1.1.0 | `properties/schema_version/enum` | merged as proposed |
 | 2 | run phase 'closed' | `properties/runs/items/properties/phase/enum` | merged as proposed |
-| 3 | premarket_scans[] per run | `properties/premarket_scans` | NOT MERGED (stays in the v1.1 preview only) |
-| 4 | global_snapshots[] per run | `properties/global_snapshots` | NOT MERGED (stays in the v1.1 preview only) |
+| 3 | premarket_scans[] per run | `properties/premarket_scans` | merged with Doodle's changes (his version is canonical) |
+| 4 | global_snapshots[] per run | `properties/global_snapshots` | merged with Doodle's changes (his version is canonical) |
 | 5 | trace_ref {path, sha256} | `properties/trace_ref` | merged with Doodle's changes (his version is canonical) |
 | 6 | integer open_interest | `$defs/OptionContract/properties/open_interest` | merged as proposed |
-| 8 | limit_price raw_amount / tick_size / rounding | `$defs/LimitPrice/properties/raw_amount` | NOT MERGED (stays in the v1.1 preview only) |
-| 9 | Condition raw_value / tick_size / rounding | `$defs/Condition/properties/raw_value` | NOT MERGED (stays in the v1.1 preview only) |
+| 8 | limit_price raw_amount / tick_size / rounding | `$defs/LimitPrice/properties/raw_amount` | merged with Doodle's changes (his version is canonical) |
+| 9 | Condition raw_value / tick_size / rounding | `$defs/Condition/properties/raw_value` | merged with Doodle's changes (his version is canonical) |

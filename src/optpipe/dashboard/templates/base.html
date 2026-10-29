@@ -10,7 +10,7 @@
 *{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 .paper{background:#1d2330;color:#fff;padding:6px 20px;font-size:12px;letter-spacing:.04em;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.paper b{color:#ffd166}
+.paper b{color:#ffd166}.paper b.demo{background:#ffd166;color:#1d2330;padding:0 6px;border-radius:4px;margin-left:6px}
 header{background:#fff;border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
 header .brand{font-weight:700;font-size:16px}header nav a{margin-right:14px;padding:6px 2px;color:var(--mute);font-weight:500}
 header nav a.on{color:var(--ink);border-bottom:2px solid var(--accent)}
@@ -37,7 +37,7 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 {% if not export %}<script src="/static/htmx.min.js" defer></script>{% endif %}
 </head>
 <body>
-<div class="paper"><span><b>PAPER ONLY</b> · research records, HYPOTHETICAL tickets · no broker, no orders</span>
+<div class="paper"><span><b>PAPER ONLY</b>{% if demo_tag %} <b class="demo">{{ demo_tag }}</b>{% endif %} · research records, HYPOTHETICAL tickets · no broker, no orders</span>
 <span>all market logic in America/New_York · times shown ET and Europe/Berlin</span></div>
 <header>
   <span class="brand">optpipe</span>

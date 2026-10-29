@@ -141,7 +141,7 @@ def build_vertical(cand: dict, strategy: str, p: PlannerParams, as_of: datetime,
         "pricing": {"run_id": run_id, "reference_mid": mid, "natural": natural, "status": pstatus,
                     "note": "; ".join([*(["UNPRICEABLE premarket: prior-session option quotes"]
                                           if pstatus != "ok" else []), tick_note])},
-        "risk_basis": f"Per-trade max loss ${p.max_risk_per_trade_usd:g} is a PLACEHOLDER pending Eugene",
+        "risk_basis": p.risk_basis or f"Per-trade max loss ${p.max_risk_per_trade_usd:g} is a PLACEHOLDER pending Eugene",
         "hold_window": {"start": tspair(start), "end": tspair(ny_at(time_stop, "16:00"))},
         "entry_rules": [{"rule_id": "entry-1", "combine": "all",
                          "text": (f"After {p.entry_not_before} ET, only if {sym} {side_txt} {ref:g} (prev close), "

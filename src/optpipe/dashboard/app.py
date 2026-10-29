@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, Red
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from ..scenario import tag_for_record
 from .data import OutDir, Session, berlin, clock, compact, fval, ftitle, pair
 
 HERE = Path(__file__).parent
@@ -112,10 +113,20 @@ def create_app(out_dir: Path | str, export: bool = False) -> FastAPI:
         except KeyError:
             raise HTTPException(404, f"no session-{date}.json in {od.root}")
 
+    def latest_tag() -> Optional[str]:
+        """Pages without a session (history) take the tag of the newest session."""
+        for d in od.dates()[:1]:
+            try:
+                return tag_for_record(od.load(d).record)
+            except Exception:
+                return None
+        return None
+
     def render(request: Request, name: str, page: str, s: Optional[Session], **ctx: Any) -> HTMLResponse:
         date = s.date if s else None
         nav = {p: link(p, date, export) for p in PAGES} if date else {"history": link("history", None, export)}
-        return tpl.TemplateResponse(request, name, {"page": page, "s": s, "date": date, "nav": nav,
+        demo_tag = tag_for_record(s.record) if s else latest_tag()
+        return tpl.TemplateResponse(request, name, {"page": page, "s": s, "date": date, "nav": nav, "demo_tag": demo_tag,
                                                     "dates": od.dates(), "out_dir": str(od.root), **ctx})
 
     @app.get("/healthz", response_class=PlainTextResponse)

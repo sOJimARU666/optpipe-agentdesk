@@ -65,7 +65,7 @@ def test_jpm_bull_call_spread_matches_doodle_example(rec, example):
     assert mine["pricing"]["reference_mid"] == ex["pricing"]["reference_mid"] == 3.025
 
 
-def test_jpm_premarket_review_matches_doodle_example(rec, example):
+def test_jpm_premarket_review_matches_doodle_example(rec, example, ref, raw_rules, settings):
     mine = next(r for r in rec["risk_reviews"] if r["ticket_id"] == "tkt-jpm-bcs-340-350")
     ex = next(r for r in example["risk_reviews"]
               if r["ticket_id"] == "tkt-jpm-bcs-340-350" and r["run_id"] == "run-premarket")
@@ -78,7 +78,17 @@ def test_jpm_premarket_review_matches_doodle_example(rec, example):
         next(r for r in ex["results"] if r["rule_id"] == "R08_MACRO_EVENTS")["result"] == "UNKNOWN"
     assert [(r["rule_id"], r["result"]) for r in mine["results"]] == expected
     assert mine["overall"]["verdict"] == ex["overall"]["verdict"] == "VETO"
-    for a, b in zip(mine["results"], ex["results"]):
+    # Thresholds: Doodle's example uses the spec defaults; with the demo scenario's risk profile the expected
+    # thresholds come from his reference evaluated on the same example inputs with that profile.
+    profile = settings.scenario.risk_profile if settings.scenario else None
+    if profile:
+        rinp = ref.inputs_from_session(example, ex["ticket_id"], ex["run_id"], ex["evaluated_at"]["ny"])
+        want = ref.evaluate(rinp, raw_rules, profile=profile)["results"]
+        assert [r["result"] for r in want] == [r["result"] for r in ex["results"]]
+        assert mine["config_overrides"] == raw_rules["profiles"][profile]["config_overrides"]
+    else:
+        want = ex["results"]
+    for a, b in zip(mine["results"], want):
         assert a["threshold"] == b["threshold"], a["rule_id"]
 
 
@@ -128,14 +138,19 @@ def test_second_run_appends_to_same_session(tmp_path, validator):
     assert len(tr["runs"]) == 2
 
 
-def test_risk_overrides_recorded_in_reviews(settings, spec):
+def test_risk_overrides_recorded_in_reviews(settings, spec, raw_rules):
     from optpipe.orchestrator import load_inputs, run_session
     from pathlib import Path
     s = settings.model_copy(update={"risk_overrides": {"per_trade_max_loss_usd": 300}})
     inputs = load_inputs(Path(FIXTURE_DIR) / "session_inputs.yaml")
     rec, _ = run_session(s, inputs, inputs.as_of, Path(FIXTURE_DIR))
-    assert all(r["config_overrides"] == {"per_trade_max_loss_usd": 300} for r in rec["risk_reviews"])
+    # effective overrides = scenario risk profile (if any) <- settings risk_overrides
+    prof = settings.scenario.risk_profile if settings.scenario else None
+    want = {**(raw_rules["profiles"][prof]["config_overrides"] if prof else {}), "per_trade_max_loss_usd": 300}
+    assert all(r["config_overrides"] == want for r in rec["risk_reviews"])
     assert all(t["max_loss"]["amount_usd"] <= 300 for t in rec["tickets"])
+    if prof:
+        assert any(n.startswith("WARNING scenario max loss $500") for n in rec["session"]["notes"])
 
 
 @pytest.mark.parametrize("ny,phase", [("06:00", "premarket"), ("08:45", "preopen"), ("09:30", "open"),
