@@ -329,7 +329,15 @@ class Orchestrator:
         if hi is not None and pc["preferred_dte_max"] > hi:
             pc["preferred_dte_max"] = hi
             notes.append(f"planner DTE window clamped to {pc['preferred_dte_min']}-{hi} d by risk rules hold period (R13)")
-        params = PlannerParams(**pc, entry_not_before=s.market.entry_not_before,
+        tick_rules = self.rules.raw_config.get("tick_rules")
+        if tick_rules:
+            spec_pp = sorted(str(x).upper() for x in tick_rules.get("penny_pilot") or [])
+            if spec_pp and spec_pp != sorted(x.upper() for x in pc["penny_pilot"]):
+                notes.append(f"penny-pilot list from spec tick_rules {spec_pp} (settings.yaml fallback "
+                             f"{pc['penny_pilot']} ignored)")
+        else:
+            notes.append("spec risk_rules.yaml has no config.tick_rules; tick rounding uses the settings.yaml fallback")
+        params = PlannerParams(**pc, tick_rules=tick_rules, entry_not_before=s.market.entry_not_before,
                                max_leg_spread_pct=float(self.rules.config.max_spread_pct_of_mid) * 100)
         plan = self._step(self.planner, PlannerInput(
             as_of=as_of, run_id=run_id, candidates=res.candidates, event_calendar=res.event_calendar,

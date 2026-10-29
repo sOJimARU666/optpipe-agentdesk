@@ -95,8 +95,9 @@ def build_vertical(cand: dict, strategy: str, p: PlannerParams, as_of: datetime,
         idea.reason = f"non-positive reference debit {mid:.3f}"
         return idea
     width = abs(long_k - short_k)
-    ticks = TickRule.from_list(p.penny_pilot, threshold=p.tick_threshold)
-    lim_r = ticks.round(sym, mid * (1 + p.entry_slippage_pct / 100), "down")     # debit cap: never pay more
+    ticks = TickRule.from_spec(p.tick_rules, p.penny_pilot, p.tick_threshold)
+    side = "debit"                     # the planner only builds debit verticals; credit rounding is in ticks.py
+    lim_r = ticks.round_for(sym, mid * (1 + p.entry_slippage_pct / 100), side, "limit")     # debit cap: never pay more
     limit = lim_r.value
     if limit <= 0:
         idea.reason = f"limit {lim_r.raw:.4f} rounds to zero on a {lim_r.tick:g} tick"
@@ -107,11 +108,11 @@ def build_vertical(cand: dict, strategy: str, p: PlannerParams, as_of: datetime,
         return idea
     pstatus = worst(lc["bid"]["status"], lc["ask"]["status"], sc["bid"]["status"], sc["ask"]["status"])
     time_stop = expiry - timedelta(days=p.time_stop_days_before_expiry)
-    stop_r = ticks.round(sym, mid * p.stop_fraction_of_debit, "up")                      # exit no later
-    target_r = ticks.round(sym, min(mid * p.target_multiple_of_debit, width * 0.9), "down")  # take profit no later
+    stop_r = ticks.round_for(sym, mid * p.stop_fraction_of_debit, side, "stop")          # exit no later
+    target_r = ticks.round_for(sym, min(mid * p.target_multiple_of_debit, width * 0.9), side, "target")  # profit no later
     stop_v, target_v = stop_r.value, target_r.value
     raw_of = lambda r: {"raw_value": r.raw, "tick_size": r.tick, "rounding": r.direction}  # noqa: E731
-    tick_note = (f"tick rounding ({'penny-pilot' if sym.upper() in ticks.penny_pilot else 'standard'} {sym}): "
+    tick_note = (f"tick rounding [{ticks.source}] ({'penny-pilot' if sym.upper() in ticks.penny_pilot else 'standard'} {sym}): "
                  f"limit {lim_r.text()}; stop {stop_r.text()}; target {target_r.text()}")
     ref = prev if prev is not None else spot
     bull = strategy == BULL
@@ -133,7 +134,7 @@ def build_vertical(cand: dict, strategy: str, p: PlannerParams, as_of: datetime,
             {"leg_id": "leg-2", "contract_id": sc["contract_id"], "type": typ, "side": "sell", "strike": short_k,
              "expiry": sl["expiry"], "ratio": 1, "multiplier": 100}],
         "quantity": qty,
-        "limit_price": {"amount": limit, "raw_amount": lim_r.raw, "tick_size": lim_r.tick, "rounding": "down",
+        "limit_price": {"amount": limit, "raw_amount": lim_r.raw, "tick_size": lim_r.tick, "rounding": lim_r.direction,
                         "price_type": "debit",
                         "valid_only_if": (f"re-quoted live after {p.entry_not_before} ET with each leg spread <= "
                                           f"{p.max_leg_spread_pct:g}% of mid; reference mid {mid:g}, cap = mid x "

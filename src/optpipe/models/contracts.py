@@ -126,8 +126,9 @@ class PlannerParams(Model):
     time_stop_days_before_expiry: int = 3
     entry_not_before: str = "09:45"
     max_leg_spread_pct: float = 10.0
-    penny_pilot: list[str] = Field(default_factory=lambda: ["SPY", "QQQ", "IWM", "JPM"])
-    tick_threshold: float = 3.0
+    penny_pilot: list[str] = Field(default_factory=lambda: ["SPY", "QQQ", "IWM", "JPM"])   # fallback only
+    tick_threshold: float = 3.0                                                         # fallback only
+    tick_rules: Optional[dict] = None     # Doodle's risk_rules.yaml config.tick_rules (wins when present)
 
 
 class PlannerInput(Model):

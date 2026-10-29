@@ -56,9 +56,9 @@ planner:
   target_multiple_of_debit: 2.0
   entry_slippage_pct: 2.5
   time_stop_days_before_expiry: 3
-  # Tick-size rounding (Doodle's ruling): penny-pilot names tick 0.01 below $3 / 0.05 from $3;
-  # all others 0.05 / 0.10. Limit rounds DOWN, stop UP, target DOWN; raw + rounded are both kept.
-  # PLACEHOLDER list - verify against the current Cboe/OCC penny program list before relying on it.
+  # Tick-size rounding comes from Doodle's spec (risk_rules.yaml config.tick_rules, spec 1.1.0): tiers,
+  # penny-pilot list and directions. The two keys below are a FALLBACK used only if the spec has no tick_rules.
+  # PLACEHOLDER list (spec's too) - verify against the current Cboe/OCC penny program list before relying on it.
   penny_pilot: [SPY, QQQ, IWM, JPM]
   tick_threshold: 3.0
 
