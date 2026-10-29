@@ -3,9 +3,9 @@
 
   python scripts/export_dashboard.py [--out-dir OUT] [--dest docs/dashboard] [--no-png]
 
-Without --out-dir it builds a fresh offline fixture session (premarket run + --append 09:40 ET run) in a
-temp dir, so the snapshots are reproducible. Pages are rendered by the same FastAPI app (export mode:
-relative links, no HTMX round-trips, all reviews/steps inline in <details>). The timeline PNG is taken with
+Without --out-dir it builds a fresh offline fixture session (premarket run + --append 09:40 ET run + a
+replay `optpipe watch` over the hand-made fictional tape) in a temp dir, so the snapshots are reproducible. Pages are rendered by the same FastAPI app (export mode:
+relative links, no HTMX round-trips, all reviews/steps inline in <details>). The timeline and today PNGs are taken with
 playwright using an installed Chrome/Chromium (PLAYWRIGHT_CHROME or /usr/bin/google-chrome); skipped if absent.
 Paper only: reads local files, writes HTML/PNG. No network.
 """
@@ -37,6 +37,10 @@ def build_fixture_session(tmp: Path) -> Path:
     with contextlib.redirect_stdout(io.StringIO()):
         cli_main(["run", "--out", str(out)])
         cli_main(["run", "--out", str(out), "--append", "--as-of", "2026-10-13T09:40:00-04:00"])
+        rc = cli_main(["watch", "--session", str(out / "session-2026-10-13.json"), "--out", str(out),
+                       "--replay", str(ROOT / "tests" / "fixtures" / "2026-10-13" / "watch_tape.yaml")])
+        if rc:
+            raise SystemExit(f"optpipe watch failed (rc {rc})")
     return out
 
 
@@ -89,8 +93,10 @@ def main() -> int:
         written = export_html(out, dest)
         for p in written.values():
             print(f"wrote {p.relative_to(ROOT) if p.is_relative_to(ROOT) else p}")
-        if not a.no_png and screenshot(written["timeline"], dest / "timeline.png"):
-            print(f"wrote {(dest / 'timeline.png').relative_to(ROOT) if dest.is_relative_to(ROOT) else dest / 'timeline.png'}")
+        for page in ("timeline", "today"):
+            png = dest / f"{page}.png"
+            if not a.no_png and screenshot(written[page], png):
+                print(f"wrote {png.relative_to(ROOT) if png.is_relative_to(ROOT) else png}")
     return 0
 
 

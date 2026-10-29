@@ -10,7 +10,7 @@
 *{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 .paper{background:#1d2330;color:#fff;padding:6px 20px;font-size:12px;letter-spacing:.04em;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.paper b{color:#ffd166}
+.paper b{color:#ffd166}.paper b.demo{background:#ffd166;color:#1d2330;padding:0 6px;border-radius:4px;margin-left:6px}
 header{background:#fff;border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
 header .brand{font-weight:700;font-size:16px}header nav a{margin-right:14px;padding:6px 2px;color:var(--mute);font-weight:500}
 header nav a.on{color:var(--ink);border-bottom:2px solid var(--accent)}
@@ -37,7 +37,7 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 
 </head>
 <body>
-<div class="paper"><span><b>PAPER ONLY</b> · research records, HYPOTHETICAL tickets · no broker, no orders</span>
+<div class="paper"><span><b>PAPER ONLY</b> <b class="demo">FICTIONAL DEMO</b> · research records, HYPOTHETICAL tickets · no broker, no orders</span>
 <span>all market logic in America/New_York · times shown ET and Europe/Berlin</span></div>
 <header>
   <span class="brand">optpipe</span>
@@ -47,8 +47,8 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
     <a href="timeline.html" class="">Agent timeline</a>
     <a href="history.html" class="on">History</a>
   </nav>
-  <span class="meta">session <b>2026-10-13</b> · v1.1 preview ·
-    trace <span class="ok" title="sha256 712f14b27af2b03374a419e4e5561f8c861b4e34dc2670640d8fabe6c07c2711">✓ sha256 verified</span></span>
+  <span class="meta">session <b>2026-10-13</b> · record (schema 1.1.0) ·
+    trace <span class="ok" title="sha256 cb81220435e940be7611b62aea03628b77a184f1a7734e372594572ec8137785">✓ sha256 verified</span></span>
 </header>
 <main>
 <h1>History</h1>
@@ -56,7 +56,7 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 <tr><th>session</th><th>runs</th><th class="num">tickets</th><th>verdicts</th><th>recommendation (last run)</th><th>trace</th><th>files</th></tr>
 <tr>
 
-<td><a href="today.html">2026-10-13</a><div class="small mute">v1.1 preview</div></td>
+<td><a href="today.html">2026-10-13</a><div class="small mute">record (schema 1.1.0)</div></td>
 <td class="small"><div>run-premarket · premarket · 2026-10-13 07:52 ET (13:52 Berlin)</div><div>run-open-0940 · open · 2026-10-13 09:40 ET (15:40 Berlin)</div></td>
 <td class="num">4</td>
 <td><span class="badge VETO">8 VETO</span> </td>
@@ -81,18 +81,18 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 <tr><td>2026-10-13</td><td>WDC Oct30 365/375 call spread<div class="mono small mute">idea-wdc-bcs · tkt-wdc-bcs-365-375</div></td>
 <td><b>vetoed</b></td>
 <td class="small"><div><b>proposed</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">WDC Oct30 365/375 call spread from candidate cand-wdc</div></div><div><b>vetoed</b> · 2026-10-13 07:52 ET (13:52 Berlin) · risk_officer<div class="mute">VETO - R01_QUOTE_FRESHNESS: US regular session closed at evaluated_at (America/New_York); quotes cannot be live; R02_BID_ASK_WIDTH: leg-1 0.186 VETO, leg-2...</div></div><div><b>vetoed</b> · 2026-10-13 09:40 ET (15:40 Berlin) · risk_officer<div class="mute">VETO - R01_QUOTE_FRESHNESS: underlying.last age 108.0 min; leg-1.bid stale; leg-1.ask stale; leg-2.bid stale; leg-2.ask stale; R02_BID_ASK_WIDTH: leg-1...</div></div></td></tr>
-<tr><td>2026-10-13</td><td>SNDX bear put debit spread<div class="mono small mute">idea-sndx-bps</div></td>
+<tr><td>2026-10-13</td><td>AAPL bull call debit spread<div class="mono small mute">idea-aapl-bcs</div></td>
 <td><b>rejected</b></td>
-<td class="small"><div><b>proposed</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">SNDX bear put debit spread from candidate cand-sndx</div></div><div><b>rejected</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">no underlying price (missing)</div></div></td></tr>
-<tr><td>2026-10-13</td><td>SNDX bull call debit spread<div class="mono small mute">idea-sndx-bcs</div></td>
+<td class="small"><div><b>proposed</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">AAPL bull call debit spread from candidate cand-aapl</div></div><div><b>rejected</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">no underlying price (missing)</div></div></td></tr>
+<tr><td>2026-10-13</td><td>AAPL bear put debit spread<div class="mono small mute">idea-aapl-bps</div></td>
 <td><b>rejected</b></td>
-<td class="small"><div><b>proposed</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">SNDX bull call debit spread from candidate cand-sndx</div></div><div><b>rejected</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">no underlying price (missing)</div></div></td></tr>
-<tr><td>2026-10-13</td><td>S bear put debit spread<div class="mono small mute">idea-s-bps</div></td>
+<td class="small"><div><b>proposed</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">AAPL bear put debit spread from candidate cand-aapl</div></div><div><b>rejected</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">no underlying price (missing)</div></div></td></tr>
+<tr><td>2026-10-13</td><td>MSFT bull call debit spread<div class="mono small mute">idea-msft-bcs</div></td>
 <td><b>rejected</b></td>
-<td class="small"><div><b>proposed</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">S bear put debit spread from candidate cand-s</div></div><div><b>rejected</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">no underlying price (missing)</div></div></td></tr>
-<tr><td>2026-10-13</td><td>S bull call debit spread<div class="mono small mute">idea-s-bcs</div></td>
+<td class="small"><div><b>proposed</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">MSFT bull call debit spread from candidate cand-msft</div></div><div><b>rejected</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">no underlying price (missing)</div></div></td></tr>
+<tr><td>2026-10-13</td><td>MSFT bear put debit spread<div class="mono small mute">idea-msft-bps</div></td>
 <td><b>rejected</b></td>
-<td class="small"><div><b>proposed</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">S bull call debit spread from candidate cand-s</div></div><div><b>rejected</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">no underlying price (missing)</div></div></td></tr>
+<td class="small"><div><b>proposed</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">MSFT bear put debit spread from candidate cand-msft</div></div><div><b>rejected</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">no underlying price (missing)</div></div></td></tr>
 <tr><td>2026-10-13</td><td>No trade<div class="mono small mute">idea-no-trade</div></td>
 <td><b>approved_pending</b></td>
 <td class="small"><div><b>proposed</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">Option quotes are not live (stale/missing); re-quote after the open</div></div><div><b>approved_pending</b> · 2026-10-13 07:52 ET (13:52 Berlin) · decision_maker<div class="mute">Current recommendation; awaiting Eugene</div></div><div><b>approved_pending</b> · 2026-10-13 09:40 ET (15:40 Berlin) · decision_maker<div class="mute">Current recommendation; awaiting Eugene</div></div></td></tr>

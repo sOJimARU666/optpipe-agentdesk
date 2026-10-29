@@ -10,7 +10,7 @@
 *{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 .paper{background:#1d2330;color:#fff;padding:6px 20px;font-size:12px;letter-spacing:.04em;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.paper b{color:#ffd166}
+.paper b{color:#ffd166}.paper b.demo{background:#ffd166;color:#1d2330;padding:0 6px;border-radius:4px;margin-left:6px}
 header{background:#fff;border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
 header .brand{font-weight:700;font-size:16px}header nav a{margin-right:14px;padding:6px 2px;color:var(--mute);font-weight:500}
 header nav a.on{color:var(--ink);border-bottom:2px solid var(--accent)}
@@ -33,11 +33,18 @@ details>summary{cursor:pointer;color:var(--accent)}
 .ok{color:var(--pass)}.bad{color:var(--veto)}
 footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 
+.wl{margin:6px 0 12px}.wtrack{position:relative;height:30px;background:#f1f3f7;border-radius:6px}
+.wsess{position:absolute;top:0;bottom:0;left:0;background:#e3e9f7;border-radius:6px 0 0 6px;border-right:2px solid #94a3b8}
+.wtick{position:absolute;top:22px;width:2px;height:8px;background:#94a3b8}.wtick.q{background:#3557d4;height:8px;width:3px}
+.wdot{position:absolute;top:6px;width:14px;height:14px;margin-left:-7px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #0002}
+.wax{position:relative;height:30px}.wax span{position:absolute;top:2px;white-space:nowrap}.wax span+span{transform:translateX(-50%)}
+.L-exit_signal{background:var(--veto)}.L-warn{background:var(--flag)}.L-info{background:#64748b}
+
 </style>
 
 </head>
 <body>
-<div class="paper"><span><b>PAPER ONLY</b> · research records, HYPOTHETICAL tickets · no broker, no orders</span>
+<div class="paper"><span><b>PAPER ONLY</b> <b class="demo">FICTIONAL DEMO</b> · research records, HYPOTHETICAL tickets · no broker, no orders</span>
 <span>all market logic in America/New_York · times shown ET and Europe/Berlin</span></div>
 <header>
   <span class="brand">optpipe</span>
@@ -47,10 +54,12 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
     <a href="timeline.html" class="">Agent timeline</a>
     <a href="history.html" class="">History</a>
   </nav>
-  <span class="meta">session <b>2026-10-13</b> · v1.1 preview ·
-    trace <span class="ok" title="sha256 712f14b27af2b03374a419e4e5561f8c861b4e34dc2670640d8fabe6c07c2711">✓ sha256 verified</span></span>
+  <span class="meta">session <b>2026-10-13</b> · record (schema 1.1.0) ·
+    trace <span class="ok" title="sha256 cb81220435e940be7611b62aea03628b77a184f1a7734e372594572ec8137785">✓ sha256 verified</span></span>
 </header>
 <main>
+
+
 
 <h1>Today · 2026-10-13</h1>
 <div class="card">
@@ -63,8 +72,61 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
   <div class="card"><div class="kpi">4</div><div class="kpi-l">candidates</div></div>
   <div class="card"><div class="kpi">4</div><div class="kpi-l">hypothetical tickets</div></div>
   <div class="card"><div class="kpi">18</div><div class="kpi-l">calendar events (12 coverage rows)</div></div>
-  <div class="card"><div class="kpi small" style="font-size:15px">missing 1911 · stale 2601 · conflicting 15</div><div class="kpi-l">data-quality index (Field paths)</div></div>
+  <div class="card"><div class="kpi small" style="font-size:15px">missing 1911 · stale 2599 · conflicting 15</div><div class="kpi-l">data-quality index (Field paths)</div></div>
 </div>
+
+
+<h2>Watcher alerts <span class="mute small">(alert only, no order · lane 5 of the timeline)</span></h2>
+
+<div class="card">
+  <p class="small" style="margin-top:0"><b>4 alert(s)</b>
+    <span class="badge L-exit_signal">0 exit_signal</span> <span class="badge L-warn">0 warn</span> <span class="badge L-info">4 info</span> 
+    · 0 watched · 4 shadow (4 vetoed) · 0 hypothetical
+    · 1 quote GET(s) over 4 wakes · simulated clock, quotes replay
+    · <span class="mono">session-2026-10-13.watch.json</span>
+    <span class="ok">sidecar ✓</span>
+    <span class="ok">session sha ✓</span></p>
+  <p class="small mute">Replay tape: HAND-MADE FICTIONAL replay tape - not market data (see scripts/make_watch_tape.py)</p>
+  
+<div class="wl">
+  <div class="wtrack">
+    <div class="wsess" style="width:92.86%"></div>
+    <div class="wtick" style="left:0.0%" title="09:30 NY / 15:30 Berlin · market open · 0 quote GET"></div><div class="wtick q" style="left:91.67%" title="15:55 NY / 21:55 Berlin · market open · 1 quote GET"></div><div class="wtick" style="left:92.86%" title="16:00 NY / 22:00 Berlin · market after_close · 0 quote GET"></div>
+    <div class="wdot L-info" style="left:92.86%" title="16:00 NY / 22:00 Berlin · info SHADOW_EOD · tkt-jpm-bcs-340-350 (VETOED, shadow) · VETOED ticket, shadow EOD: would-be mark 1.555 at 15:55 NY vs entry 3.1 (hypothetical -154 USD); between would-be stop and target; not watched intraday"></div><div class="wdot L-info" style="left:92.86%" title="16:00 NY / 22:00 Berlin · info SHADOW_EOD · tkt-jpm-bps-335-325 (VETOED, shadow) · VETOED ticket, shadow EOD: would-be mark 5.685 at 15:55 NY vs entry 3.85 (hypothetical +184 USD); between would-be stop and target; not watched intraday"></div><div class="wdot L-info" style="left:92.86%" title="16:00 NY / 22:00 Berlin · info SHADOW_EOD · tkt-wdc-bps-360-350 (VETOED, shadow) · VETOED ticket, shadow EOD: would-be mark 4.14 at 15:55 NY vs entry 2.9 (hypothetical +124 USD); between would-be stop and target; not watched intraday"></div><div class="wdot L-info" style="left:92.86%" title="16:00 NY / 22:00 Berlin · info SHADOW_EOD · tkt-wdc-bcs-365-375 (VETOED, shadow) · VETOED ticket, shadow EOD: would-be mark 2.41 at 15:55 NY vs entry 3.9 (hypothetical -149 USD); between would-be stop and target; not watched intraday"></div>
+  </div>
+  <div class="wax small mute"><span>09:30 NY open<br>15:30 Berlin</span><span style="left:92.86%">16:00 close<br>22:00 Berlin</span></div>
+</div>
+
+  <table><tr><th>time (NY / Berlin)</th><th>level</th><th>rule</th><th>ticket</th><th>detail</th></tr>
+  <tr>
+    <td class="mono" style="white-space:nowrap">10-13 16:00 NY<br>22:00 Berlin</td>
+    <td><span class="badge L-info">info</span></td>
+    <td class="mono">SHADOW_EOD</td>
+    <td class="mono">tkt-jpm-bcs-340-350 <span class="badge VETO">VETOED · shadow</span></td>
+    <td class="small">VETOED ticket, shadow EOD: would-be mark 1.555 at 15:55 NY vs entry 3.1 (hypothetical -154 USD); between would-be stop and target; not watched intraday<div class="mute">value 1.555 · quotes as of 2026-10-13T15:55:00-04:00</div></td></tr>
+  <tr>
+    <td class="mono" style="white-space:nowrap">10-13 16:00 NY<br>22:00 Berlin</td>
+    <td><span class="badge L-info">info</span></td>
+    <td class="mono">SHADOW_EOD</td>
+    <td class="mono">tkt-jpm-bps-335-325 <span class="badge VETO">VETOED · shadow</span></td>
+    <td class="small">VETOED ticket, shadow EOD: would-be mark 5.685 at 15:55 NY vs entry 3.85 (hypothetical +184 USD); between would-be stop and target; not watched intraday<div class="mute">value 5.685 · quotes as of 2026-10-13T15:55:00-04:00</div></td></tr>
+  <tr>
+    <td class="mono" style="white-space:nowrap">10-13 16:00 NY<br>22:00 Berlin</td>
+    <td><span class="badge L-info">info</span></td>
+    <td class="mono">SHADOW_EOD</td>
+    <td class="mono">tkt-wdc-bps-360-350 <span class="badge VETO">VETOED · shadow</span></td>
+    <td class="small">VETOED ticket, shadow EOD: would-be mark 4.14 at 15:55 NY vs entry 2.9 (hypothetical +124 USD); between would-be stop and target; not watched intraday<div class="mute">value 4.14 · quotes as of 2026-10-13T15:55:00-04:00</div></td></tr>
+  <tr>
+    <td class="mono" style="white-space:nowrap">10-13 16:00 NY<br>22:00 Berlin</td>
+    <td><span class="badge L-info">info</span></td>
+    <td class="mono">SHADOW_EOD</td>
+    <td class="mono">tkt-wdc-bcs-365-375 <span class="badge VETO">VETOED · shadow</span></td>
+    <td class="small">VETOED ticket, shadow EOD: would-be mark 2.41 at 15:55 NY vs entry 3.9 (hypothetical -149 USD); between would-be stop and target; not watched intraday<div class="mute">value 2.41 · quotes as of 2026-10-13T15:55:00-04:00</div></td></tr>
+  
+  </table>
+  <details class="small"><summary>watcher notes (2)</summary><ul><li>no watched targets: every ticket is vetoed/rejected (shadow only); quotes are fetched once per session day for the shadow end-of-day mark</li><li>underlying_last target conditions are not a watcher rule in watcher_rules v1.1.0 (W02 watches stop levels and breakevens only)</li></ul></details>
+</div>
+
 
 <div class="grid g2">
 <div class="card">
@@ -131,7 +193,7 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 </div>
 
 <div class="card">
-  <h3 style="margin-top:0">SNDX <span class="mute small"> · </span></h3>
+  <h3 style="margin-top:0">AAPL <span class="mute small"> · </span></h3>
   
   <table>
     <tr><th>last</th><th>bid / ask</th><th>prev close</th><th>IV30</th><th>IV30 history</th></tr>
@@ -140,11 +202,11 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
   </table>
   <p class="small mute">0 chain slices · 0 contracts · IV method: n/a</p>
   
-  <div class="small">• <span class="st-stale" title="status: stale | source: src-finviz-toplosers | as_of: 2026-10-13T07:52:00-04:00">Finviz ta_toplosers: 14.81 -10.51%<sup class="small"> stale</sup></span></div>
+  <div class="small">• <span class="st-ok" title="status: ok | source: src-settings | as_of: 2026-10-13T07:52:00-04:00">watchlist</span></div>
 </div>
 
 <div class="card">
-  <h3 style="margin-top:0">S <span class="mute small"> · </span></h3>
+  <h3 style="margin-top:0">MSFT <span class="mute small"> · </span></h3>
   
   <table>
     <tr><th>last</th><th>bid / ask</th><th>prev close</th><th>IV30</th><th>IV30 history</th></tr>
@@ -153,7 +215,7 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
   </table>
   <p class="small mute">0 chain slices · 0 contracts · IV method: n/a</p>
   
-  <div class="small">• <span class="st-stale" title="status: stale | source: src-finviz-toplosers | as_of: 2026-10-13T07:52:00-04:00">Finviz ta_toplosers: 23.56 -8.18%<sup class="small"> stale</sup></span></div>
+  <div class="small">• <span class="st-ok" title="status: ok | source: src-settings | as_of: 2026-10-13T07:52:00-04:00">watchlist</span></div>
 </div>
 
 </div>
@@ -181,7 +243,7 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 <td><span class="st-ok" title="status: ok | source: src-fed-fomc | as_of: 2026-10-13T07:50:00-04:00 | note: statement time 14:00 ET is customary; the Fed calendar page lists meeting dates only">2027-01-27T14:00:00-05:00</span></td><td class="small">at_time</td></tr><tr><td class="mono">ev-nfp-2027-02-05</td><td>NFP</td>
 <td><span class="st-ok" title="status: ok | source: src-bls-nfp-schedule | as_of: 2026-10-13T07:50:00-04:00">2027-02-05T08:30:00-05:00</span></td><td class="small">at_time</td></tr></table></div>
 <div class="card"><table><tr><th>coverage</th><th>checked through</th><th>source</th></tr>
-<tr><td>FOMC</td><td><span class="st-ok" title="status: ok | source: src-fed-fomc | as_of: 2026-10-13T07:50:00-04:00 | method: derived | formula: min(Dec 31 of the last year listed on the calendar page (2027); 2027-12-31, as_of + 120d record horizon) | note: FOMC coverage excludes unscheduled meetings/notation votes (not knowable in advance)">2027-02-10</span></td><td class="mono small">src-fed-fomc</td></tr><tr><td>CPI</td><td><span class="st-ok" title="status: ok | source: src-bls-cpi-schedule | as_of: 2026-10-13T07:50:00-04:00 | method: derived | formula: min(last release date listed in the BLS schedule; releases before the fetch date are in the past; 2027-12-10, as_of + 120d record horizon)">2027-02-10</span></td><td class="mono small">src-bls-cpi-schedule</td></tr><tr><td>PPI</td><td><span class="st-ok" title="status: ok | source: src-bls-ppi-schedule | as_of: 2026-10-13T07:50:00-04:00 | method: derived | formula: min(last release date listed in the BLS schedule; releases before the fetch date are in the past; 2027-12-15, as_of + 120d record horizon)">2027-02-10</span></td><td class="mono small">src-bls-ppi-schedule</td></tr><tr><td>NFP</td><td><span class="st-ok" title="status: ok | source: src-bls-nfp-schedule | as_of: 2026-10-13T07:50:00-04:00 | method: derived | formula: min(last release date listed in the BLS schedule; releases before the fetch date are in the past; 2027-12-03, as_of + 120d record horizon) | note: no NFP release between 2026-10-13 and 2026-11-06: the 2026-10-02 Employment Situation release says the October report is scheduled for 2026-11-06 (bls_empsit_2026-10-02_header.md)">2027-02-10</span></td><td class="mono small">src-bls-nfp-schedule</td></tr><tr><td>earnings · JPM</td><td><span class="st-ok" title="status: ok | source: src-sec-jpm-q3 | as_of: 2026-10-13T07:52:00-04:00 | method: derived | formula: Q3 reported 2026-10-13; quarterly cadence -&gt; next report not before January 2027">2026-12-31</span></td><td class="mono small">src-sec-jpm-q3</td></tr><tr><td>earnings · WDC</td><td><span class="st-ok" title="status: ok | source: src-wd-ir | as_of: 2026-10-13T07:52:00-04:00 | method: derived | formula: next report announced for 2026-10-22; following one ~3 months later">2026-12-31</span></td><td class="mono small">src-wd-ir</td></tr><tr><td>ex_dividend · JPM</td><td><span class="st-ok" title="status: ok | source: src-jpm-ir-dividend | as_of: 2026-10-13T09:09:00-04:00 | method: derived | formula: ex-date 2026-10-06 passed; next quarterly ex-date expected January 2027">2026-12-31</span></td><td class="mono small">src-jpm-ir-dividend</td></tr><tr><td>ex_dividend · WDC</td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: not checked">-<sup class="small"> missing</sup></span></td><td class="mono small">-</td></tr><tr><td>earnings · SNDX</td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no calendar source configured for this symbol">-<sup class="small"> missing</sup></span></td><td class="mono small">-</td></tr><tr><td>ex_dividend · SNDX</td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no calendar source configured for this symbol">-<sup class="small"> missing</sup></span></td><td class="mono small">-</td></tr><tr><td>earnings · S</td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no calendar source configured for this symbol">-<sup class="small"> missing</sup></span></td><td class="mono small">-</td></tr><tr><td>ex_dividend · S</td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no calendar source configured for this symbol">-<sup class="small"> missing</sup></span></td><td class="mono small">-</td></tr></table></div>
+<tr><td>FOMC</td><td><span class="st-ok" title="status: ok | source: src-fed-fomc | as_of: 2026-10-13T07:50:00-04:00 | method: derived | formula: min(Dec 31 of the last year listed on the calendar page (2027); 2027-12-31, as_of + 120d record horizon) | note: FOMC coverage excludes unscheduled meetings/notation votes (not knowable in advance)">2027-02-10</span></td><td class="mono small">src-fed-fomc</td></tr><tr><td>CPI</td><td><span class="st-ok" title="status: ok | source: src-bls-cpi-schedule | as_of: 2026-10-13T07:50:00-04:00 | method: derived | formula: min(last release date listed in the BLS schedule; releases before the fetch date are in the past; 2027-12-10, as_of + 120d record horizon)">2027-02-10</span></td><td class="mono small">src-bls-cpi-schedule</td></tr><tr><td>PPI</td><td><span class="st-ok" title="status: ok | source: src-bls-ppi-schedule | as_of: 2026-10-13T07:50:00-04:00 | method: derived | formula: min(last release date listed in the BLS schedule; releases before the fetch date are in the past; 2027-12-15, as_of + 120d record horizon)">2027-02-10</span></td><td class="mono small">src-bls-ppi-schedule</td></tr><tr><td>NFP</td><td><span class="st-ok" title="status: ok | source: src-bls-nfp-schedule | as_of: 2026-10-13T07:50:00-04:00 | method: derived | formula: min(last release date listed in the BLS schedule; releases before the fetch date are in the past; 2027-12-03, as_of + 120d record horizon) | note: no NFP release between 2026-10-13 and 2026-11-06: the 2026-10-02 Employment Situation release says the October report is scheduled for 2026-11-06 (bls_empsit_2026-10-02_header.md)">2027-02-10</span></td><td class="mono small">src-bls-nfp-schedule</td></tr><tr><td>earnings · JPM</td><td><span class="st-ok" title="status: ok | source: src-sec-jpm-q3 | as_of: 2026-10-13T07:52:00-04:00 | method: derived | formula: Q3 reported 2026-10-13; quarterly cadence -&gt; next report not before January 2027">2026-12-31</span></td><td class="mono small">src-sec-jpm-q3</td></tr><tr><td>earnings · WDC</td><td><span class="st-ok" title="status: ok | source: src-wd-ir | as_of: 2026-10-13T07:52:00-04:00 | method: derived | formula: next report announced for 2026-10-22; following one ~3 months later">2026-12-31</span></td><td class="mono small">src-wd-ir</td></tr><tr><td>ex_dividend · JPM</td><td><span class="st-ok" title="status: ok | source: src-jpm-ir-dividend | as_of: 2026-10-13T09:09:00-04:00 | method: derived | formula: ex-date 2026-10-06 passed; next quarterly ex-date expected January 2027">2026-12-31</span></td><td class="mono small">src-jpm-ir-dividend</td></tr><tr><td>ex_dividend · WDC</td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: not checked">-<sup class="small"> missing</sup></span></td><td class="mono small">-</td></tr><tr><td>earnings · AAPL</td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no calendar source configured for this symbol">-<sup class="small"> missing</sup></span></td><td class="mono small">-</td></tr><tr><td>ex_dividend · AAPL</td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no calendar source configured for this symbol">-<sup class="small"> missing</sup></span></td><td class="mono small">-</td></tr><tr><td>earnings · MSFT</td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no calendar source configured for this symbol">-<sup class="small"> missing</sup></span></td><td class="mono small">-</td></tr><tr><td>ex_dividend · MSFT</td><td><span class="st-missing" title="status: missing | source: - | as_of: - | note: no calendar source configured for this symbol">-<sup class="small"> missing</sup></span></td><td class="mono small">-</td></tr></table></div>
 </div>
 </main>
 <footer>read-only view of <span class="mono">out</span> · GET only · bound to 127.0.0.1 · Owner: Moodle (UX) / Poodle (code)</footer>

@@ -10,7 +10,7 @@
 *{box-sizing:border-box}body{margin:0;font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--ink)}
 a{color:var(--accent);text-decoration:none}a:hover{text-decoration:underline}
 .paper{background:#1d2330;color:#fff;padding:6px 20px;font-size:12px;letter-spacing:.04em;display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap}
-.paper b{color:#ffd166}
+.paper b{color:#ffd166}.paper b.demo{background:#ffd166;color:#1d2330;padding:0 6px;border-radius:4px;margin-left:6px}
 header{background:#fff;border-bottom:1px solid var(--line);padding:10px 20px;display:flex;align-items:center;gap:22px;flex-wrap:wrap}
 header .brand{font-weight:700;font-size:16px}header nav a{margin-right:14px;padding:6px 2px;color:var(--mute);font-weight:500}
 header nav a.on{color:var(--ink);border-bottom:2px solid var(--accent)}
@@ -33,6 +33,13 @@ details>summary{cursor:pointer;color:var(--accent)}
 .ok{color:var(--pass)}.bad{color:var(--veto)}
 footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 
+.wl{margin:6px 0 12px}.wtrack{position:relative;height:30px;background:#f1f3f7;border-radius:6px}
+.wsess{position:absolute;top:0;bottom:0;left:0;background:#e3e9f7;border-radius:6px 0 0 6px;border-right:2px solid #94a3b8}
+.wtick{position:absolute;top:22px;width:2px;height:8px;background:#94a3b8}.wtick.q{background:#3557d4;height:8px;width:3px}
+.wdot{position:absolute;top:6px;width:14px;height:14px;margin-left:-7px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px #0002}
+.wax{position:relative;height:30px}.wax span{position:absolute;top:2px;white-space:nowrap}.wax span+span{transform:translateX(-50%)}
+.L-exit_signal{background:var(--veto)}.L-warn{background:var(--flag)}.L-info{background:#64748b}
+
 .lane{display:grid;grid-template-columns:210px 1fr 110px;align-items:center;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line)}
 .lane .who{font-weight:600}.lane .who small{display:block;color:var(--mute);font-weight:400}
 .track{position:relative;height:26px;background:#f1f3f7;border-radius:6px}
@@ -49,7 +56,7 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 
 </head>
 <body>
-<div class="paper"><span><b>PAPER ONLY</b> · research records, HYPOTHETICAL tickets · no broker, no orders</span>
+<div class="paper"><span><b>PAPER ONLY</b> <b class="demo">FICTIONAL DEMO</b> · research records, HYPOTHETICAL tickets · no broker, no orders</span>
 <span>all market logic in America/New_York · times shown ET and Europe/Berlin</span></div>
 <header>
   <span class="brand">optpipe</span>
@@ -59,40 +66,40 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
     <a href="timeline.html" class="on">Agent timeline</a>
     <a href="history.html" class="">History</a>
   </nav>
-  <span class="meta">session <b>2026-10-13</b> · v1.1 preview ·
-    trace <span class="ok" title="sha256 712f14b27af2b03374a419e4e5561f8c861b4e34dc2670640d8fabe6c07c2711">✓ sha256 verified</span></span>
+  <span class="meta">session <b>2026-10-13</b> · record (schema 1.1.0) ·
+    trace <span class="ok" title="sha256 cb81220435e940be7611b62aea03628b77a184f1a7734e372594572ec8137785">✓ sha256 verified</span></span>
 </header>
 <main>
 <h1>Agent timeline · 2026-10-13</h1>
-<p class="mute small">From <span class="mono">session-2026-10-13.trace.json</span> · sha256 <span class="mono">712f14b27af2b033…</span>
-  (<span class="ok">sidecar ✓</span>, <span class="ok">v1.1 trace_ref ✓</span>, <span class="ok">session_ref ✓</span>).
+<p class="mute small">From <span class="mono">session-2026-10-13.trace.json</span> · sha256 <span class="mono">cb81220435e940be…</span>
+  (<span class="ok">sidecar ✓</span>, <span class="ok">trace_ref ✓</span>).
   Market time is the run's <i>as_of</i> (ET); bar positions are wall-clock compute time of each agent.</p>
 
 <div class="card">
-  <h2 style="margin-top:0">run-premarket <span class="mute small">premarket · as_of 2026-10-13T07:52:00-04:00 (2026-10-13 13:52 CEST) · data mode fixtures · 313 ms total</span></h2>
+  <h2 style="margin-top:0">run-premarket <span class="mute small">premarket · as_of 2026-10-13T07:52:00-04:00 (2026-10-13 13:52 CEST) · data mode fixtures · 340 ms total</span></h2>
   <p><b>NO TRADE - every ticket was vetoed by the Risk Officer (or none could be built)</b> <span class="badge VETO">4 VETO</span> 
-   · validation <span class="ok">v1 ✓ v1.1 ✓</span></p>
+   · validation <span class="ok">spec ✓</span></p>
 
   <div class="flow">
   
     <div class="node"><span class="stage s-discovery">discovery</span>
       <div class="t">DiscoveryAgent</div>
       <div class="small mute">Doodle (logic) / Poodle (code)</div>
-      <div class="small"><div><b>screens</b>: 5</div><div><b>global_instruments</b>: 11</div><div><b>picks</b>: 4 (JPM(bullish), WDC(bearish), SNDX(bearish), S(bearish))</div><div><b>notes</b>: 2</div></div>
+      <div class="small"><div><b>screens</b>: 5</div><div><b>global_instruments</b>: 11</div><div><b>picks</b>: 4 (JPM(bullish), WDC(bearish), AAPL(neutral), MSFT(neutral))</div><div><b>notes</b>: 2</div></div>
     </div>
     <div class="arrow">→</div>
   
     <div class="node"><span class="stage s-research">research</span>
       <div class="t">ResearchAgent</div>
       <div class="small mute">Doodle (logic) / Poodle (code)</div>
-      <div class="small"><div><b>candidates</b>: 4 (JPM, WDC, SNDX, S)</div><div><b>contracts</b>: 210</div><div><b>events</b>: 18</div><div><b>notes</b>: 8</div></div>
+      <div class="small"><div><b>candidates</b>: 4 (JPM, WDC, AAPL, MSFT)</div><div><b>contracts</b>: 210</div><div><b>events</b>: 18</div><div><b>notes</b>: 8</div></div>
     </div>
     <div class="arrow">→</div>
   
     <div class="node"><span class="stage s-planner">planner</span>
       <div class="t">PlannerAgent</div>
       <div class="small mute">Doodle (strategy) / Poodle (code)</div>
-      <div class="small"><div><b>tickets</b>: 4 (tkt-jpm-bcs-340-350, tkt-jpm-bps-335-325, tkt-wdc-bps-360-350, tkt-wdc-bcs-365-375)</div><div><b>rejected_ideas</b>: 4 (idea-sndx-bps, idea-sndx-bcs, idea-s-bps, idea-s-bcs)</div></div>
+      <div class="small"><div><b>tickets</b>: 4 (tkt-jpm-bcs-340-350, tkt-jpm-bps-335-325, tkt-wdc-bps-360-350, tkt-wdc-bcs-365-375)</div><div><b>rejected_ideas</b>: 4 (idea-aapl-bcs, idea-aapl-bps, idea-msft-bcs, idea-msft-bps)</div></div>
     </div>
     <div class="arrow">→</div>
   
@@ -115,49 +122,49 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
   
   <div class="lane">
     <div class="who">#1 DiscoveryAgent<small>discovery</small></div>
-    <div class="track"><div class="bar s-discovery" style="left:0.0%;width:56.77%"
+    <div class="track"><div class="bar s-discovery" style="left:0.0%;width:46.62%"
       
-      title="DiscoveryAgent: 177.9 ms">178 ms</div></div>
-    <div class="small mute" title="2026-10-29 20:14 CET">20:14:04.703 CET</div>
+      title="DiscoveryAgent: 158.7 ms">159 ms</div></div>
+    <div class="small mute" title="2026-10-29 21:07 CET">21:07:28.961 CET</div>
   </div>
   
   <div class="lane">
     <div class="who">#2 ResearchAgent<small>research</small></div>
-    <div class="track"><div class="bar s-research" style="left:56.8%;width:17.61%"
+    <div class="track"><div class="bar s-research" style="left:46.65%;width:17.4%"
       
-      title="ResearchAgent: 55.2 ms">55 ms</div></div>
-    <div class="small mute" title="2026-10-29 20:14 CET">20:14:04.881 CET</div>
+      title="ResearchAgent: 59.2 ms">59 ms</div></div>
+    <div class="small mute" title="2026-10-29 21:07 CET">21:07:29.120 CET</div>
   </div>
   
   <div class="lane">
     <div class="who">#3 PlannerAgent<small>planner</small></div>
-    <div class="track"><div class="bar s-planner" style="left:74.45%;width:2.24%"
+    <div class="track"><div class="bar s-planner" style="left:64.09%;width:2.12%"
       
-      title="PlannerAgent: 7.0 ms">7 ms</div></div>
-    <div class="small mute" title="2026-10-29 20:14 CET">20:14:04.936 CET</div>
+      title="PlannerAgent: 7.2 ms">7 ms</div></div>
+    <div class="small mute" title="2026-10-29 21:07 CET">21:07:29.179 CET</div>
   </div>
   
   <div class="lane">
     <div class="who">#4 RiskOfficerAgent<small>risk_officer · every ticket VETO -&gt; NO TRADE</small></div>
-    <div class="track"><div class="bar s-risk_officer" style="left:81.85%;width:15.59%"
+    <div class="track"><div class="bar s-risk_officer" style="left:71.36%;width:15.25%"
       
-      title="RiskOfficerAgent: 48.9 ms">49 ms</div></div>
-    <div class="small mute" title="2026-10-29 20:14 CET">20:14:04.959 CET</div>
+      title="RiskOfficerAgent: 51.9 ms">52 ms</div></div>
+    <div class="small mute" title="2026-10-29 21:07 CET">21:07:29.204 CET</div>
   </div>
   
   <div class="lane">
     <div class="who">#5 WatcherAgent<small>watcher</small></div>
     <div class="track"><div class="bar s-watcher" style="left:99.92%;width:1.2%"
       
-      title="WatcherAgent: 0.2 ms">0 ms</div></div>
-    <div class="small mute" title="2026-10-29 20:14 CET">20:14:05.016 CET</div>
+      title="WatcherAgent: 0.3 ms">0 ms</div></div>
+    <div class="small mute" title="2026-10-29 21:07 CET">21:07:29.301 CET</div>
   </div>
   
 
   
   <details><summary>#1 DiscoveryAgent inputs / outputs</summary><div class="step-detail">
 <h3 style="margin-top:0">#1 DiscoveryAgent <span class="mute small">discovery · Doodle (logic) / Poodle (code)</span></h3>
-<p class="small">started 2026-10-29 20:14 CET (wall clock) · 177.9 ms</p>
+<p class="small">started 2026-10-29 21:07 CET (wall clock) · 158.7 ms</p>
 
 <div class="grid g2"><div><b class="small">inputs</b><pre class="mono io">{
   "as_of": "2026-10-13T07:52:00-04:00",
@@ -173,7 +180,14 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
     "ta_newhigh",
     "ta_newlow"
   ],
-  "watchlist": []
+  "watchlist": [
+    "JPM",
+    "WDC",
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "XOM"
+  ]
 }</pre></div>
 <div><b class="small">outputs</b><pre class="mono io">{
   "global_instruments": 11,
@@ -181,8 +195,8 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
   "picks": [
     "JPM(bullish)",
     "WDC(bearish)",
-    "SNDX(bearish)",
-    "S(bearish)"
+    "AAPL(neutral)",
+    "MSFT(neutral)"
   ],
   "screens": {
     "ta_newhigh": "stale:5",
@@ -194,7 +208,7 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 }</pre></div></div>
 </div></details><details><summary>#2 ResearchAgent inputs / outputs</summary><div class="step-detail">
 <h3 style="margin-top:0">#2 ResearchAgent <span class="mute small">research · Doodle (logic) / Poodle (code)</span></h3>
-<p class="small">started 2026-10-29 20:14 CET (wall clock) · 55.2 ms</p>
+<p class="small">started 2026-10-29 21:07 CET (wall clock) · 59.2 ms</p>
 
 <div class="grid g2"><div><b class="small">inputs</b><pre class="mono io">{
   "coverage_items": 4,
@@ -204,8 +218,8 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
   "picks": [
     "JPM",
     "WDC",
-    "SNDX",
-    "S"
+    "AAPL",
+    "MSFT"
   ],
   "rates": true
 }</pre></div>
@@ -213,8 +227,8 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
   "candidates": [
     "JPM",
     "WDC",
-    "SNDX",
-    "S"
+    "AAPL",
+    "MSFT"
   ],
   "contracts": 210,
   "events": 18,
@@ -222,23 +236,23 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 }</pre></div></div>
 </div></details><details><summary>#3 PlannerAgent inputs / outputs</summary><div class="step-detail">
 <h3 style="margin-top:0">#3 PlannerAgent <span class="mute small">planner · Doodle (strategy) / Poodle (code)</span></h3>
-<p class="small">started 2026-10-29 20:14 CET (wall clock) · 7.0 ms</p>
+<p class="small">started 2026-10-29 21:07 CET (wall clock) · 7.2 ms</p>
 
 <div class="grid g2"><div><b class="small">inputs</b><pre class="mono io">{
   "candidates": [
     "JPM",
     "WDC",
-    "SNDX",
-    "S"
+    "AAPL",
+    "MSFT"
   ],
   "max_risk_usd": 500.0
 }</pre></div>
 <div><b class="small">outputs</b><pre class="mono io">{
   "rejected_ideas": [
-    "idea-sndx-bps",
-    "idea-sndx-bcs",
-    "idea-s-bps",
-    "idea-s-bcs"
+    "idea-aapl-bcs",
+    "idea-aapl-bps",
+    "idea-msft-bcs",
+    "idea-msft-bps"
   ],
   "tickets": [
     "tkt-jpm-bcs-340-350",
@@ -249,12 +263,12 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 }</pre></div></div>
 </div></details><details><summary>#4 RiskOfficerAgent inputs / outputs</summary><div class="step-detail">
 <h3 style="margin-top:0">#4 RiskOfficerAgent <span class="mute small">risk_officer · Doodle (rules) / Poodle (code)</span></h3>
-<p class="small">started 2026-10-29 20:14 CET (wall clock) · 48.9 ms · verdict <b>every ticket VETO -&gt; NO TRADE</b></p>
+<p class="small">started 2026-10-29 21:07 CET (wall clock) · 51.9 ms · verdict <b>every ticket VETO -&gt; NO TRADE</b></p>
 
 <div class="grid g2"><div><b class="small">inputs</b><pre class="mono io">{
   "evaluated_at": "2026-10-13T07:52:00-04:00",
   "ruleset_source": "/workspace/trading/spec/risk_rules.yaml",
-  "ruleset_version": "1.0.0",
+  "ruleset_version": "1.1.0",
   "run_id": "run-premarket",
   "tickets": [
     "tkt-jpm-bcs-340-350",
@@ -318,7 +332,7 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 }</pre></div></div>
 </div></details><details><summary>#5 WatcherAgent inputs / outputs</summary><div class="step-detail">
 <h3 style="margin-top:0">#5 WatcherAgent <span class="mute small">watcher · Doodle (rules) / Poodle (code)</span></h3>
-<p class="small">started 2026-10-29 20:14 CET (wall clock) · 0.2 ms</p>
+<p class="small">started 2026-10-29 21:07 CET (wall clock) · 0.3 ms</p>
 
 <div class="grid g2"><div><b class="small">inputs</b><pre class="mono io">{
   "reviews": 4,
@@ -335,34 +349,34 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 }</pre></div></div>
 </div></details>
   
-  <details class="small"><summary>run notes (14)</summary><ul><li>finviz ta_unusualvolume: no result table in page (no rows matched or layout changed)</li><li>finviz ta_topgainers: no result table in page (no rows matched or layout changed)</li><li>risk-free rate for derived IV: r = ln(1 + y*91/365)/(91/365); y = 4.16% Treasury 13 weeks coupon equivalent on 2026-10-09 -&gt; r = 0.041386 (src-treasury-bill-rates)</li><li>macro calendars: HAND-MADE replay snapshot (not an actual 2026-10-13 fetch; built from real 2026-10-29 captures)</li><li>JPM: IV30 0.2519 (2026-10-12) recorded to IV history</li><li>WDC: IV30 0.6239 (2026-10-12) recorded to IV history</li><li>SNDX: quote unavailable (fixture not found: info_SNDX.json)</li><li>SNDX: option chain unavailable (fixture not found: oc_SNDX.json)</li><li>S: quote unavailable (fixture not found: info_S.json)</li><li>S: option chain unavailable (fixture not found: oc_S.json)</li><li>SNDX bear put debit spread: not built (no underlying price (missing))</li><li>SNDX bull call debit spread: not built (no underlying price (missing))</li><li>S bear put debit spread: not built (no underlying price (missing))</li><li>S bull call debit spread: not built (no underlying price (missing))</li></ul></details>
+  <details class="small"><summary>run notes (15)</summary><ul><li>finviz ta_unusualvolume: no result table in page (no rows matched or layout changed)</li><li>finviz ta_topgainers: no result table in page (no rows matched or layout changed)</li><li>risk-free rate for derived IV: r = ln(1 + y*91/365)/(91/365); y = 4.16% Treasury 13 weeks coupon equivalent on 2026-10-09 -&gt; r = 0.041386 (src-treasury-bill-rates)</li><li>macro calendars: HAND-MADE replay snapshot (not an actual 2026-10-13 fetch; built from real 2026-10-29 captures)</li><li>JPM: IV30 0.2519 (2026-10-12) recorded to IV history</li><li>WDC: IV30 0.6239 (2026-10-12) recorded to IV history</li><li>AAPL: quote unavailable (fixture not found: info_AAPL.json)</li><li>AAPL: option chain unavailable (fixture not found: oc_AAPL.json)</li><li>MSFT: quote unavailable (fixture not found: info_MSFT.json)</li><li>MSFT: option chain unavailable (fixture not found: oc_MSFT.json)</li><li>planner DTE window clamped to 14-28 d by risk rules hold period (R13)</li><li>AAPL bull call debit spread: not built (no underlying price (missing))</li><li>AAPL bear put debit spread: not built (no underlying price (missing))</li><li>MSFT bull call debit spread: not built (no underlying price (missing))</li><li>MSFT bear put debit spread: not built (no underlying price (missing))</li></ul></details>
 </div>
 
 <div class="card">
-  <h2 style="margin-top:0">run-open-0940 <span class="mute small">open · as_of 2026-10-13T09:40:00-04:00 (2026-10-13 15:40 CEST) · data mode fixtures · 356 ms total</span></h2>
+  <h2 style="margin-top:0">run-open-0940 <span class="mute small">open · as_of 2026-10-13T09:40:00-04:00 (2026-10-13 15:40 CEST) · data mode fixtures · 358 ms total</span></h2>
   <p><b>NO TRADE - every ticket was vetoed by the Risk Officer (or none could be built)</b> <span class="badge VETO">4 VETO</span> 
-   · validation <span class="ok">v1 ✓ v1.1 ✓</span></p>
+   · validation <span class="ok">spec ✓</span></p>
 
   <div class="flow">
   
     <div class="node"><span class="stage s-discovery">discovery</span>
       <div class="t">DiscoveryAgent</div>
       <div class="small mute">Doodle (logic) / Poodle (code)</div>
-      <div class="small"><div><b>screens</b>: 5</div><div><b>global_instruments</b>: 11</div><div><b>picks</b>: 4 (JPM(bullish), WDC(bearish), SNDX(bearish), S(bearish))</div><div><b>notes</b>: 2</div></div>
+      <div class="small"><div><b>screens</b>: 5</div><div><b>global_instruments</b>: 11</div><div><b>picks</b>: 4 (JPM(bullish), WDC(bearish), AAPL(neutral), MSFT(neutral))</div><div><b>notes</b>: 2</div></div>
     </div>
     <div class="arrow">→</div>
   
     <div class="node"><span class="stage s-research">research</span>
       <div class="t">ResearchAgent</div>
       <div class="small mute">Doodle (logic) / Poodle (code)</div>
-      <div class="small"><div><b>candidates</b>: 4 (JPM, WDC, SNDX, S)</div><div><b>contracts</b>: 210</div><div><b>events</b>: 18</div><div><b>notes</b>: 8</div></div>
+      <div class="small"><div><b>candidates</b>: 4 (JPM, WDC, AAPL, MSFT)</div><div><b>contracts</b>: 210</div><div><b>events</b>: 18</div><div><b>notes</b>: 8</div></div>
     </div>
     <div class="arrow">→</div>
   
     <div class="node"><span class="stage s-planner">planner</span>
       <div class="t">PlannerAgent</div>
       <div class="small mute">Doodle (strategy) / Poodle (code)</div>
-      <div class="small"><div><b>tickets</b>: 4 (tkt-jpm-bcs-340-350, tkt-jpm-bps-335-325, tkt-wdc-bps-360-350, tkt-wdc-bcs-365-375)</div><div><b>rejected_ideas</b>: 4 (idea-sndx-bps, idea-sndx-bcs, idea-s-bps, idea-s-bcs)</div></div>
+      <div class="small"><div><b>tickets</b>: 4 (tkt-jpm-bcs-340-350, tkt-jpm-bps-335-325, tkt-wdc-bps-360-350, tkt-wdc-bcs-365-375)</div><div><b>rejected_ideas</b>: 4 (idea-aapl-bcs, idea-aapl-bps, idea-msft-bcs, idea-msft-bps)</div></div>
     </div>
     <div class="arrow">→</div>
   
@@ -385,49 +399,49 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
   
   <div class="lane">
     <div class="who">#1 DiscoveryAgent<small>discovery</small></div>
-    <div class="track"><div class="bar s-discovery" style="left:0.0%;width:30.21%"
+    <div class="track"><div class="bar s-discovery" style="left:0.0%;width:30.13%"
       
-      title="DiscoveryAgent: 107.4 ms">107 ms</div></div>
-    <div class="small mute" title="2026-10-29 20:14 CET">20:14:06.234 CET</div>
+      title="DiscoveryAgent: 107.9 ms">108 ms</div></div>
+    <div class="small mute" title="2026-10-29 21:07 CET">21:07:30.538 CET</div>
   </div>
   
   <div class="lane">
     <div class="who">#2 ResearchAgent<small>research</small></div>
-    <div class="track"><div class="bar s-research" style="left:30.23%;width:16.13%"
+    <div class="track"><div class="bar s-research" style="left:30.15%;width:15.48%"
       
-      title="ResearchAgent: 57.4 ms">57 ms</div></div>
-    <div class="small mute" title="2026-10-29 20:14 CET">20:14:06.341 CET</div>
+      title="ResearchAgent: 55.4 ms">55 ms</div></div>
+    <div class="small mute" title="2026-10-29 21:07 CET">21:07:30.646 CET</div>
   </div>
   
   <div class="lane">
     <div class="who">#3 PlannerAgent<small>planner</small></div>
-    <div class="track"><div class="bar s-planner" style="left:46.39%;width:1.98%"
+    <div class="track"><div class="bar s-planner" style="left:45.67%;width:1.94%"
       
-      title="PlannerAgent: 7.0 ms">7 ms</div></div>
-    <div class="small mute" title="2026-10-29 20:14 CET">20:14:06.399 CET</div>
+      title="PlannerAgent: 6.9 ms">7 ms</div></div>
+    <div class="small mute" title="2026-10-29 21:07 CET">21:07:30.701 CET</div>
   </div>
   
   <div class="lane">
     <div class="who">#4 RiskOfficerAgent<small>risk_officer · every ticket VETO -&gt; NO TRADE</small></div>
-    <div class="track"><div class="bar s-risk_officer" style="left:69.66%;width:25.76%"
+    <div class="track"><div class="bar s-risk_officer" style="left:67.89%;width:27.28%"
       
-      title="RiskOfficerAgent: 91.6 ms">92 ms</div></div>
-    <div class="small mute" title="2026-10-29 20:14 CET">20:14:06.481 CET</div>
+      title="RiskOfficerAgent: 97.7 ms">98 ms</div></div>
+    <div class="small mute" title="2026-10-29 21:07 CET">21:07:30.781 CET</div>
   </div>
   
   <div class="lane">
     <div class="who">#5 WatcherAgent<small>watcher</small></div>
-    <div class="track"><div class="bar s-watcher" style="left:99.92%;width:1.2%"
+    <div class="track"><div class="bar s-watcher" style="left:99.9%;width:1.2%"
       
       title="WatcherAgent: 0.3 ms">0 ms</div></div>
-    <div class="small mute" title="2026-10-29 20:14 CET">20:14:06.589 CET</div>
+    <div class="small mute" title="2026-10-29 21:07 CET">21:07:30.895 CET</div>
   </div>
   
 
   
   <details><summary>#1 DiscoveryAgent inputs / outputs</summary><div class="step-detail">
 <h3 style="margin-top:0">#1 DiscoveryAgent <span class="mute small">discovery · Doodle (logic) / Poodle (code)</span></h3>
-<p class="small">started 2026-10-29 20:14 CET (wall clock) · 107.4 ms</p>
+<p class="small">started 2026-10-29 21:07 CET (wall clock) · 107.9 ms</p>
 
 <div class="grid g2"><div><b class="small">inputs</b><pre class="mono io">{
   "as_of": "2026-10-13T09:40:00-04:00",
@@ -443,7 +457,14 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
     "ta_newhigh",
     "ta_newlow"
   ],
-  "watchlist": []
+  "watchlist": [
+    "JPM",
+    "WDC",
+    "AAPL",
+    "MSFT",
+    "NVDA",
+    "XOM"
+  ]
 }</pre></div>
 <div><b class="small">outputs</b><pre class="mono io">{
   "global_instruments": 11,
@@ -451,8 +472,8 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
   "picks": [
     "JPM(bullish)",
     "WDC(bearish)",
-    "SNDX(bearish)",
-    "S(bearish)"
+    "AAPL(neutral)",
+    "MSFT(neutral)"
   ],
   "screens": {
     "ta_newhigh": "stale:5",
@@ -464,7 +485,7 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 }</pre></div></div>
 </div></details><details><summary>#2 ResearchAgent inputs / outputs</summary><div class="step-detail">
 <h3 style="margin-top:0">#2 ResearchAgent <span class="mute small">research · Doodle (logic) / Poodle (code)</span></h3>
-<p class="small">started 2026-10-29 20:14 CET (wall clock) · 57.4 ms</p>
+<p class="small">started 2026-10-29 21:07 CET (wall clock) · 55.4 ms</p>
 
 <div class="grid g2"><div><b class="small">inputs</b><pre class="mono io">{
   "coverage_items": 4,
@@ -474,8 +495,8 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
   "picks": [
     "JPM",
     "WDC",
-    "SNDX",
-    "S"
+    "AAPL",
+    "MSFT"
   ],
   "rates": true
 }</pre></div>
@@ -483,8 +504,8 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
   "candidates": [
     "JPM",
     "WDC",
-    "SNDX",
-    "S"
+    "AAPL",
+    "MSFT"
   ],
   "contracts": 210,
   "events": 18,
@@ -492,23 +513,23 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 }</pre></div></div>
 </div></details><details><summary>#3 PlannerAgent inputs / outputs</summary><div class="step-detail">
 <h3 style="margin-top:0">#3 PlannerAgent <span class="mute small">planner · Doodle (strategy) / Poodle (code)</span></h3>
-<p class="small">started 2026-10-29 20:14 CET (wall clock) · 7.0 ms</p>
+<p class="small">started 2026-10-29 21:07 CET (wall clock) · 6.9 ms</p>
 
 <div class="grid g2"><div><b class="small">inputs</b><pre class="mono io">{
   "candidates": [
     "JPM",
     "WDC",
-    "SNDX",
-    "S"
+    "AAPL",
+    "MSFT"
   ],
   "max_risk_usd": 500.0
 }</pre></div>
 <div><b class="small">outputs</b><pre class="mono io">{
   "rejected_ideas": [
-    "idea-sndx-bps",
-    "idea-sndx-bcs",
-    "idea-s-bps",
-    "idea-s-bcs"
+    "idea-aapl-bcs",
+    "idea-aapl-bps",
+    "idea-msft-bcs",
+    "idea-msft-bps"
   ],
   "tickets": [
     "tkt-jpm-bcs-340-350",
@@ -519,12 +540,12 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 }</pre></div></div>
 </div></details><details><summary>#4 RiskOfficerAgent inputs / outputs</summary><div class="step-detail">
 <h3 style="margin-top:0">#4 RiskOfficerAgent <span class="mute small">risk_officer · Doodle (rules) / Poodle (code)</span></h3>
-<p class="small">started 2026-10-29 20:14 CET (wall clock) · 91.6 ms · verdict <b>every ticket VETO -&gt; NO TRADE</b></p>
+<p class="small">started 2026-10-29 21:07 CET (wall clock) · 97.7 ms · verdict <b>every ticket VETO -&gt; NO TRADE</b></p>
 
 <div class="grid g2"><div><b class="small">inputs</b><pre class="mono io">{
   "evaluated_at": "2026-10-13T09:40:00-04:00",
   "ruleset_source": "/workspace/trading/spec/risk_rules.yaml",
-  "ruleset_version": "1.0.0",
+  "ruleset_version": "1.1.0",
   "run_id": "run-open-0940",
   "tickets": [
     "tkt-jpm-bcs-340-350",
@@ -587,7 +608,7 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 }</pre></div></div>
 </div></details><details><summary>#5 WatcherAgent inputs / outputs</summary><div class="step-detail">
 <h3 style="margin-top:0">#5 WatcherAgent <span class="mute small">watcher · Doodle (rules) / Poodle (code)</span></h3>
-<p class="small">started 2026-10-29 20:14 CET (wall clock) · 0.3 ms</p>
+<p class="small">started 2026-10-29 21:07 CET (wall clock) · 0.3 ms</p>
 
 <div class="grid g2"><div><b class="small">inputs</b><pre class="mono io">{
   "reviews": 4,
@@ -604,9 +625,34 @@ footer{color:var(--mute);font-size:12px;padding:20px;text-align:center}
 }</pre></div></div>
 </div></details>
   
-  <details class="small"><summary>run notes (14)</summary><ul><li>finviz ta_unusualvolume: no result table in page (no rows matched or layout changed)</li><li>finviz ta_topgainers: no result table in page (no rows matched or layout changed)</li><li>risk-free rate for derived IV: r = ln(1 + y*91/365)/(91/365); y = 4.16% Treasury 13 weeks coupon equivalent on 2026-10-09 -&gt; r = 0.041386 (src-treasury-bill-rates)</li><li>macro calendars: HAND-MADE replay snapshot (not an actual 2026-10-13 fetch; built from real 2026-10-29 captures)</li><li>JPM: IV30 0.2519 (2026-10-12) recorded to IV history</li><li>WDC: IV30 0.6239 (2026-10-12) recorded to IV history</li><li>SNDX: quote unavailable (fixture not found: info_SNDX.json)</li><li>SNDX: option chain unavailable (fixture not found: oc_SNDX.json)</li><li>S: quote unavailable (fixture not found: info_S.json)</li><li>S: option chain unavailable (fixture not found: oc_S.json)</li><li>SNDX bear put debit spread: not built (no underlying price (missing))</li><li>SNDX bull call debit spread: not built (no underlying price (missing))</li><li>S bear put debit spread: not built (no underlying price (missing))</li><li>S bull call debit spread: not built (no underlying price (missing))</li></ul></details>
+  <details class="small"><summary>run notes (15)</summary><ul><li>finviz ta_unusualvolume: no result table in page (no rows matched or layout changed)</li><li>finviz ta_topgainers: no result table in page (no rows matched or layout changed)</li><li>risk-free rate for derived IV: r = ln(1 + y*91/365)/(91/365); y = 4.16% Treasury 13 weeks coupon equivalent on 2026-10-09 -&gt; r = 0.041386 (src-treasury-bill-rates)</li><li>macro calendars: HAND-MADE replay snapshot (not an actual 2026-10-13 fetch; built from real 2026-10-29 captures)</li><li>JPM: IV30 0.2519 (2026-10-12) recorded to IV history</li><li>WDC: IV30 0.6239 (2026-10-12) recorded to IV history</li><li>AAPL: quote unavailable (fixture not found: info_AAPL.json)</li><li>AAPL: option chain unavailable (fixture not found: oc_AAPL.json)</li><li>MSFT: quote unavailable (fixture not found: info_MSFT.json)</li><li>MSFT: option chain unavailable (fixture not found: oc_MSFT.json)</li><li>planner DTE window clamped to 14-28 d by risk rules hold period (R13)</li><li>AAPL bull call debit spread: not built (no underlying price (missing))</li><li>AAPL bear put debit spread: not built (no underlying price (missing))</li><li>MSFT bull call debit spread: not built (no underlying price (missing))</li><li>MSFT bear put debit spread: not built (no underlying price (missing))</li></ul></details>
 </div>
 
+
+<div class="card" id="watcher-lane">
+  <h2 style="margin-top:0">Lane 5 · Watcher <span class="mute small">market-hours alerts (alert only, no order) · NY session, Berlin below</span></h2>
+  
+  <p class="small mute" style="margin-top:0">From <span class="mono">session-2026-10-13.watch.json</span> (simulated clock, quotes replay, 1 GET over 4 wakes)
+    <span class="ok">sidecar ✓</span>.
+    Dots are alerts (<span class="badge L-exit_signal">exit_signal 0</span> <span class="badge L-warn">warn 0</span> <span class="badge L-info">info 4</span> ); ticks are wakes, blue ticks fetched quotes.
+    The WatcherAgent step in each run above is the stage that hands targets to this lane.</p>
+  
+  <div class="lane"><div class="who">2026-10-13<small>4 alert(s)</small></div>
+    <div>
+<div class="wl">
+  <div class="wtrack">
+    <div class="wsess" style="width:92.86%"></div>
+    <div class="wtick" style="left:0.0%" title="09:30 NY / 15:30 Berlin · market open · 0 quote GET"></div><div class="wtick q" style="left:91.67%" title="15:55 NY / 21:55 Berlin · market open · 1 quote GET"></div><div class="wtick" style="left:92.86%" title="16:00 NY / 22:00 Berlin · market after_close · 0 quote GET"></div>
+    <div class="wdot L-info" style="left:92.86%" title="16:00 NY / 22:00 Berlin · info SHADOW_EOD · tkt-jpm-bcs-340-350 (VETOED, shadow) · VETOED ticket, shadow EOD: would-be mark 1.555 at 15:55 NY vs entry 3.1 (hypothetical -154 USD); between would-be stop and target; not watched intraday"></div><div class="wdot L-info" style="left:92.86%" title="16:00 NY / 22:00 Berlin · info SHADOW_EOD · tkt-jpm-bps-335-325 (VETOED, shadow) · VETOED ticket, shadow EOD: would-be mark 5.685 at 15:55 NY vs entry 3.85 (hypothetical +184 USD); between would-be stop and target; not watched intraday"></div><div class="wdot L-info" style="left:92.86%" title="16:00 NY / 22:00 Berlin · info SHADOW_EOD · tkt-wdc-bps-360-350 (VETOED, shadow) · VETOED ticket, shadow EOD: would-be mark 4.14 at 15:55 NY vs entry 2.9 (hypothetical +124 USD); between would-be stop and target; not watched intraday"></div><div class="wdot L-info" style="left:92.86%" title="16:00 NY / 22:00 Berlin · info SHADOW_EOD · tkt-wdc-bcs-365-375 (VETOED, shadow) · VETOED ticket, shadow EOD: would-be mark 2.41 at 15:55 NY vs entry 3.9 (hypothetical -149 USD); between would-be stop and target; not watched intraday"></div>
+  </div>
+  <div class="wax small mute"><span>09:30 NY open<br>15:30 Berlin</span><span style="left:92.86%">16:00 close<br>22:00 Berlin</span></div>
+</div>
+</div>
+    <div class="small mute">22:00 Berlin close</div></div>
+  
+  <details class="small"><summary>alerts (4)</summary><ul><li><span class="mono">16:00 NY / 22:00 Berlin</span> <span class="badge L-info">info</span> SHADOW_EOD tkt-jpm-bcs-340-350 (VETOED, shadow): VETOED ticket, shadow EOD: would-be mark 1.555 at 15:55 NY vs entry 3.1 (hypothetical -154 USD); between would-be stop and target; not watched intraday</li><li><span class="mono">16:00 NY / 22:00 Berlin</span> <span class="badge L-info">info</span> SHADOW_EOD tkt-jpm-bps-335-325 (VETOED, shadow): VETOED ticket, shadow EOD: would-be mark 5.685 at 15:55 NY vs entry 3.85 (hypothetical +184 USD); between would-be stop and target; not watched intraday</li><li><span class="mono">16:00 NY / 22:00 Berlin</span> <span class="badge L-info">info</span> SHADOW_EOD tkt-wdc-bps-360-350 (VETOED, shadow): VETOED ticket, shadow EOD: would-be mark 4.14 at 15:55 NY vs entry 2.9 (hypothetical +124 USD); between would-be stop and target; not watched intraday</li><li><span class="mono">16:00 NY / 22:00 Berlin</span> <span class="badge L-info">info</span> SHADOW_EOD tkt-wdc-bcs-365-375 (VETOED, shadow): VETOED ticket, shadow EOD: would-be mark 2.41 at 15:55 NY vs entry 3.9 (hypothetical -149 USD); between would-be stop and target; not watched intraday</li></ul></details>
+  
+</div>
 </main>
 <footer>read-only view of <span class="mono">out</span> · GET only · bound to 127.0.0.1 · Owner: Moodle (UX) / Poodle (code)</footer>
 </body>

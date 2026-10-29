@@ -27,6 +27,8 @@ class Integrity:
     sidecar_ok: Optional[bool] = None         # trace.json.sha256 matches the trace file
     trace_ref_ok: Optional[bool] = None       # v1.1 trace_ref.sha256 matches the trace file
     session_ref_ok: Optional[bool] = None     # trace.session_ref.sha256 matches session-<date>.json
+    watch_sidecar_ok: Optional[bool] = None   # <session>.watch.json.sha256 matches the watch file
+    watch_session_ok: Optional[bool] = None   # watch.session.sha256 matches session-<date>.json
     problems: list[str] = field(default_factory=list)
 
     @property
@@ -42,6 +44,7 @@ class Session:
     trace: Optional[dict[str, Any]]
     integrity: Integrity
     files: dict[str, str]
+    watch: Optional[dict[str, Any]] = None    # <session>.watch.json (M3 watcher output), if present
 
     @property
     def runs(self) -> list[dict]:
@@ -107,9 +110,25 @@ class OutDir:
                     integ.problems.append(f"trace.session_ref does not match {jp.name}")
         else:
             integ.problems.append(f"{tp.name} not found")
+        wp = self.root / f"session-{date}.watch.json"
+        wsp = wp.with_name(wp.name + ".sha256")
+        watch = None
+        if wp.exists():
+            wb = wp.read_bytes()
+            watch = json.loads(wb)
+            if wsp.exists():
+                integ.watch_sidecar_ok = wsp.read_text().split()[0] == sha256_bytes(wb)
+                if not integ.watch_sidecar_ok:
+                    integ.problems.append(f"{wsp.name} does not match {wp.name}")
+            wref = (watch.get("session") or {}).get("sha256")
+            if wref:
+                integ.watch_session_ok = wref == sha256_bytes(jp.read_bytes())
+                if not integ.watch_session_ok:
+                    integ.problems.append(f"{wp.name} was made from a different {jp.name} (re-run optpipe watch)")
         files = {k: p.name for k, p in (("v1", jp), ("v1_1", vp), ("trace", tp), ("sha256", sp),
-                                        ("md", self.root / f"session-{date}.md")) if p.exists()}
-        return Session(date, rec, origin, trace, integ, files)
+                                        ("md", self.root / f"session-{date}.md"), ("watch", wp),
+                                        ("watch_sha256", wsp)) if p.exists()}
+        return Session(date, rec, origin, trace, integ, files, watch)
 
 
 # ---------------------------------------------------------------- formatting helpers (Jinja filters)

@@ -76,13 +76,14 @@ A read-only FastAPI + Jinja + HTMX app over `out/`. It uses **GET routes only**,
 
 | Page | Shows |
 |---|---|
-| **Today** `/s/<date>/today?run=` | Run selector, the per-run global snapshot and premarket scan, candidates (quote, derived IV30, catalysts), the event calendar and coverage. Hovering a value shows its status, source, as_of and method. |
+| **Today** `/s/<date>/today?run=` | Run selector, the per-run global snapshot and premarket scan, candidates (quote, derived IV30, catalysts), the event calendar and coverage. Hovering a value shows its status, source, as_of and method. The **Watcher alerts** panel (M3) reads `session-<date>.watch.json` and shows each alert with its level, rule, ticket, NY and Berlin times, and VETOED/HYPOTHETICAL labels. It also checks the watch sidecar and the session SHA-256. |
 | **Tickets** `/s/<date>/tickets` | Each HYPOTHETICAL ticket with legs, the limit (raw → rounded tick), max loss/profit, breakevens, hold window and rules. The **Risk Officer** verdict comes with a rule-by-rule table (severity, result, reason, measured, threshold, per-leg). Earlier runs' reviews load through HTMX. |
-| **Agent timeline** `/s/<date>/timeline` | From the trace, per run: the agent hand-off flow (Discovery → Research → Planner → RiskOfficer → Watcher) and a Gantt chart of the wall-clock steps. Clicking a bar shows that agent's inputs and outputs (HTMX). Also shown: trace SHA-256 checks (sidecar, v1.1 `trace_ref`, `session_ref`), validation status and run notes. |
+| **Agent timeline** `/s/<date>/timeline` | From the trace, per run: the agent hand-off flow (Discovery → Research → Planner → RiskOfficer → Watcher) and a Gantt chart of the wall-clock steps. Clicking a bar shows that agent's inputs and outputs (HTMX). Also shown: trace SHA-256 checks (sidecar, v1.1 `trace_ref`, `session_ref`), validation status and run notes. **Lane 5 · Watcher** (M3) plots the watcher's alerts and wakes on the NY regular session (open → close, early closes respected), with the NY and Berlin times. |
 | **History** `/history` | All sessions (runs, verdict counts, recommendation, integrity, raw files) plus the aggregated **idea log**. |
 
 Static snapshots (rendered by the same app in export mode, with relative links and no HTMX) live in `docs/dashboard/`:
-`today.html`, `tickets.html`, `timeline.html`, `history.html` and `timeline.png`. To regenerate them:
+`today.html`, `tickets.html`, `timeline.html`, `history.html`, `timeline.png` and `today.png`. The export session also
+includes a replay `optpipe watch` run over the hand-made fictional tape. To regenerate them:
 
 ```bash
 .venv/bin/pip install -e '.[dev,docs]'
@@ -90,6 +91,44 @@ Static snapshots (rendered by the same app in export mode, with relative links a
 ```
 
 The PNG uses an installed Chrome (`PLAYWRIGHT_CHROME`, or `/usr/bin/google-chrome`), so no browser download is needed.
+
+## Watcher (Milestone 3): alert only, paper only
+
+`optpipe watch` loads a session record and watches its HYPOTHETICAL tickets with the spec's `watcher_rules.yaml`
+(W01–W07, plus the shadow end-of-day summary). It writes `out/session-<date>.watch.json` and a `.sha256` sidecar.
+It **only emits alerts**: no order path, no broker, and nothing is sent to any outside service (no email, chat
+or webhooks). It also never modifies the session record; `watch.json` references the record's SHA-256.
+
+```bash
+# replay a market day on a simulated clock (offline; what the tests and the docs snapshots use)
+.venv/bin/optpipe watch --session out/session-2026-10-13.json --replay tests/fixtures/2026-10-13/watch_tape.yaml --out out
+.venv/bin/optpipe watch ... --replay TAPE --clock 2026-10-13T09:30:00-04:00 --until 2026-10-13T17:00:00-04:00
+.venv/bin/optpipe watch ... --replay TAPE --once        # a single wake
+.venv/bin/optpipe watch ... --live                       # EXPERIMENTAL: real clock, Nasdaq read-only GETs, untested in CI
+```
+
+* **Market-hours gating.** Quotes are requested only while the NY regular session is open: 09:30–16:00 ET,
+  13:00 on the spec's early-close days, and never on weekends or spec holidays. Premarket, after-close,
+  weekend and holiday wakes are logged as `market <state>: no quote request`, and the watcher sleeps until the
+  next open. Polls run every 300 s (60 s when a level is near) and are clamped to the close.
+* **Targets.**
+  * Approved tickets and open paper positions are watched.
+  * HYPOTHETICAL tickets that are not vetoed are watched as `approved_pending` and flagged `HYPOTHETICAL`.
+  * **Vetoed** (and rejected) tickets are flagged `VETOED` and are shadow-only. They are never polled intraday.
+    One quote snapshot at close − 5 min feeds a single `SHADOW_EOD` info alert at the close (would-be mark,
+    hypothetical USD P&L, and where it sits relative to the would-be stop and target).
+* **Rule engine.** The engine is pluggable (`watcher.runtime.register_engine` / `--engine`). The default `spec` engine is
+  `watcher/engine.py`, which has parity with Doodle's `watcher_reference.py` on every YAML case. Profit targets
+  on `underlying_last` are not a watcher rule in `watcher_rules` v1.1.0; this is noted in `watch.json`.
+* **Validation.** `validate_watch` checks the JSON schema and three invariants: no intraday alert for a shadow
+  target, no quote call while the market is closed, and every vetoed target flagged. The CLI verifies the
+  sidecar and exits 1 on errors.
+* **Replay tape.** `tests/fixtures/2026-10-13/watch_tape.yaml` is **HAND-MADE FICTIONAL**, not market data.
+  It comes from `scripts/make_watch_tape.py` (seeded random walk from the captured JPM/WDC prices, Black-Scholes
+  at the captured IVs, and a 12:10–12:25 quote gap that exercises W06).
+* **Scenario.** In the 2026-10-13 fixture session, all four tickets are VETOED, so a watch run is shadow-only:
+  4 wakes, 1 quote GET at 15:55 ET, and 4 `SHADOW_EOD` alerts at 16:00 ET (22:00 Berlin, CEST). The unit tests
+  cover the watched paths (W01–W07) with synthetic approved tickets on the same tape.
 
 ## Sources: macro calendars, risk-free rate, IV
 
@@ -157,7 +196,8 @@ fixture run validated as 1.1.0. It is **not pushed anywhere** (no remote).
 | `risk/engine.py`, `risk/ruleset.py` | **Risk Officer**: a pure function `evaluate(input, ruleset, overrides)` over the spec's rules | Doodle | Poodle |
 | `risk/adapter.py`, `risk/review_input.py` | Session record → rule inputs (point-in-time visibility) | Doodle | Poodle |
 | `risk/agent.py` | Risk Officer stage wrapper | Moodle | Poodle |
-| `watcher/` | **STUB** (Milestone 3): defines inactive watch rules for non-vetoed tickets; no loop, never force-closes | Doodle | Poodle |
+| `watcher/` | Pipeline stage (inactive watch rules in the record; never force-closes); `engine.py` rule engine (spec parity); `runtime.py` M3 watcher: market-hours gating, targets, replay/live GET sources, `watch.json` + sidecar + `validate_watch` | Doodle (rules) / Moodle (runtime) | Poodle |
+| `scripts/make_watch_tape.py` | Generates the HAND-MADE FICTIONAL replay tape | Poodle | Poodle |
 | `records/` | Store (JSON/v1.1/MD/trace + SHA-256), v1 ↔ v1.1 compat, idea log, data-quality index, Markdown | Doodle (semantics) | Poodle |
 | `providers/finviz.py`, `nasdaq.py` | Parsers + providers (fixtures or experimental live read-only GET) | Doodle | Poodle |
 | `providers/macro.py`, `treasury.py` | Fed FOMC / BLS calendar parsers and replay; Treasury bill-rate parser | Doodle | Poodle |
@@ -168,7 +208,7 @@ fixture run validated as 1.1.0. It is **not pushed anywhere** (no remote).
 | `scripts/gen_models.py` | Regenerates the models from the schemas (`--check`) | Moodle | Poodle |
 | `scripts/make_spec_patch.py` | Builds `spec_patches/v1.1/` from the locked spec (`--check`) | Doodle (content) | Poodle |
 | `scripts/sync_spec.py` | Pinned copy of the spec in `spec/` + `--check` for CI | Doodle (content) | Poodle |
-| `scripts/export_dashboard.py` | Static snapshots + timeline PNG → `docs/dashboard/` | Moodle | Poodle |
+| `scripts/export_dashboard.py` | Static snapshots + timeline/today PNGs → `docs/dashboard/` | Moodle | Poodle |
 
 ## Run
 
@@ -178,6 +218,7 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 .venv/bin/optpipe run --fixtures tests/fixtures/2026-10-13                  # offline replay of 2026-10-13
 .venv/bin/optpipe run --fixtures tests/fixtures/2026-10-13 --append --as-of 2026-10-13T09:40:00-04:00
 .venv/bin/optpipe validate out/session-2026-10-13.json                     # Doodle's validator, exit 1 on errors
+.venv/bin/optpipe watch --session out/session-2026-10-13.json --replay tests/fixtures/2026-10-13/watch_tape.yaml --out out
 .venv/bin/optpipe serve --out out                                          # dashboard on 127.0.0.1:8765
 .venv/bin/pytest                                                           # our tests (offline)
 cd /workspace/trading/spec && ../../options-pipeline/.venv/bin/python -m pytest -q   # Doodle's tests
@@ -199,7 +240,8 @@ The global snapshot, single-name events and earnings have no live source and rem
 | Risk-free rate (Treasury) | Parser tested on the 2026 CSV. Live = GET. |
 | Implied volatility | Derived from chain mids (Black-Scholes). R10 is UNKNOWN until 20 daily points exist. |
 | Global snapshot, earnings reports, single-name events | Curated `session_inputs.yaml` / fixtures only |
-| EODHD, watcher loop | Stubs (watcher = Milestone 3) |
+| Watcher (M3) | Replay tape (HAND-MADE FICTIONAL) tested offline. `--live` = experimental Nasdaq GET during NY market hours. |
+| EODHD | Stub |
 
 ## Placeholders (pending Eugene)
 

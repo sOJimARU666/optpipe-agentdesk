@@ -6,7 +6,7 @@ for the static snapshots in docs/dashboard/ (relative links, no HTMX round-trips
 from __future__ import annotations
 
 from collections import Counter, defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
@@ -66,6 +66,35 @@ def timeline_model(s: Session) -> list[dict]:
                     "handoffs": handoffs, "verdicts": dict(sorted(verdicts.items(), key=lambda kv: VERDICT_ORDER[kv[0]])),
                     "validation": run.get("validation") or {}})
     return out
+
+
+LEVEL_ORDER = {"exit_signal": 0, "warn": 1, "info": 2}
+
+
+def watch_model(s: Session) -> Optional[dict]:
+    """Today panel + timeline lane 5 (Watcher) from <session>.watch.json. Markers are placed on the NY
+    regular session of each market day the watcher visited (open -> close, early closes respected)."""
+    w = s.watch
+    if not w:
+        return None
+    alerts = sorted(w.get("alerts") or [], key=lambda a: (a["at"]["ny"], LEVEL_ORDER.get(a["level"], 9)))
+    days = []
+    for md in w.get("market_days") or []:
+        if not md.get("trading_day"):
+            days.append({**md, "markers": [], "wakes": [], "closed": True})
+            continue
+        o, c = datetime.fromisoformat(md["open"]["ny"]), datetime.fromisoformat(md["close"]["ny"])
+        span = (c - o).total_seconds() + 1800             # 30 min after the close for the shadow EOD summary
+
+        def pos(ts: str) -> float:
+            return round(max(0.0, min(100.0, 100 * (datetime.fromisoformat(ts) - o).total_seconds() / span)), 2)
+        mk = [{**a, "left_pct": pos(a["at"]["ny"])} for a in alerts if a["at"]["ny"][:10] == md["date"]]
+        wk = [{**x, "left_pct": pos(x["at"]["ny"])} for x in w.get("wakes") or []
+              if x["at"]["ny"][:10] == md["date"] and o <= datetime.fromisoformat(x["at"]["ny"]) <= c + timedelta(minutes=30)]
+        days.append({**md, "markers": mk, "wakes": wk, "close_pct": round(100 * (c - o).total_seconds() / span, 2),
+                     "closed": False})
+    return {"doc": w, "alerts": alerts, "days": days, "summary": w.get("summary") or {},
+            "targets": w.get("targets") or [], "mode": w.get("mode") or {}}
 
 
 def tickets_model(s: Session) -> list[dict]:
@@ -154,7 +183,7 @@ def create_app(out_dir: Path | str, export: bool = False) -> FastAPI:
         cands = [{"c": c, "snap": next((x for x in c.get("snapshots", []) if x.get("run_id") == run_id),
                                       (c.get("snapshots") or [None])[-1])} for c in s.record.get("candidates", [])]
         ev = s.record.get("event_calendar", {})
-        return render(request, "today.html", "today", s, run_id=run_id,
+        return render(request, "today.html", "today", s, run_id=run_id, watch=watch_model(s),
                       run_links={r["run_id"]: link("today", date, export, run=r["run_id"]) for r in s.runs},
                       scan=s.per_run("premarket_scans", run_id), glob=s.per_run("global_snapshots", run_id),
                       cands=cands, events=ev.get("events", []), coverage=ev.get("coverage", []),
@@ -176,7 +205,7 @@ def create_app(out_dir: Path | str, export: bool = False) -> FastAPI:
     @app.get("/s/{date}/timeline", response_class=HTMLResponse)
     def timeline(request: Request, date: str):
         s = session(date)
-        return render(request, "timeline.html", "timeline", s, runs=timeline_model(s))
+        return render(request, "timeline.html", "timeline", s, runs=timeline_model(s), watch=watch_model(s))
 
     @app.get("/s/{date}/step/{run_id}/{seq}", response_class=HTMLResponse)
     def step(request: Request, date: str, run_id: str, seq: int):

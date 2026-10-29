@@ -2,6 +2,8 @@
 
   optpipe run [--fixtures DIR] [--inputs FILE] [--as-of TS] [--out DIR] [--append] [--live]
   optpipe serve [--out DIR] [--host 127.0.0.1] [--port 8765]   # read-only dashboard, loopback only
+  optpipe watch [--session FILE | --date D] (--replay TAPE [--clock TS] [--until TS] | --live) [--once] [--out DIR]
+                                     paper-only watcher: alerts only, quotes GET-only and only while NY is open
   optpipe spec-check                 what was found in Doodle's spec folder + ruleset placeholders
   optpipe validate FILE.json         run Doodle's validate_session.py on a record
   optpipe show FILE.json             print the Markdown for a record
@@ -65,6 +67,63 @@ def serve(out: str, host: str, port: int) -> int:
     return 0
 
 
+def watch(a, settings) -> int:
+    import json
+    import yaml
+    from .risk import load_ruleset
+    from .risk.engine import Calendar
+    from .spec import discover
+    from .watcher.runtime import (LiveNasdaqSource, RealClock, ReplayTape, SimClock, Watcher, get_engine,
+                                  validate_watch, verify_sidecar, write_watch)
+    if bool(a.replay) == bool(a.live):
+        print("choose exactly one of --replay TAPE or --live", file=sys.stderr); return 2
+    if a.live and a.clock:
+        print("--clock is for replay only (live uses the real clock)", file=sys.stderr); return 2
+    sp = discover(settings.spec_path)
+    rules = sp.watcher_rules()
+    if rules is None:
+        print("spec watcher_rules.yaml not found", file=sys.stderr); return 2
+    cal = Calendar(load_ruleset(sp)[0].config.market_hours)
+    tape_date = str(yaml.safe_load(Path(a.replay).read_text()).get("date")) if a.replay else None
+    day = a.date or (a.clock[:10] if a.clock else None) or tape_date or datetime.now(NY).date().isoformat()
+    sess = Path(a.session) if a.session else Path(a.out) / f"session-{day}.json"
+    if not sess.exists():
+        print(f"session file not found: {sess}", file=sys.stderr); return 2
+    rec = json.loads(sess.read_text())
+    if a.live:
+        src, clock = LiveNasdaqSource(settings.http.user_agent, settings.http.timeout_s), RealClock()
+    else:
+        src = ReplayTape(a.replay)
+        start = datetime.fromisoformat(a.clock) if a.clock else datetime.fromisoformat(f"{day}T07:00:00").replace(tzinfo=NY)
+        if start.tzinfo is None:
+            print("--clock needs a UTC offset", file=sys.stderr); return 2
+        clock = SimClock(start)
+    s0 = clock.now()
+    until = (datetime.fromisoformat(a.until) if a.until else
+             datetime.combine(s0.astimezone(NY).date(), datetime.min.time(), NY).replace(hour=17))
+    wt = Watcher(rec, rules, cal, src, get_engine(a.engine), session_path=sess)
+    doc = wt.run(clock, until, once=a.once)
+    res = write_watch(doc, sess, Path(a.out))
+    sm = doc["summary"]
+    t0 = s0.astimezone(NY)
+    print(f"PAPER ONLY | watch {doc['session']['id']} | {doc['mode']['clock']} clock, quotes {doc['mode']['quotes']} "
+          f"(GET only) | from {t0:%Y-%m-%d %H:%M} New York / {t0.astimezone(BERLIN):%H:%M %Z} Berlin")
+    for t in doc["targets"]:
+        flag = "VETOED, shadow" if t["vetoed"] else ("HYPOTHETICAL, watched" if t["hypothetical"] else t["status"])
+        print(f"  {t['target_id']:30} {flag}")
+    print(f"wakes {sm['wakes']} | quote calls {sm['quote_calls']} | alerts {sm['alerts']} {sm['by_level']}")
+    for al in doc["alerts"][:40]:
+        at = datetime.fromisoformat(al["at"]["ny"])
+        print(f"  {at:%m-%d %H:%M} NY / {at.astimezone(BERLIN):%H:%M} Berlin  {al['message']}")
+    for n in doc["notes"]:
+        print(f"note: {n}")
+    errs = validate_watch(doc)
+    ok = verify_sidecar(res.json_path)
+    print(f"wrote {res.json_path}  sha256 {res.sha256}\nwrote {res.json_path}.sha256 (sidecar {'OK' if ok else 'MISMATCH'})")
+    print("validate_watch: " + ("OK" if not errs else f"{len(errs)} error(s)\n  " + "\n  ".join(errs)))
+    return 1 if (errs or not ok) else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="optpipe", description="Paper-only options research pipeline (no orders, ever)")
     ap.add_argument("--config", help="settings.yaml path")
@@ -84,6 +143,16 @@ def main(argv: list[str] | None = None) -> int:
     sv.add_argument("--out", default=str(REPO_ROOT / "out"))
     sv.add_argument("--host", default="127.0.0.1", help="loopback only: 127.0.0.1, ::1 or localhost")
     sv.add_argument("--port", type=int, default=8765)
+    w = sub.add_parser("watch", help="paper-only watcher over a session's tickets (alert only, no order)")
+    w.add_argument("--session", help="session JSON (default: <out>/session-<date>.json)")
+    w.add_argument("--date", help="session date YYYY-MM-DD (default: the replay tape's date)")
+    w.add_argument("--out", default=str(REPO_ROOT / "out"), help="where <session>.watch.json is written")
+    w.add_argument("--replay", help="replay quote tape YAML (offline, no network)")
+    w.add_argument("--clock", help="simulated start time, ISO with offset (replay only; default 07:00 NY of the date)")
+    w.add_argument("--until", help="stop time, ISO with offset (default 17:00 NY of the start date)")
+    w.add_argument("--once", action="store_true", help="a single wake at --clock")
+    w.add_argument("--live", action="store_true", help="EXPERIMENTAL: real clock + read-only Nasdaq GETs while open")
+    w.add_argument("--engine", default="spec", help="rule engine name (pluggable; default: spec)")
     a = ap.parse_args(argv)
     if a.cmd == "serve":
         return serve(a.out, a.host, a.port)
@@ -99,6 +168,8 @@ def main(argv: list[str] | None = None) -> int:
         for n in notes:
             print(f"note               {n}")
         return 0
+    if a.cmd == "watch":
+        return watch(a, settings)
     if a.cmd == "show":
         print(render_markdown(read_session(a.file), read_trace(str(a.file).replace(".json", ".trace.json"))))
         return 0

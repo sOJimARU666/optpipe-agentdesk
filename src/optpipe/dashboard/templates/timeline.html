@@ -1,5 +1,6 @@
 {% extends "base.html" %}
-{% block css %}
+{% from "_watch.html" import wlane, wcss %}
+{% block css %}{{ wcss() }}
 .lane{display:grid;grid-template-columns:210px 1fr 110px;align-items:center;gap:10px;padding:5px 0;border-bottom:1px dashed var(--line)}
 .lane .who{font-weight:600}.lane .who small{display:block;color:var(--mute);font-weight:400}
 .track{position:relative;height:26px;background:#f1f3f7;border-radius:6px}
@@ -52,4 +53,20 @@
   {% if run.notes %}<details class="small"><summary>run notes ({{ run.notes|length }})</summary><ul>{% for n in run.notes %}<li>{{ n }}</li>{% endfor %}</ul></details>{% endif %}
 </div>
 {% else %}<div class="card mute">No trace for this session.</div>{% endfor %}
+
+<div class="card" id="watcher-lane">
+  <h2 style="margin-top:0">Lane 5 · Watcher <span class="mute small">market-hours alerts (alert only, no order) · NY session, Berlin below</span></h2>
+  {% if watch %}
+  <p class="small mute" style="margin-top:0">From <span class="mono">{{ s.files.watch }}</span> ({{ watch.mode.clock }} clock, quotes {{ watch.mode.quotes }}, {{ watch.summary.quote_calls }} GET over {{ watch.summary.wakes }} wakes)
+    {% if s.integrity.watch_sidecar_ok %}<span class="ok">sidecar ✓</span>{% elif s.integrity.watch_sidecar_ok is not none %}<span class="bad">sidecar ✗</span>{% endif %}.
+    Dots are alerts ({% for lv in ['exit_signal','warn','info'] %}<span class="badge L-{{ lv }}">{{ lv }} {{ watch.summary.by_level[lv] }}</span> {% endfor %}); ticks are wakes, blue ticks fetched quotes.
+    The WatcherAgent step in each run above is the stage that hands targets to this lane.</p>
+  {% for D in watch.days %}
+  <div class="lane"><div class="who">{{ D.date }}<small>{% if D.closed %}market closed{% else %}{{ D.markers|length }} alert(s){% endif %}</small></div>
+    <div>{% if not D.closed %}{{ wlane(D) }}{% else %}<span class="mute small">no session, no quote requests</span>{% endif %}</div>
+    <div class="small mute">{% if not D.closed %}{{ D.close.berlin[11:16] }} Berlin close{% endif %}</div></div>
+  {% endfor %}
+  {% if watch.alerts %}<details class="small"><summary>alerts ({{ watch.alerts|length }})</summary><ul>{% for a in watch.alerts %}<li><span class="mono">{{ a.at.ny[11:16] }} NY / {{ a.at.berlin[11:16] }} Berlin</span> <span class="badge L-{{ a.level }}">{{ a.level }}</span> {{ a.rule_id }} {{ a.ticket_id }}{% if a.vetoed %} (VETOED, shadow){% endif %}{% if a.hypothetical %} (HYPOTHETICAL){% endif %}: {{ a.detail }}</li>{% endfor %}</ul></details>{% endif %}
+  {% else %}<p class="mute small">No watcher output for this session (<span class="mono">session-{{ s.date }}.watch.json</span>). Run <span class="mono">optpipe watch</span>.</p>{% endif %}
+</div>
 {% endblock %}

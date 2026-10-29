@@ -190,3 +190,5 @@ def test_static_export(tmp_path):
         assert 'href="/s/' not in html and "/tmp/" not in html
     assert 'href="timeline.html"' in (dest / "today.html").read_text()
     assert "<details><summary>#4 RiskOfficerAgent inputs / outputs" in (dest / "timeline.html").read_text()
+    assert "SHADOW_EOD" in (dest / "today.html").read_text()          # M3: export includes the replay watch run
+    assert 'id="watcher-lane"' in (dest / "timeline.html").read_text()
