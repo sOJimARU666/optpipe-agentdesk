@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Regenerate the pydantic models from the session schemas (both read-only inputs).
 
-  models/schema_v1.py    <- Doodle's  <spec_dir>/session.schema.json        (SessionRecordV1)
+  models/schema_v1.py    <- Doodle's frozen v1.0.0 schema: <spec_dir>/_v1_backup/session.schema.json
+                            (<spec_dir>/session.schema.json while the spec has no _v1_backup)  (SessionRecordV1)
+  models/schema_spec.py  <- Doodle's live <spec_dir>/session.schema.json (v1.1 merged 2026-10-29)  (SessionRecordSpec)
   models/schema_v1_1.py  <- proposal  spec_patches/v1.1/session.schema.json (SessionRecordV11)
 
 Usage: .venv/bin/python scripts/gen_models.py [--check] [--spec-dir DIR]
@@ -59,9 +61,17 @@ def generate(schema: Path, label: str, alias: str, source_str: str) -> str:
     return code
 
 
+def v1_base(spec_dir: Path) -> Path:
+    """Folder holding Doodle's v1.0.0 files: the frozen _v1_backup once v1.1 is merged, else the spec itself."""
+    b = spec_dir / "_v1_backup"
+    return b if (b / "session.schema.json").exists() else spec_dir
+
+
 def targets(spec_dir: Path):
-    v1 = spec_dir / "session.schema.json"
-    yield MODELS / "schema_v1.py", generate(v1, "Doodle's session.schema.json", "SessionRecordV1", str(v1))
+    v1 = v1_base(spec_dir) / "session.schema.json"
+    yield MODELS / "schema_v1.py", generate(v1, "Doodle's v1.0.0 session.schema.json", "SessionRecordV1", str(v1))
+    live = spec_dir / "session.schema.json"
+    yield MODELS / "schema_spec.py", generate(live, "Doodle's live session.schema.json", "SessionRecordSpec", str(live))
     v11 = ROOT / "spec_patches/v1.1/session.schema.json"
     if v11.exists():
         yield MODELS / "schema_v1_1.py", generate(v11, "the v1.1 PROPOSAL spec_patches/v1.1/session.schema.json",

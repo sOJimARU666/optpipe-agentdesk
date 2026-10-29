@@ -389,7 +389,8 @@ def r10(rule, c: Ctx):
 
 
 def r11(rule, c: Ctx):
-    thr = {k: c.raw[k] for k in ("max_underlying_risk_usd", "max_total_open_risk_usd", "max_open_positions")}
+    thr = {k: c.raw.get(k) for k in ("max_underlying_risk_usd", "max_sector_risk_usd", "max_total_open_risk_usd",
+                                     "max_open_positions")}
     op = c.inp.open_positions
     if not op.usable:
         return _res(rule, "UNKNOWN", None, thr, "open positions unknown")
@@ -401,14 +402,124 @@ def r11(rule, c: Ctx):
     total = sum((D(p["max_loss_usd"]) for p in op.value), D(0)) + t
     n = len(op.value) + 1
     flag = same > c.cfg.max_underlying_risk_usd or total > c.cfg.max_total_open_risk_usd or n > c.cfg.max_open_positions
-    return _res(rule, "FLAG" if flag else "PASS", {"same_underlying_usd": float(same), "total_usd": float(total), "count": n},
-                thr, f"same-underlying ${same}, total ${total}, positions {n} (placeholder limits pending Eugene)")
+    measured: dict[str, Any] = {"same_underlying_usd": float(same), "total_usd": float(total), "count": n}
+    why: list[str] = []
+    if c.cfg.max_sector_risk_usd is not None:          # ruleset 1.1.0 sector cap; null = not checked
+        smap = c.cfg.sector_map
+        sec = smap.get(u)
+        sector_of = lambda p: p.get("sector", smap.get(p["underlying"]))       # noqa: E731
+        unmapped = sorted({p["underlying"] for p in op.value if sector_of(p) is None} | ({u} if sec is None else set()))
+        if unmapped:
+            return _res(rule, "UNKNOWN", {**measured, "sector": sec, "same_sector_usd": None}, thr,
+                        f"no sector mapping for {', '.join(unmapped)}")
+        same_sec = sum((D(p["max_loss_usd"]) for p in op.value if sector_of(p) == sec), D(0)) + t
+        measured.update(sector=sec, same_sector_usd=float(same_sec))
+        flag = flag or same_sec > c.cfg.max_sector_risk_usd
+        why.append(f"sector {sec} ${same_sec}")
+    tag = " (placeholder limits pending Eugene)" if "max_underlying_risk_usd" in c.cfg.placeholders else ""
+    return _res(rule, "FLAG" if flag else "PASS", measured, thr,
+                f"same-underlying ${same}, {', '.join(why) + ', ' if why else ''}total ${total}, positions {n}{tag}")
+
+
+VERTICALS = {  # strategy -> (option type, price_type, which strike is bought: low|high)
+    "bull_call_debit_spread": ("call", "debit", "low"), "bear_put_debit_spread": ("put", "debit", "high"),
+    "bull_put_credit_spread": ("put", "credit", "low"), "bear_call_credit_spread": ("call", "credit", "high"),
+}
+
+
+def shape_errors(strategy: str, legs: list[dict], price_type: Optional[str]) -> list[str]:
+    """Reasons the legs do not form the declared strategy ([] = they match). Port of Doodle's _shape_errors."""
+    if strategy in VERTICALS:
+        typ, pt, bought = VERTICALS[strategy]
+        if len(legs) != 2:
+            return [f"{strategy} needs 2 legs, got {len(legs)}"]
+        a, b = legs
+        errs = []
+        if {a["type"], b["type"]} != {typ}:
+            errs.append(f"{strategy} legs must both be {typ}s")
+        if a["expiry"] != b["expiry"]:
+            errs.append("vertical legs must share one expiry")
+        if a["ratio"] != b["ratio"]:
+            errs.append("vertical legs must have equal ratio")
+        if {a["side"], b["side"]} != {"buy", "sell"}:
+            errs.append("vertical needs one buy and one sell leg")
+        if a["strike"] == b["strike"]:
+            errs.append("vertical strikes must differ")
+        if not errs:
+            lo, hi = sorted(legs, key=lambda l: l["strike"])
+            if (lo if bought == "low" else hi)["side"] != "buy":
+                errs.append(f"{strategy} must buy the {bought}er strike")
+        if price_type != pt:
+            errs.append(f"{strategy} must be priced as {pt}, ticket says {price_type}")
+        return errs
+    if strategy in ("long_call", "long_put"):
+        typ = strategy.split("_")[1]
+        ok = len(legs) == 1 and legs[0]["type"] == typ and legs[0]["side"] == "buy" and price_type == "debit"
+        return [] if ok else [f"{strategy} must be a single bought {typ} priced as debit"]
+    if strategy == "iron_condor":
+        puts = [l for l in legs if l["type"] == "put"]
+        calls = [l for l in legs if l["type"] == "call"]
+        if len(legs) != 4 or len(puts) != 2 or len(calls) != 2:
+            return ["iron_condor needs 2 puts + 2 calls"]
+        errs = (shape_errors("bull_put_credit_spread", puts, "credit")
+                + shape_errors("bear_call_credit_spread", calls, "credit"))
+        if len({l["expiry"] for l in legs}) > 1:
+            errs.append("iron_condor legs must share one expiry")
+        if price_type != "credit":
+            errs.append("iron_condor must be priced as credit")
+        return errs
+    return [f"no shape definition for strategy {strategy!r}"]
+
+
+def r12(rule, c: Ctx):
+    tk = c.inp.ticket
+    legs = [{"type": l.type, "side": l.side, "strike": l.strike, "expiry": l.expiry, "ratio": l.ratio} for l in c.inp.legs]
+    allowed = list(c.cfg.allowed_structures)
+    thr = {"allowed_structures": allowed}
+    if not legs or not tk.strategy:
+        return _res(rule, "UNKNOWN", None, thr, "no legs" if not legs else "ticket strategy missing")
+    net = {typ: sum((1 if l["side"] == "buy" else -1) * l["ratio"] for l in legs if l["type"] == typ)
+           for typ in ("call", "put")}
+    naked = [typ for typ, v in net.items() if v < 0]
+    measured = {"strategy": tk.strategy, "naked_short": naked, "defined_risk": not naked}
+    if naked:
+        return _res(rule, "VETO", measured, thr,
+                    f"naked short {'/'.join(naked)} (more contracts sold than bought): not defined-risk")
+    if tk.strategy not in allowed:
+        return _res(rule, "VETO", measured, thr, f"structure {tk.strategy} not in allowed_structures")
+    errs = shape_errors(tk.strategy, legs, tk.limit_price.price_type)
+    if errs:
+        return _res(rule, "VETO", measured, thr, "; ".join(errs))
+    return _res(rule, "PASS", measured, thr, f"{tk.strategy}: defined-risk, legs match")
+
+
+def r13(rule, c: Ctx):
+    lo, hi = c.cfg.hold_min_days, c.cfg.hold_max_days
+    thr = {"hold_min_days": lo, "hold_max_days": hi}
+    legs, tk = c.inp.legs, c.inp.ticket
+    if not legs or lo is None:
+        return _res(rule, "UNKNOWN", None, thr, "no legs" if not legs else "hold_min_days not configured")
+    today = c.t.astimezone(NY).date()
+    start = max(c.t, tk.hold_window_start).astimezone(NY).date()
+    stop = tk.hold_window_end
+    hold = (stop.astimezone(NY).date() - start).days
+    dte = min((l.expiry - today).days for l in legs)
+    first_close = min(c.cal.close_dt(l.expiry) for l in legs)
+    why = []
+    if stop > first_close:
+        why.append(f"time stop {stop.astimezone(NY).isoformat()} after expiry close {first_close.isoformat()}")
+    for name, v in (("time stop", hold), ("DTE", dte)):
+        if v < lo or (hi is not None and v > hi):
+            why.append(f"{name} {v} d outside {lo}-{hi if hi is not None else 'inf'} d")
+    return _res(rule, "VETO" if why else "PASS", {"hold_days": hold, "dte": dte}, thr,
+                "; ".join(why) or f"time stop in {hold} d, DTE {dte} (NY date {today})")
 
 
 RULE_FUNCS: dict[str, Callable[[RuleDef, Ctx], RuleOutcome]] = {
     "R01_QUOTE_FRESHNESS": r01, "R02_BID_ASK_WIDTH": r02, "R03_OPEN_INTEREST": r03, "R04_MAX_LOSS": r04,
     "R05_NET_PRICE_VS_LIMIT": r05, "R06_MIN_DTE": r06, "R07_EARNINGS_IN_WINDOW": r07, "R08_MACRO_EVENTS": r08,
-    "R09_EARLY_ASSIGNMENT": r09, "R10_IV_VS_HISTORY": r10, "R11_CONCENTRATION": r11}
+    "R09_EARLY_ASSIGNMENT": r09, "R10_IV_VS_HISTORY": r10, "R11_CONCENTRATION": r11,
+    "R12_DEFINED_RISK_STRUCTURE": r12, "R13_HOLD_PERIOD": r13}
 
 
 def overall(results: list[RuleOutcome]) -> Overall:
@@ -418,10 +529,12 @@ def overall(results: list[RuleOutcome]) -> Overall:
                    blocking_rule_ids=blocking, flag_rule_ids=flags, approval_required=True)
 
 
-def evaluate(inp: ReviewInput | dict, ruleset: Ruleset, config_overrides: dict | None = None) -> RiskEvaluation:
-    """Pure function: same input + ruleset -> same output. Unknown rule ids fail loudly."""
+def evaluate(inp: ReviewInput | dict, ruleset: Ruleset, config_overrides: dict | None = None,
+             profile: str | None = None) -> RiskEvaluation:
+    """Pure function: same input + ruleset -> same output. Unknown rule ids fail loudly.
+    cfg = defaults <- profile overrides <- per-call overrides (as Doodle's risk_reference.evaluate)."""
     inp = ReviewInput.model_validate(inp)
-    rs = ruleset.with_overrides(config_overrides)
+    rs = ruleset.with_profile(profile).with_overrides(config_overrides)
     c = Ctx(inp, rs)
     missing = [r.id for r in rs.rules if r.id not in RULE_FUNCS]
     if missing:

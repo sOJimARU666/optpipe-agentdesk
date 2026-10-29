@@ -41,6 +41,7 @@ class RLimit(_M):
 
 class RTicket(_M):
     underlying: str
+    strategy: Optional[str] = None
     quantity: int
     limit_price: RLimit
     hold_window_start: AwareDatetime

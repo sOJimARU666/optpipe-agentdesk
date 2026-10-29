@@ -25,8 +25,8 @@ def _norm(o):
     return json.loads(json.dumps(o, default=str))
 
 
-def _mine(inp, ruleset, cfg=None):
-    out = evaluate(inp, ruleset, cfg).model_dump(mode="json")
+def _mine(inp, ruleset, cfg=None, profile=None):
+    out = evaluate(inp, ruleset, cfg, profile=profile).model_dump(mode="json")
     for r in out["results"]:
         for k in ("per_leg", "placeholder"):
             if r[k] is None:
@@ -34,13 +34,14 @@ def _mine(inp, ruleset, cfg=None):
     return out
 
 
-def test_case_count_is_55():
-    assert len(CASES) == 55
+def test_case_count():
+    # ruleset 1.0.0 had 55 cases; 1.1.0 (Doodle, 2026-10-29) adds R11 sector / R12 / R13 / demo-profile cases
+    assert len(CASES) == 78
 
 
 @pytest.mark.parametrize("case", CASES, ids=[c["id"] for c in CASES])
 def test_yaml_case(case, ref, raw_rules, ruleset):
-    out = _mine(ref.apply_case(raw_rules["fixture"], case), ruleset, case.get("config"))
+    out = _mine(ref.apply_case(raw_rules["fixture"], case), ruleset, case.get("config"), case.get("profile"))
     assert out["overall"]["approval_required"] is True
     if case["rule"] == "OVERALL":
         assert out["overall"]["verdict"] == case["expect"]["result"]
@@ -57,8 +58,8 @@ def test_yaml_case(case, ref, raw_rules, ruleset):
 @pytest.mark.parametrize("case", CASES, ids=[c["id"] for c in CASES])
 def test_parity_with_reference(case, ref, raw_rules, ruleset):
     inp = ref.apply_case(raw_rules["fixture"], case)
-    expected = ref.evaluate(copy.deepcopy(inp), raw_rules, case.get("config"))
-    assert _norm(expected) == _norm(_mine(inp, ruleset, case.get("config")))
+    expected = ref.evaluate(copy.deepcopy(inp), raw_rules, case.get("config"), profile=case.get("profile"))
+    assert _norm(expected) == _norm(_mine(inp, ruleset, case.get("config"), case.get("profile")))
 
 
 def test_clean_fixture_passes_everything(raw_rules, ruleset):

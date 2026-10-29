@@ -1,18 +1,52 @@
-"""Priority 1: generated models match Doodle's session.schema.json and round-trip session.example.json."""
-import hashlib
+"""Priority 1: generated models match Doodle's schemas and round-trip their examples.
 
-from optpipe.models.schema_v1 import SCHEMA_SHA256, SessionRecordV1
+SessionRecordV1 is generated from Doodle's frozen v1.0.0 schema (spec/_v1_backup/ since his v1.1 merge on
+2026-10-29), which is what the pipeline still writes; SessionRecordSpec tracks his live schema."""
+import hashlib
+import json
+
+import pytest
+
+from optpipe.models import schema_spec, schema_v1
+from optpipe.models.schema_spec import SessionRecordSpec
+from optpipe.models.schema_v1 import SessionRecordV1
+
+
+def _v1_dir(spec):
+    b = spec.root / "_v1_backup"
+    return b if (b / "session.schema.json").exists() else spec.root
+
+
+def _sha(p):
+    return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
 def test_models_generated_from_current_schema(spec):
-    sha = hashlib.sha256(spec.path("session_schema").read_bytes()).hexdigest()
-    assert sha == SCHEMA_SHA256, "schema changed: re-run scripts/gen_models.py"
+    assert _sha(_v1_dir(spec) / "session.schema.json") == schema_v1.SCHEMA_SHA256, "re-run scripts/gen_models.py"
+    assert _sha(spec.path("session_schema")) == schema_spec.SCHEMA_SHA256, "re-run scripts/gen_models.py"
 
 
-def test_example_round_trip(example):
-    m = SessionRecordV1.model_validate(example)
-    assert m.model_dump(mode="json", exclude_unset=True) == example
-    assert SessionRecordV1.model_validate_json(m.model_dump_json(exclude_unset=True)) == m
+def _round_trip(model, ex):
+    m = model.model_validate(ex)
+    assert m.model_dump(mode="json", exclude_unset=True) == ex
+    assert model.model_validate_json(m.model_dump_json(exclude_unset=True)) == m
+
+
+def test_example_round_trip(spec):
+    """v1 model <-> Doodle's v1.0.0 example (frozen copy once v1.1 is merged)."""
+    _round_trip(SessionRecordV1, json.loads((_v1_dir(spec) / "session.example.json").read_text()))
+
+
+def test_live_example_round_trip(example):
+    """Live-spec model <-> Doodle's current example (1.1.0 since 2026-10-29)."""
+    _round_trip(SessionRecordSpec, example)
+
+
+def test_live_spec_still_accepts_v1(spec):
+    enum = json.loads(spec.path("session_schema").read_text())["properties"]["schema_version"]
+    if "const" in enum and enum["const"] == "1.0.0":
+        pytest.skip("spec is still v1.0.0 only")
+    assert "1.0.0" in enum["enum"], "the pipeline writes 1.0.0; Doodle's live schema must keep accepting it"
 
 
 def test_example_passes_doodle_validator(example, validator):

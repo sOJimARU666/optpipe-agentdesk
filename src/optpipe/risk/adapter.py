@@ -52,7 +52,7 @@ def review_input_from_session(sess: BaseModel | dict, ticket_id: str, run_id: st
     return ReviewInput.model_validate({
         "evaluated_at": evaluated_at,
         "underlying": {"symbol": cand["underlying"], "last": vis(snap["quote"]["last"])},
-        "ticket": {"underlying": tk["underlying"], "quantity": tk["quantity"], "limit_price": tk["limit_price"],
+        "ticket": {"underlying": tk["underlying"], "strategy": tk.get("strategy"), "quantity": tk["quantity"], "limit_price": tk["limit_price"],
                    "hold_window_start": tk["hold_window"]["start"]["ny"], "hold_window_end": tk["hold_window"]["end"]["ny"],
                    "intended_event_ids": tk["intended_event_ids"]},
         "legs": legs, "events": events, "coverage": coverage,

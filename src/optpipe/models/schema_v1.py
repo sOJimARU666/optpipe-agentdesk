@@ -1,11 +1,11 @@
-"""GENERATED from Doodle's session.schema.json - do not edit by hand.
+"""GENERATED from Doodle's v1.0.0 session.schema.json - do not edit by hand.
 
 Regenerate: .venv/bin/python scripts/gen_models.py
 """
 from __future__ import annotations
 
 SCHEMA_SHA256 = "118dff7038847fd2d72d90c8161ea5ad8a8f023a4066077da76056541de5ac7c"
-SCHEMA_SOURCE = "/workspace/trading/spec/session.schema.json"
+SCHEMA_SOURCE = "/workspace/trading/spec/_v1_backup/session.schema.json"
 
 from datetime import date as date_aliased
 from enum import Enum, IntEnum

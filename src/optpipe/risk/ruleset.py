@@ -29,6 +29,12 @@ class RiskConfig(BaseModel):
     max_underlying_risk_usd: Decimal
     max_total_open_risk_usd: Decimal
     max_open_positions: int
+    # ruleset 1.1.0 (R11 sector cap, R12 structures, R13 hold period); absent in 1.0.0 -> rule not checked
+    max_sector_risk_usd: Optional[Decimal] = None
+    sector_map: dict[str, str] = Field(default_factory=dict)
+    allowed_structures: list[str] = Field(default_factory=list)
+    hold_min_days: Optional[int] = None
+    hold_max_days: Optional[int] = None
     placeholders: list[str] = Field(default_factory=list)
     quote_max_age_seconds: int
     quote_future_tolerance_seconds: int
@@ -61,6 +67,22 @@ class Ruleset(BaseModel):
     rules: list[RuleDef]
     source: str = ""
     raw_config: dict[str, Any] = Field(default_factory=dict)
+    profiles: dict[str, Any] = Field(default_factory=dict)
+    profile: Optional[str] = None
+
+    def profile_overrides(self, name: Optional[str]) -> dict[str, Any]:
+        """config_overrides of a named profile in risk_rules.yaml `profiles` (None -> {})."""
+        if name is None:
+            return {}
+        if name not in self.profiles:
+            raise KeyError(f"risk profile {name!r} not in risk_rules.yaml profiles {sorted(self.profiles)}")
+        return dict(self.profiles[name].get("config_overrides") or {})
+
+    def with_profile(self, name: Optional[str]) -> "Ruleset":
+        """cfg = defaults <- profile overrides (Doodle's evaluate(..., profile=))."""
+        if name is None:
+            return self
+        return self.with_overrides(self.profile_overrides(name)).model_copy(update={"profile": name})
 
     def with_overrides(self, overrides: dict[str, Any] | None) -> "Ruleset":
         if not overrides:
@@ -71,7 +93,8 @@ class Ruleset(BaseModel):
 
 def ruleset_from_dict(d: dict[str, Any], source: str = "") -> Ruleset:
     return Ruleset(ruleset_version=str(d["ruleset_version"]), config=RiskConfig.model_validate(d["config"]),
-                   rules=[RuleDef.model_validate(r) for r in d["rules"]], source=source, raw_config=dict(d["config"]))
+                   rules=[RuleDef.model_validate(r) for r in d["rules"]], source=source, raw_config=dict(d["config"]),
+                   profiles=dict(d.get("profiles") or {}))
 
 
 class SpecMissing(RuntimeError):
