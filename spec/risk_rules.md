@@ -1,4 +1,4 @@
-# Risk rules v1.1.0 (paper-only US options)
+# Risk rules v1.1.1 (paper-only US options)
 
 The machine-readable source of truth is `risk_rules.yaml`. It holds the config, definitions, rules, profiles, fixture and 78 test cases. `risk_reference.py` is the reference implementation, and `test_risk_reference.py` runs the YAML tests (`.venv/bin/python -m pytest -q`). If this document and the YAML disagree, the YAML wins.
 
@@ -44,7 +44,7 @@ The machine-readable source of truth is `risk_rules.yaml`. It holds the config, 
 | R01_QUOTE_FRESHNESS | H | evaluated_at, underlying.last, legs bid/ask | age = evaluated_at − as_of | market closed (NY hours), any quote stale, or age > 900 s | – | any quote unusable, or as_of > 60 s in the future | open and every age ≤ 900 s |
 | R02_BID_ASK_WIDTH | H | legs bid/ask | (ask−bid)/mid per leg | any leg > 0.10 | – | unusable or invalid quote (ask<bid, ask≤0, bid<0) | all legs ≤ 0.10 |
 | R03_OPEN_INTEREST | H | legs OI | OI per leg | any leg < 500 | – | OI unusable | all legs ≥ 500 |
-| R04_MAX_LOSS ⚠placeholder | H | legs, qty, limit, fees | max loss of the expiry payoff at the **limit price**, checked at S ∈ {0} ∪ strikes. Unlimited if the net call ratio is < 0. | unlimited or > $500 | – | no limit price, no threshold, or legs with different expiries | ≤ $500 |
+| R04_MAX_LOSS ⚠placeholder | H | legs, qty, limit, fees | max loss at the **limit price**. v1.1.1: for the four verticals whose legs match the strategy, the INV-14 formula (`verticals.py`) + fees; otherwise the expiry payoff checked at S ∈ {0} ∪ strikes. Unlimited if the net call ratio is < 0. | unlimited or > $500 | – | no limit price, no threshold, or legs with different expiries | ≤ $500 |
 | R05_NET_PRICE_VS_LIMIT | H | legs bid/ask, side, ratio, limit | net = Σbuy px − Σsell px (mid or natural) | debit: net > limit; credit: −net < limit | – | quote unusable | within limit |
 | R06_MIN_DTE | H | legs expiry, evaluated_at | min DTE (NY date) | < 7 | – | no legs | ≥ 7 |
 | R07_EARNINGS_IN_WINDOW | H | earnings events + coverage, hold window, intended_event_ids | event interval ∩ window | earnings in window and not intended | every in-window earnings event is intended | coverage short or date unusable | covered and none in window |
@@ -80,3 +80,44 @@ Layering: `config` defaults ← `profiles.<name>.config_overrides` ← per-revie
 - R12 and R13 PASS in both reviews (bull call debit spread; hold and DTE within 7+ days).
 - 07:52 ET (13:52 CEST) premarket: **VETO**. R01 (market closed, stale quotes), R02 (350C 20.8%), R03 (340C OI 472), and R09 UNKNOWN (ex-div calendar not yet fetched).
 - 12:16 ET (18:16 CEST) post-open: **VETO**. R02 (340C 14.5%, 350C 24.7%), R03 (340C OI 472), and R05 (mid 3.11 > limit 3.10). Soft UNKNOWNs: R08 (FOMC/NFP/PPI coverage), R10 (no IV).
+
+## Tick rounding (session schema INV-13; `config.tick_rules`)
+Applies to the 1.1.0+ raw tick fields: `limit_price.raw_amount` and `Condition.raw_value`, each with `tick_size` and `rounding`. The validator is `validate_session.py`; the risk rules R01–R13 do not use these fields.
+
+| | below $3.00 | at or above $3.00 |
+|---|---|---|
+| penny-pilot names (`penny_pilot`, **PLACEHOLDER** [SPY, QQQ, IWM, JPM]; verify against the Cboe/OCC list) | 0.01 | 0.05 |
+| all other names | 0.05 | 0.10 |
+
+- The tier is chosen by the **raw** price. The rounded value must equal `round(raw, tick, direction)`, computed in exact Decimal (`repr` of the float, so 3.1006249999999995 → 3.10 down).
+- `down` = floor, `up` = ceiling, `nearest` = half-up, `none` = rounded equals raw.
+
+| ticket | limit | stop (`stop_rules`) | target (`target_rules`) |
+|---|---|---|---|
+| debit (all versions) | down (pay at most the cap) | up (exit no later) | down (take profit no later) |
+| credit vertical (1.1.1 records) | **up** (receive at least the min credit) | **down** (buy back no later) | **up** (buy back no later) |
+
+- Entry, exit and watcher conditions are only checked for consistency, with no forced direction.
+- 1.1.0 records keep the 1.1.0 rule: no direction on a credit limit, and stop up / target down for every ticket.
+
+## Vertical consistency (session schema INV-14, 1.1.1 records only)
+Applies to bull call / bear put debit spreads and bull put / bear call credit spreads.
+- **Structure:** 2 legs of the same type and expiry, ratio 1:1, multiplier 100, one buy and one sell. Strikes must be ordered as the strategy says, and `price_type` must match (debit / credit).
+- **Inputs:** every value comes from the legs.
+  - width = |long − short strike|.
+  - The price is the **limit**, the worst acceptable price (max debit / min credit).
+  - stop and target are the single `position_value` condition (cost to close) in `stop_rules` and in `target_rules`.
+
+| | credit (bull put / bear call) | debit (bull call / bear put) |
+|---|---|---|
+| price | 0 < credit < width | 0 < debit < width |
+| stop | credit < stop_debit < width | 0 < stop < debit |
+| target | 0 ≤ target_buyback < credit | debit < target ≤ width |
+| max_loss | (width − credit) × 100 × qty | debit × 100 × qty |
+| max_profit | credit × 100 × qty | (width − debit) × 100 × qty |
+| breakeven | short − credit (put) / short + credit (call) | long + debit (call) / long − debit (put) |
+| planned loss at stop | (stop − credit) × 100 × qty ≤ max_loss | – |
+
+- **Stored values:** `max_loss.amount_usd`, `max_profit.amount_usd` and the breakeven whose `at_price` equals the limit must equal the computed values. `unlimited` must be false, and `at_price`, if set, must equal the limit. Any other `breakevens[]` entry must match the formula at its own `at_price`.
+- **Precision:** arithmetic is exact Decimal with a 0.01 tolerance on $ amounts and breakevens; the inequalities are exact.
+- **Credit stop check:** the planned loss at the stop is implied by stop < width, so it can only fail together with that clause.

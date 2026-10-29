@@ -35,3 +35,6 @@ where = ["src"]
 testpaths = ["tests"]
 addopts = "-q"
 filterwarnings = ["ignore:Using `httpx` with `starlette.testclient`"]
+markers = [
+    "live: hits real read-only market-data endpoints; skipped unless run with `-m live` or OPTPIPE_LIVE_TESTS=1 (never in CI)",
+]

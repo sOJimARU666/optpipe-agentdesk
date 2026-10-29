@@ -24,7 +24,7 @@ from .discovery.agent import SETTINGS_SRC
 from .models.contracts import (DiscoveryInput, ManualCandidate, ManualCoverage, ManualEvent, ManualSource,
                                PlannerInput, PlannerParams, ResearchInput, RiskInput, WatcherInput)
 from .models.schema_spec import SessionRecordSpec
-from .models.schema_v1_1 import SessionRecordV11
+from .models.schema_spec import SessionRecordSpec
 from .records.compat import from_v1
 from .scenario import scenario_note
 from .models.session import HandoffTrace, RunTrace, SessionTrace
@@ -46,7 +46,7 @@ from .risk.engine import Calendar
 from .risk.ruleset import Ruleset, load_ruleset
 from .spec import SpecFiles, discover
 
-SCHEMA_VERSION = "1.1.0"   # Doodle's spec 1.1.0 (pinned 2026-10-29): written as-is; compat.to_v1 only for v1 readers
+SCHEMA_VERSION = "1.1.1"   # Doodle's spec 1.1.1 (pinned 2026-10-29 21:17 CET; INV-14, credit rounding): written as-is; compat.to_v1 only for v1 readers
 MODE = "paper"   # the only mode the schema allows; there is no live mode anywhere in this package
 
 
@@ -85,7 +85,7 @@ def phase_for(t: datetime, cal: Calendar) -> str:
     closed    weekend / NYSE holiday, before 04:00, or at/after the regular close
               (16:00; 13:00 on early-close days)                      [Doodle's ruling, v1.1]
     premarket 04:00 .. open-1h | preopen open-1h .. open | open open .. open+15m | intraday .. close
-    Records are schema 1.1.0, so "closed" is written as-is (Doodle's INV-10 checks it against the NY clock).
+    Records are schema 1.1.1 (v1.1 shape), so "closed" is written as-is (Doodle's INV-10 checks it against the NY clock).
     """
     n = t.astimezone(NY)
     if not cal.is_trading_day(n.date()):
@@ -352,7 +352,7 @@ class Orchestrator:
         rec = self._assemble(existing, as_of, run_id, phase, inputs, disc, res, plan, dump,
                              self._market_status([p.symbol for p in disc.picks], as_of))
 
-        risk_out = self._step(self.risk, RiskInput(record=SessionRecordV11.model_validate(rec), run_id=run_id,
+        risk_out = self._step(self.risk, RiskInput(record=SessionRecordSpec.model_validate(rec), run_id=run_id,
                                                    evaluated_at=as_of))
         reviews = [r.model_dump(mode="json", exclude_unset=True) for r in risk_out.risk_reviews]
         for rv, src in zip(reviews, risk_out.risk_reviews):     # keep explicit nulls the schema requires
@@ -365,8 +365,8 @@ class Orchestrator:
 
         rec["idea_log"], recommendation = apply_reviews(rec["idea_log"], reviews, as_of)
         rec["data_quality"] = {**quality_index(rec), "notes": [recommendation, *notes][:50]}
-        SessionRecordV11.model_validate(rec)
-        SessionRecordSpec.model_validate(rec)          # Doodle's schema 1.1.0
+        SessionRecordSpec.model_validate(rec)
+        SessionRecordSpec.model_validate(rec)          # Doodle's schema 1.1.1
 
         validation = self.validate(rec)
         trace = RunTrace(run_id=run_id, as_of=as_of, data_mode=self.p.data_mode, steps=self.steps,
@@ -418,12 +418,13 @@ class Orchestrator:
         return rec
 
     def validate(self, rec: dict) -> dict:
-        """errors: the 1.1.0 record against Doodle's validator + schema (the INV-11 trace file check runs
+        """errors: the 1.1.1 record against Doodle's validator + schema (the INV-11 trace file check runs
         on the written file, see validate_file)."""
         mod = self.spec.load_module("session_validator") if self.spec else None
         if mod is None:
             return {"validator": None, "errors": [], "note": "spec validate_session.py not found; pydantic only"}
-        return {"validator": str(self.spec.path("session_validator")), "errors": list(mod.validate(copy.deepcopy(rec)))}
+        from .config import display_path
+        return {"validator": display_path(self.spec.path("session_validator")), "errors": list(mod.validate(copy.deepcopy(rec)))}
 
 
 def run_session(settings: Settings, inputs: SessionInputs, as_of: datetime, fixtures_dir: Optional[Path],

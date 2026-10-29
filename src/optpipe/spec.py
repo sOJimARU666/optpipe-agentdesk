@@ -1,4 +1,4 @@
-"""Read-only access to Doodle's spec folder (default /workspace/trading/spec, env OPTIONS_SPEC_DIR).
+"""Read-only access to Doodle's spec folder (default ../trading/spec next to this repo, env OPTIONS_SPEC_DIR).
 
 Local/default runs read Doodle's live folder directly. CI sets OPTIONS_SPEC_DIR=spec/, the pinned copy written by
 scripts/sync_spec.py (VERSION + MANIFEST sha; `sync_spec.py --check` fails on any edit). Doodle owns both.

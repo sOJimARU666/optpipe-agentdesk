@@ -11,7 +11,8 @@ from __future__ import annotations
 import copy
 from typing import Any
 
-V1, V11 = "1.0.0", "1.1.0"
+V1, V11 = "1.0.0", "1.1.1"   # V11 = the v1.1-shape version this pipeline writes
+V11_SHAPE = ("1.1.0", "1.1.1")
 _LIMIT_EXTRA = ("raw_amount", "tick_size", "rounding")
 _COND_EXTRA = ("raw_value", "tick_size", "rounding")
 CLOSED_NOTE = "[phase=closed; v1 has no 'closed' phase, recorded as afterhours]"
@@ -68,7 +69,8 @@ def _reindex(v: dict) -> None:
 def from_v1(rec: dict) -> dict:
     """Upgrade a v1 record (e.g. an older session-<date>.json) so further runs can be appended."""
     v = copy.deepcopy(rec)
-    if v.get("schema_version") == V11:
+    if v.get("schema_version") in V11_SHAPE:
+        v["schema_version"] = V11              # 1.1.0 -> 1.1.1: same shape, stricter checks
         return v
     v["schema_version"] = V11
     first = v["runs"][0]["run_id"] if v.get("runs") else None

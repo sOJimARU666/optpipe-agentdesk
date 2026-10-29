@@ -323,7 +323,7 @@ runs = [
 ]
 
 sess = {
-    "schema_version": "1.1.0",
+    "schema_version": "1.1.1",
     "session": {"id": "sess-2026-10-13", "date": "2026-10-13", "mode": "paper", "created": tp(T_PRE), "updated": tp(T_POST),
                 "risk_ruleset_version": rr.load_rules()["ruleset_version"],
                 "market_calendar": {"timezone": "America/New_York", "is_trading_day": True, "early_close": False,

@@ -17,6 +17,8 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
+import verticals
+
 SPEC_DIR = Path(__file__).resolve().parent
 NY = ZoneInfo("America/New_York")
 BERLIN = ZoneInfo("Europe/Berlin")
@@ -174,6 +176,11 @@ def payoff_max_loss(inp, cfg):
     if lp.get("amount") is None:
         return {"error": "limit price missing"}
     qty = D(tk["quantity"]); mult = D(cfg["contract_multiplier"])
+    fees_v = D(cfg["fees_per_contract_usd"]) * qty * sum(D(l["ratio"]) for l in legs)
+    if verticals.is_vertical(tk.get("strategy", "")):   # v1.1.1: R04 uses the INV-14 vertical max loss (+ fees)
+        v = verticals.compute(tk["strategy"], legs, tk["quantity"], lp, mult)
+        if "error" not in v:
+            return {"max_loss_usd": float(v["max_loss"] + fees_v), "unlimited": False, "basis": "vertical"}
     premium = D(lp["amount"]) if lp["price_type"] == "debit" else -D(lp["amount"])
     sign = lambda l: 1 if l["side"] == "buy" else -1
     call_slope = sum(sign(l) * l["ratio"] for l in legs if l["type"] == "call")

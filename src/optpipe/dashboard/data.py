@@ -26,7 +26,7 @@ class Integrity:
     trace_sha256: Optional[str] = None
     sidecar_ok: Optional[bool] = None         # trace.json.sha256 matches the trace file
     trace_ref_ok: Optional[bool] = None       # v1.1 trace_ref.sha256 matches the trace file
-    session_ref_ok: Optional[bool] = None     # trace.session_ref.sha256 matches session-<date>.json
+    session_ref_ok: Optional[bool] = None     # trace.session_ref.sha256 matches the record content (minus trace_ref)
     watch_sidecar_ok: Optional[bool] = None   # <session>.watch.json.sha256 matches the watch file
     watch_session_ok: Optional[bool] = None   # watch.session.sha256 matches session-<date>.json
     problems: list[str] = field(default_factory=list)
@@ -83,8 +83,8 @@ class OutDir:
         if not jp.exists():
             raise KeyError(date)
         main = json.loads(jp.read_text())
-        if main.get("schema_version") == "1.1.0":
-            rec, origin = main, "record (schema 1.1.0)"
+        if main.get("schema_version") in ("1.1.0", "1.1.1"):
+            rec, origin = main, f"record (schema {main['schema_version']})"
         elif vp.exists():
             rec, origin = json.loads(vp.read_text()), "v1.1 preview (older output)"
         else:
@@ -103,11 +103,11 @@ class OutDir:
                 integ.trace_ref_ok = ref.get("sha256") == integ.trace_sha256 and ref.get("path") == tp.name
                 if not integ.trace_ref_ok:
                     integ.problems.append("trace_ref in the record does not match the trace file")
-            sref = trace.get("session_ref")
-            if sref and sref.get("sha256"):
-                integ.session_ref_ok = sref.get("sha256") == sha256_bytes(jp.read_bytes())
-                if not integ.session_ref_ok:
-                    integ.problems.append(f"trace.session_ref does not match {jp.name}")
+            from ..records.store import verify_session_ref
+            ok, msg = verify_session_ref(jp, trace)
+            integ.session_ref_ok = ok
+            if ok is False:
+                integ.problems.append(msg)
         else:
             integ.problems.append(f"{tp.name} not found")
         wp = self.root / f"session-{date}.watch.json"

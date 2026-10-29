@@ -1,15 +1,15 @@
 """Option price tick-size rounding. Owner: Doodle (rule, spec risk_rules.yaml config.tick_rules) / Poodle (code).
 
 The tiers, the penny-pilot list and the rounding directions are read from Doodle's spec
-(risk_rules.yaml `config.tick_rules`, spec 1.1.0); config/settings.yaml `planner.penny_pilot` /
+(risk_rules.yaml `config.tick_rules`, spec 1.1.1, nested `directions.debit` / `directions.credit`); config/settings.yaml `planner.penny_pilot` /
 `tick_threshold` are only a fallback when the spec has no tick_rules.
 
   penny-pilot names: 0.01 below the threshold ($3.00), 0.05 at/above it
   everything else:   0.05 below, 0.10 at/above      (tier chosen by the RAW price, as validate_session does)
 
 Round in the SAFE direction (never worse than intended):
-  debit spreads  (spec 1.1.0):            limit DOWN (pay no more), stop UP (exit no later), target DOWN
-  credit spreads (Doodle's ruling for 1.1.1, mirrored here before the spec has it):
+  debit spreads  (spec 1.1.1):            limit DOWN (pay no more), stop UP (exit no later), target DOWN
+  credit spreads (spec 1.1.1, config.tick_rules.directions.credit):
                                           min-credit limit UP (collect no less), stop = debit to close DOWN
                                           (exit no later), target = buy-back UP (take profit no later)
 Raw and rounded values are both kept. Exact Decimal arithmetic avoids 3.1006 -> 3.0999999 artefacts.
@@ -60,6 +60,11 @@ class TickRule:
         tr = tick_rules
         dirs = _dirs()
         for k, v in (tr.get("directions") or {}).items():
+            if k in ("debit", "credit") and isinstance(v, Mapping):        # spec 1.1.1: {debit: {limit,stop,target}, credit: {...}}
+                for role, d in v.items():
+                    if role in ("limit", "stop", "target"):
+                        dirs[k][role] = str(d)
+                continue
             if k in _SPEC_DIRECTION_KEYS:
                 side, role = _SPEC_DIRECTION_KEYS[k]
                 dirs[side][role] = str(v)

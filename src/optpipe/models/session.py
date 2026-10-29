@@ -39,8 +39,12 @@ class RunTrace(Model):
 
 class FileRef(Model):
     path: str                       # relative to the trace file's directory
-    sha256: Optional[str] = None    # None in session_ref: the record pins the trace hash (trace_ref), not vice versa
+    sha256: Optional[str] = None
     schema_version: Optional[str] = None
+    # What `sha256` covers when it is not simply the file's bytes. session_ref uses SESSION_REF_COVERS: the record
+    # with its trace_ref removed, as canonical JSON, so record -> trace (trace_ref) and trace -> record
+    # (session_ref) can both be hashed without a cycle.
+    sha256_covers: Optional[str] = None
 
 
 class SessionTrace(Model):

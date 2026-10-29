@@ -1,4 +1,4 @@
-"""Validate a session record (schema v1.0.0 or v1.1.0): JSON Schema (draft 2020-12) + x-invariants INV-01..13.
+"""Validate a session record (schema v1.0.0, v1.1.0 or v1.1.1): JSON Schema (draft 2020-12) + x-invariants INV-01..14.
 Usage: python validate_session.py session.example.json [more.json ...]"""
 from __future__ import annotations
 
@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 from jsonschema import Draft202012Validator, FormatChecker
 
 import risk_reference as rr
+import verticals as vt
 
 SPEC = Path(__file__).resolve().parent
 NY, BERLIN = ZoneInfo("America/New_York"), ZoneInfo("Europe/Berlin")
@@ -89,12 +90,13 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
             if is_field(o) and o["status"] in ("ok", "stale") and o["source_id"] in src:
                 if datetime.fromisoformat(o["as_of"]) > datetime.fromisoformat(src[o["source_id"]]["fetched_at"]):
                     errs.append(f"INV-09 {p} as_of after source fetch")
-    v11 = sess["schema_version"] == "1.1.0"
+    v11 = sess["schema_version"] in ("1.1.0", "1.1.1")   # v1.1 shape
+    v111 = sess["schema_version"] == "1.1.1"            # stricter 1.1.1 checks (INV-13 credit, INV-14)
     # INV-10 run phase vs NY clock (v1.1 'closed')
     for r in sess["runs"]:
         closed = CAL.is_closed(datetime.fromisoformat(r["started"]["ny"]))
         if r["phase"] == "closed" and not v11:
-            errs.append(f"INV-10 run {r['run_id']} phase 'closed' requires schema_version 1.1.0")
+            errs.append(f"INV-10 run {r['run_id']} phase 'closed' requires schema_version 1.1.0 or 1.1.1")
         elif r["phase"] == "closed" and not closed:
             errs.append(f"INV-10 run {r['run_id']} phase 'closed' but started {r['started']['ny']} is inside NY 04:00-close on a trading day")
         elif v11 and closed and r["phase"] != "closed":
@@ -103,7 +105,7 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
     tr = sess.get("trace_ref")
     if tr is not None:
         if not v11:
-            errs.append("INV-11 trace_ref requires schema_version 1.1.0")
+            errs.append("INV-11 trace_ref requires schema_version 1.1.0 or 1.1.1")
         elif base_dir is not None:
             base = Path(base_dir).resolve()
             f = (base / tr["path"]).resolve()
@@ -205,7 +207,7 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
         if arr not in sess:
             continue
         if not v11:
-            errs.append(f"INV-12 {arr} requires schema_version 1.1.0")
+            errs.append(f"INV-12 {arr} requires schema_version 1.1.0 or 1.1.1")
             continue
         ids = [x["run_id"] for x in sess[arr]]
         if len(ids) != len(set(ids)):
@@ -218,7 +220,7 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
     # INV-13 raw tick fields (v1.1): tick per rule, rounded == round(raw, tick, direction), safe directions
     def tick_check(where, underlying, rounded, raw, tick, direction, need=None):
         if not v11:
-            errs.append(f"INV-13 {where} raw tick fields require schema_version 1.1.0")
+            errs.append(f"INV-13 {where} raw tick fields require schema_version 1.1.0 or 1.1.1")
             return
         if need and direction != need:
             errs.append(f"INV-13 {where} rounding {direction!r}, must be {need!r}")
@@ -228,10 +230,13 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
             errs.append(f"INV-13 {where} rounded {rounded} != round({raw}, {tick}, {direction}) = {round_tick(raw, tick, direction)}")
     for t in sess["tickets"]:
         lp = t["limit_price"]
+        credit111 = v111 and vt.is_vertical(t["strategy"]) and vt.VERTICALS[t["strategy"]][1] == "credit"
+        # debit: limit down / stop up / target down; 1.1.1 credit verticals: min credit up / stop down / target up
+        need_lim = "up" if credit111 else ("down" if lp["price_type"] == "debit" else None)
+        need_stop, need_tgt = ("down", "up") if credit111 else ("up", "down")
         if "raw_amount" in lp:
-            tick_check(f"{t['ticket_id']}.limit_price", t["underlying"], lp["amount"], lp["raw_amount"], lp["tick_size"], lp["rounding"],
-                       "down" if lp["price_type"] == "debit" else None)
-        for grp, need in (("entry_rules", None), ("exit_rules", None), ("stop_rules", "up"), ("target_rules", "down")):
+            tick_check(f"{t['ticket_id']}.limit_price", t["underlying"], lp["amount"], lp["raw_amount"], lp["tick_size"], lp["rounding"], need_lim)
+        for grp, need in (("entry_rules", None), ("exit_rules", None), ("stop_rules", need_stop), ("target_rules", need_tgt)):
             for tr_ in t.get(grp, []):
                 for j, c in enumerate(tr_["conditions"]):
                     if "raw_value" in c:
@@ -241,12 +246,72 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
         for j, c in enumerate(w["conditions"]):
             if "raw_value" in c and tk:
                 tick_check(f"watch {w['watch_id']}[{j}]", tk["underlying"], c["value"], c["raw_value"], c["tick_size"], c["rounding"])
+    # INV-14 vertical consistency (1.1.1 only)
+    if v111:
+        for t in sess["tickets"]:
+            if vt.is_vertical(t["strategy"]):
+                errs.extend(f"INV-14 {t['ticket_id']} {m}" for m in vertical_errors(t))
     # data_quality must be regenerable
     qi = quality_index(sess)
     for k in ("missing", "stale", "conflicting"):
         if sorted(qi[k]) != sorted(sess["data_quality"][k]):
             errs.append(f"data_quality.{k} out of sync with record")
     return errs
+
+
+def _pv(t, grp):
+    """position_value conditions (cost to close the spread) in stop_rules / target_rules; INV-14 needs exactly one"""
+    cs = [c for r in t.get(grp, []) for c in r["conditions"] if c["metric"] == "position_value"]
+    return cs
+
+
+def vertical_errors(t: dict) -> list[str]:
+    """INV-14: all values from legs + limit (worst acceptable price); exact Decimal, 0.01 tolerance on $ amounts."""
+    mults = {l.get("multiplier", 100) for l in t["legs"]}
+    if mults != {100}:
+        return [f"leg multiplier must be 100, is {sorted(mults)}"]
+    v = vt.compute(t["strategy"], t["legs"], t["quantity"], t["limit_price"], 100)
+    if "error" in v:
+        return [v["error"]]
+    out, D, TOL = [], vt.D, Decimal("0.01")
+    w, p, q, m = v["width"], v["price"], v["qty"], v["mult"]
+    stops, tgts = _pv(t, "stop_rules"), _pv(t, "target_rules")
+    if len(stops) != 1:
+        out.append(f"needs exactly one position_value stop condition, has {len(stops)}")
+    if len(tgts) != 1:
+        out.append(f"needs exactly one position_value target condition, has {len(tgts)}")
+    stop = D(stops[0]["value"]) if len(stops) == 1 else None
+    tgt = D(tgts[0]["value"]) if len(tgts) == 1 else None
+    if v["price_type"] == "credit":
+        if not (0 < p < w):
+            out.append(f"min credit {p} must satisfy 0 < credit < width {w}")
+        if stop is not None and not (p < stop < w):
+            out.append(f"stop debit {stop} must satisfy credit {p} < stop < width {w}")
+        if tgt is not None and not (0 <= tgt < p):
+            out.append(f"target buyback {tgt} must satisfy 0 <= target < credit {p}")
+        if stop is not None and (stop - p) * m * q > v["max_loss"]:
+            out.append(f"planned loss at stop {(stop - p) * m * q} > max_loss {v['max_loss']}")
+    else:
+        if not (0 < p < w):
+            out.append(f"max debit {p} must satisfy 0 < debit < width {w}")
+        if stop is not None and not (0 < stop < p):
+            out.append(f"stop {stop} must satisfy 0 < stop < debit {p}")
+        if tgt is not None and not (p < tgt <= w):
+            out.append(f"target {tgt} must satisfy debit {p} < target <= width {w}")
+    for key, want in (("max_loss", v["max_loss"]), ("max_profit", v["max_profit"])):
+        st = t[key]
+        if st.get("unlimited") or st.get("amount_usd") is None or abs(D(st["amount_usd"]) - want) > TOL:
+            out.append(f"{key}.amount_usd {st.get('amount_usd')} != computed {want}")
+        if st.get("at_price") is not None and D(st["at_price"]) != p:
+            out.append(f"{key}.at_price {st['at_price']} != limit {p}")
+    be_lim = v["breakeven_at"](p)
+    if not any(D(b["at_price"]) == p for b in t["breakevens"]):
+        out.append(f"no breakeven at the limit {p} (computed {be_lim})")
+    for b in t["breakevens"]:
+        want = v["breakeven_at"](b["at_price"])
+        if abs(D(b["underlying_price"]) - want) > TOL:
+            out.append(f"breakeven {b['underlying_price']} at {b['at_price']} != computed {want}")
+    return out
 
 
 if __name__ == "__main__":

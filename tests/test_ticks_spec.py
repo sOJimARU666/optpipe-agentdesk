@@ -1,6 +1,6 @@
-"""Tick rounding from Doodle's spec (risk_rules.yaml config.tick_rules, 1.1.0) + the credit-spread ruling for 1.1.1.
+"""Tick rounding from Doodle's spec (risk_rules.yaml config.tick_rules) incl. 1.1.1 credit-spread rounding.
 
-Debit (spec 1.1.0): limit DOWN, stop UP, target DOWN.  Credit (ruling for 1.1.1, mirrored now): min-credit limit UP,
+Debit (spec 1.1.0): limit DOWN, stop UP, target DOWN.  Credit (spec 1.1.1): min-credit limit UP,
 stop = debit to close DOWN, target = buy-back UP. The penny-pilot list is a PLACEHOLDER read from the spec."""
 from __future__ import annotations
 
@@ -40,8 +40,18 @@ def test_spec_has_tick_rules_and_they_win(tr, spec_ticks):
     assert tr.penny_ticks == tuple(float(x) for x in spec_ticks["penny_ticks"])
     assert tr.standard_ticks == tuple(float(x) for x in spec_ticks["standard_ticks"])
     d = spec_ticks["directions"]
-    assert (tr.direction("debit", "limit"), tr.direction("debit", "stop"), tr.direction("debit", "target")) == (
-        d["debit_limit"], d["stop"], d["target"]) == ("down", "up", "down")
+    assert d == {"debit": {"limit": "down", "stop": "up", "target": "down"},          # spec 1.1.1 nested form
+                 "credit": {"limit": "up", "stop": "down", "target": "up"}}
+    assert {s: {r: tr.direction(s, r) for r in ("limit", "stop", "target")} for s in ("debit", "credit")} == d
+
+
+def test_spec_directions_are_read_not_defaulted(spec_ticks):
+    """A changed direction in the spec must reach the planner (guards against silently using built-in defaults)."""
+    custom = {**spec_ticks, "directions": {"debit": {"limit": "down", "stop": "up", "target": "nearest"},
+                                           "credit": {"limit": "up", "stop": "down", "target": "up"}}}
+    assert TickRule.from_spec(custom).direction("debit", "target") == "nearest"
+    legacy = {**spec_ticks, "directions": {"debit_limit": "down", "stop": "up", "target": "nearest"}}   # 1.1.0 form
+    assert TickRule.from_spec(legacy).direction("debit", "target") == "nearest"
 
 
 def test_penny_list_comes_from_spec_not_settings(spec_ticks):
@@ -135,20 +145,19 @@ def test_planner_ticks_pass_inv13(record, vs):
     assert errs == []
 
 
-def test_known_gap_credit_stop_vs_spec_1_1_0(record, vs, spec):
-    """Spec 1.1.0's INV-13 needs stop 'up' for every ticket; Doodle's ruling makes a credit stop round DOWN.
-    While VERSION is 1.1.0 the validator flags it (documented gap). When 1.1.1 lands this test flips to
-    requiring the credit stop to pass, so the mirror gets re-checked against the real spec."""
+@pytest.mark.parametrize("schema_version,want_flagged", [("1.1.0", True), ("1.1.1", False)])
+def test_credit_stop_rounding_by_record_version(record, vs, spec, schema_version, want_flagged):
+    """Spec 1.1.1 (pinned 2026-10-29 21:17 CET): a credit vertical's stop rounds DOWN, and 1.1.1 records accept it.
+    1.1.0 records still force stop 'up' on every ticket, which is wrong for credit (why the pipeline writes 1.1.1)."""
     rec = copy.deepcopy(record)
+    rec["schema_version"] = schema_version
     t = rec["tickets"][0]
+    t["strategy"] = "bear_call_credit_spread"           # same call legs, read as sell lower / buy higher
+    t["legs"][0]["side"], t["legs"][1]["side"] = "sell", "buy"
     t["limit_price"]["price_type"] = "credit"
     c = next(c for c in t["stop_rules"][0]["conditions"] if "raw_value" in c)
     r = TickRule.from_spec(spec.risk_rules()["config"]["tick_rules"]).round_for(t["underlying"], c["raw_value"],
                                                                                "credit", "stop")
     c.update(value=r.value, tick_size=r.tick, rounding=r.direction)
-    flagged = [e for e in vs.validate(rec) if e.startswith("INV-13") and ".stop_rules." in e and "must be 'up'" in e]
-    version = (Path(spec.root) / "VERSION").read_text().strip()
-    if version == "1.1.0":
-        assert flagged, "spec 1.1.0 should still flag a credit stop rounded down (known gap until 1.1.1)"
-    else:
-        assert not flagged, f"spec {version}: credit stops rounding DOWN should now be accepted"
+    flagged = [e for e in vs.validate(rec) if e.startswith("INV-13") and ".stop_rules." in e]
+    assert bool(flagged) is want_flagged, flagged

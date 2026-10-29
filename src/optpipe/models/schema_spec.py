@@ -4,7 +4,7 @@ Regenerate: .venv/bin/python scripts/gen_models.py
 """
 from __future__ import annotations
 
-SCHEMA_SHA256 = "1f5d863d7a35edf81930937be93b0b2d439439bea9448fe5b23159692bdb1767"
+SCHEMA_SHA256 = "ea3b2abc1bb7029d09f70255eedc8e1bd9168caeb0e2adca0ff5c33bbc7b8efd"
 SCHEMA_SOURCE = "<spec>/session.schema.json"
 
 from datetime import date as date_aliased
@@ -32,6 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field, RootModel
 class SchemaVersion(Enum):
     field_1_0_0 = '1.0.0'
     field_1_1_0 = '1.1.0'
+    field_1_1_1 = '1.1.1'
 
 
 class NyBerlinOffsetHours(IntEnum):
@@ -1330,7 +1331,7 @@ class PaperUSOptionsTradingSessionRecord(BaseModel):
     )
     schema_version: SchemaVersion = Field(
         ...,
-        description="1.0.0 = v1 record; 1.1.0 = may use v1.1 additions (run phase 'closed', trace_ref). Integer open_interest applies to both (integral floats like 472.0 still validate).",
+        description="1.0.0 = v1 record; 1.1.0 = may use v1.1 additions (run phase 'closed', trace_ref, premarket_scans/global_snapshots, raw tick fields); 1.1.1 = same shape as 1.1.0 plus the stricter checks INV-13 credit directions and INV-14 vertical consistency. Integer open_interest applies to all (integral floats like 472.0 still validate).",
     )
     session: Session
     sources: list[Source]

@@ -1,5 +1,21 @@
 # optpipe: paper-only options research pipeline
 
+## 60-second demo (offline, fixtures only)
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
+.venv/bin/optpipe run --fixtures tests/fixtures/2026-10-13 --out out      # Discovery → Planner → RiskOfficer → Watcher, validated as spec 1.1.1
+.venv/bin/optpipe serve --out out                                          # dashboard at http://127.0.0.1:8765/ (loopback only, read-only)
+```
+
+The run uses saved responses from 2026-10-13 (no network), writes `out/session-2026-10-13.json` plus its trace and a
+Markdown rendering, and prints `validate_session …: OK as 1.1.1 (schema + invariants INV-01..14)`. The dashboard timeline
+for that session:
+
+![Session timeline, 2026-10-13 fixtures](docs/dashboard/timeline.png)
+
+Static snapshots of every dashboard page are in [`docs/dashboard/`](docs/dashboard/). MIT licensed, see [`LICENSE`](LICENSE).
+
 **PAPER ONLY.** There is no broker integration and no order path. Every ticket is a *HYPOTHETICAL* paper
 idea, every risk review sets `approval_required: true`, and `session.mode` is always `"paper"`.
 `tests/test_paper_only.py` enforces this from the source code. It fails if the package imports a broker SDK, defines or calls
@@ -12,7 +28,7 @@ This is a three-agent project for Eugene Ward:
 | Agent | Role |
 |---|---|
 | **Moodle** | Architecture: stages, contracts, orchestrator and trace, config shape |
-| **Doodle** | Finance logic and the **spec** (`/workspace/trading/spec/`, the source of truth, release 1.1.0), and the pinned copy `spec/` in this repo |
+| **Doodle** | Finance logic and the **spec** (`../trading/spec/`, the source of truth, release 1.1.1), and the pinned copy `spec/` in this repo |
 | **Poodle** | Code: this repo |
 
 ## The spec: loaded in place, plus one pinned copy (`spec/`)
@@ -20,22 +36,22 @@ This is a three-agent project for Eugene Ward:
 `spec_dir` in `config/settings.yaml` (or env `OPTIONS_SPEC_DIR`) points to Doodle's folder. Files are read
 in place by `optpipe/spec.py`: `session.schema.json`, `risk_rules.yaml`, `risk_reference.py`,
 `validate_session.py`, `session.example.json`, `watcher_rules.yaml` and `watcher_reference.py`. Nothing in this
-repo edits them. Local/default runs read `/workspace/trading/spec` directly.
+repo edits them. Local/default runs read `../trading/spec` directly.
 If the folder is missing, the Risk Officer raises `SpecMissing`. There is no silent fallback ruleset.
 
 > **Doodle owns `spec/`.** `spec/` is a pinned, byte-for-byte copy of Doodle's release, written only by
-> `python scripts/sync_spec.py`. Do not edit it. Changes go through Doodle in `/workspace/trading/spec`
+> `python scripts/sync_spec.py`. Do not edit it. Changes go through Doodle in `../trading/spec`
 > (new `VERSION` + `MANIFEST.sha256`), then the pin in `scripts/sync_spec.py` is bumped and the script re-run.
 
-* **Pin.** Spec `VERSION` **1.1.0**, `sha256(MANIFEST.sha256)` = `3b25cfe562bbd818589e82e069235b188c4f2b4aac434c04fce54d238fd95e07`.
-  `sync_spec.py` refuses a source whose VERSION, manifest hash or any listed file hash differs. It copies the 18 manifest
+* **Pin.** Spec `VERSION` **1.1.1**, `sha256(MANIFEST.sha256)` = `477401b68298f5b4513aa9b46eed9a56df5d1097e85175bdcf8a166cd3d4f489`.
+  `sync_spec.py` refuses a source whose VERSION, manifest hash or any listed file hash differs. It copies the 20 manifest
   files, the manifest, and the two frozen v1.0.0 files from `_v1_backup/` that `gen_models.py`/`make_spec_patch.py` need
   (hashed separately), then writes the pin record `spec/PIN.json` (version, manifest sha, per-file sha, Berlin time).
 * **CI.** CI sets `OPTIONS_SPEC_DIR=spec/` and runs `sync_spec.py --check`, which fails on a manifest mismatch, any edited,
   missing or extra file, or a changed pin record.
 * **No other copies.** `test_spec_is_only_copied_as_the_pinned_spec_dir` fails if spec files appear anywhere else
   (`spec_patches/v1.1/` is the historical v1.1 proposal, see below) or if `spec/` no longer passes `--check`.
-* `models/schema_spec.py` (live 1.1.0 schema, `SessionRecordSpec`), `models/schema_v1.py` (frozen v1.0.0) and
+* `models/schema_spec.py` (live 1.1.1 schema, `SessionRecordSpec`), `models/schema_v1.py` (frozen v1.0.0) and
   `models/schema_v1_1.py` (proposal) are **generated** (`python scripts/gen_models.py`, `--check` in CI/tests).
 * The Risk Officer reads the rules, thresholds and config from `risk_rules.yaml`. Overrides go in
   `settings.yaml: risk_overrides` and are recorded in each review's `config_overrides`.
@@ -51,8 +67,8 @@ Output per session date, under `out/` by default (`out/` is gitignored):
 
 | File | Contents |
 |---|---|
-| `session-YYYY-MM-DD.json` | **Schema 1.1.0** record (Doodle's spec 1.1.0): per-run `premarket_scans[]`/`global_snapshots[]` **and** the single legacy `premarket_scan`/`global_snapshot` (latest run, INV-12), raw/tick_size/rounding on limits and conditions (INV-13), phase `closed` outside market phases (INV-10), `trace_ref` = `{path, sha256}` of the trace (INV-11). Validated with pydantic and Doodle's `validate_session.py` (incl. `base_dir`, so INV-11 hashes the trace file) before/after writing. |
-| `session-YYYY-MM-DD.trace.json` (+ `.sha256`) | Hand-off trace for each run and stage: agent, owner, timings, input/output summaries, verdict and error. `session_ref` = `{path, schema_version}`; no sha256 (the record pins the trace; hashes in both directions would be a cycle). |
+| `session-YYYY-MM-DD.json` | **Schema 1.1.1** record (Doodle's spec 1.1.1): per-run `premarket_scans[]`/`global_snapshots[]` **and** the single legacy `premarket_scan`/`global_snapshot` (latest run, INV-12), raw/tick_size/rounding on limits and conditions (INV-13), vertical-spread math checked from the legs (INV-14), phase `closed` outside market phases (INV-10), `trace_ref` = `{path, sha256}` of the trace (INV-11). Validated with pydantic and Doodle's `validate_session.py` (incl. `base_dir`, so INV-11 hashes the trace file) before/after writing. |
+| `session-YYYY-MM-DD.trace.json` (+ `.sha256`) | Hand-off trace for each run and stage: agent, owner, timings, input/output summaries, verdict and error. `session_ref` = `{path, sha256, sha256_covers, schema_version}`. Its sha256 covers the record **without `trace_ref`** as canonical JSON (sorted keys, no whitespace, UTF-8). The record's `trace_ref` pins the trace file's bytes (INV-11), so neither hash depends on itself. `optpipe validate` and the dashboard recompute both. |
 | `session-YYYY-MM-DD.md` | Human-readable rendering |
 
 Older outputs (a v1 `session-*.json` plus a `session-*.v1_1.json` preview) are still read by `--append` and the dashboard;
@@ -147,13 +163,13 @@ or webhooks). It also never modifies the session record; `watch.json` references
 * **Coverage.** `checked_through` = min(last date the calendar lists, as_of + 120 d).
 * **IV (`method: derived`).** Each contract's IV is a Black-Scholes inversion of the chain mid (European, no dividends, with American early exercise ignored and noted). IV30 is the ATM IV per expiry (the call/put mean, linear in strike at spot), interpolated or flat-extrapolated to 30 days. It is stored as one daily point per underlying in `var/state/iv_history/<SYM>.jsonl`. R10 stays a soft UNKNOWN until there are 20 points.
 
-## Schema v1.1 proposal (Doodle's ruling 5): merged into spec 1.1.0
+## Schema v1.1 proposal (Doodle's ruling 5): merged into spec 1.1.0 (now 1.1.1)
 
 The proposal lives in `spec_patches/v1.1/` (a generated copy of the frozen v1 schema/example plus `CHANGES.md`).
 Doodle merged all 8 items into spec 1.1.0; `spec_patches/v1.1/MERGE_STATUS.md` (kept in the repo, generated by
 `scripts/make_spec_patch.py`, `--check` fails on drift) records which were taken as proposed (1, 2, 6) and which with Doodle's
 changes (3 premarket_scans, 4 global_snapshots, 5 trace_ref, 8 LimitPrice raw, 9 Condition raw). The spec folder stays the
-source of truth; the pipeline now writes 1.1.0 records.
+source of truth; the pipeline now writes 1.1.1 records. The proposal schema itself is frozen (it only knows 1.0.0/1.1.0).
 
 ## Tick rounding (spec `risk_rules.yaml` `config.tick_rules`)
 
@@ -163,18 +179,40 @@ The penny-pilot list `[SPY, QQQ, IWM, JPM]` is a **placeholder** in the spec too
 
 | Spread | limit | stop | target | Source |
 |---|---|---|---|---|
-| debit (built today) | DOWN (pay no more) | UP (exit no later) | DOWN (take profit no later) | spec 1.1.0 |
-| credit (not built yet) | min credit UP | debit to close DOWN | buy-back UP | Doodle's ruling for 1.1.1, mirrored in `planner/ticks.py` |
+| debit | DOWN (pay no more) | UP (exit no later) | DOWN (take profit no later) | spec 1.1.1 `directions.debit` |
+| credit | min credit UP | debit to close DOWN | buy-back UP | spec 1.1.1 `directions.credit` |
 
-Spec 1.1.0's INV-13 still requires every stop to round UP, so a credit stop rounded DOWN is flagged until 1.1.1;
-`test_known_gap_credit_stop_vs_spec_1_1_0` documents this and flips once the pinned VERSION changes.
+Spec 1.1.0's INV-13 required every stop to round UP, which is wrong for credit stops; records are therefore written as
+**1.1.1**, where INV-13 applies the credit directions to credit verticals. `test_credit_stop_rounding_by_record_version`
+shows the same credit ticket flagged under 1.1.0 and clean under 1.1.1.
 Example: JPM bull call 340/350 limit 3.1006 → **3.10** (0.05, down), stop 1.5125 → **1.52** (0.01, up), target **6.05** (0.05, down).
+
+## Vertical spreads (INV-14, spec 1.1.1)
+
+`planner/verticals.py` mirrors Doodle's `verticals.py` / INV-14 and runs on **every** planner ticket; a ticket that fails is
+dropped with reason `INV-14: …` (fail closed). Everything is derived from the legs with `Decimal`, exact to $0.01:
+
+| | credit (bull put / bear call) | debit (bull call / bear put) |
+|---|---|---|
+| structure | 2 legs, same type and expiry, ratio 1:1, multiplier 100, one buy + one sell, strikes ordered, limit `price_type` credit | same, `price_type` debit |
+| limit / stop / target | 0 < c < w; c < stop < w; 0 ≤ target < c | 0 < d < w; 0 < stop < d; d < target ≤ w |
+| max loss / profit | (w − c)·100·q / c·100·q; and (stop − c)·100·q ≤ max loss | d·100·q / (w − d)·100·q |
+| breakeven | put: short − c, call: short + c | call: long + d, put: long − d |
+| rounding | limit UP, stop DOWN, target UP | limit DOWN, stop UP, target DOWN |
+| stop `op` (spec 1.1.2, mirrored early) | `gte` (debit to close rises to the stop) | `lte` (value falls to the stop) |
+
+Stored `max_loss`, `max_profit` and `breakevens` must equal the computed values. R04 and R11 use the computed max loss plus
+fees (`fees_per_contract_usd` × contracts × legs), as the spec's `risk_reference.py` does. `tests/test_verticals.py`
+checks parity with the spec's `vertical_errors` on a mutation matrix; target `op` is not checked (the spec does not yet).
 
 ## CI (local only)
 
 `.github/workflows/ci.yml` sets `OPTIONS_SPEC_DIR=spec/` and runs `sync_spec.py --check` (before and after the run), pytest,
 Doodle's spec tests (inside `spec/`), `gen_models.py --check`, `make_spec_patch.py --check`, the paper-only scan and a CLI
-fixture run validated as 1.1.0. It is **not pushed anywhere** (no remote).
+fixture run validated as 1.1.1. It is **not pushed anywhere** (no remote).
+Tests marked `live` (`tests/test_watch_live.py`: one real `watch --live --once` pass, read-only GETs) are **skipped by default
+and never run in CI**; live mode is untested in CI. Run them by hand with `pytest -m live` or `OPTPIPE_LIVE_TESTS=1 pytest`.
+`tests/test_repo_hygiene.py` fails on absolute box paths, tokens/keys, or non-placeholder email addresses in tracked files.
 
 ## Modules
 
@@ -221,13 +259,13 @@ python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
 .venv/bin/optpipe watch --session out/session-2026-10-13.json --replay tests/fixtures/2026-10-13/watch_tape.yaml --out out
 .venv/bin/optpipe serve --out out                                          # dashboard on 127.0.0.1:8765
 .venv/bin/pytest                                                           # our tests (offline)
-cd /workspace/trading/spec && ../../options-pipeline/.venv/bin/python -m pytest -q   # Doodle's tests
-.venv/bin/python scripts/sync_spec.py            # re-pin spec/ (refuses anything but VERSION 1.1.0 / manifest 3b25cfe5...)
+cd ../trading/spec && ../../options-pipeline/.venv/bin/python -m pytest -q   # Doodle's tests
+.venv/bin/python scripts/sync_spec.py            # re-pin spec/ (refuses anything but VERSION 1.1.1 / manifest 477401b6...)
 .venv/bin/python scripts/sync_spec.py --check    # what CI runs
 OPTIONS_SPEC_DIR=$PWD/spec .venv/bin/pytest      # our tests against the pinned copy (CI mode)
 ```
 
-`--live` swaps in `HttpFetcher` (read-only GETs to Finviz, Nasdaq, Fed, BLS and Treasury). It is **experimental and untested in CI**.
+`--live` swaps in `HttpFetcher` (read-only GETs to Finviz, Nasdaq, Fed, BLS and Treasury). It is **experimental and untested in CI** (the only live test is opt-in: `pytest -m live`).
 The global snapshot, single-name events and earnings have no live source and remain `missing`.
 
 ## Live vs fixtures
@@ -255,9 +293,9 @@ The global snapshot, single-name events and earnings have no live source and rem
 2. **Review ids.** They are `rv-<run>-<ticket>`, unique and stable within a session (ruling 2). The example uses `rv-premarket`. The schema allows both.
 3. **Planner alternatives and rounding.**
    * The planner builds extra alternative tickets per candidate.
-   * Ticks follow the spec's `tick_rules`: JPM stop 1.5125 → **1.52** (UP, 0.01), target 6.05 (DOWN, 0.05), as in Doodle's 1.1.0 example.
+   * Ticks follow the spec's `tick_rules`: JPM stop 1.5125 → **1.52** (UP, 0.01), target 6.05 (DOWN, 0.05), as in Doodle's 1.1.x example.
 4. **Per-run scans.** Records carry `premarket_scans[]`/`global_snapshots[]` per run plus the singular legacy objects (INV-12).
 5. **Open interest** is an integer (ruling 5). The v1 example has floats, and both validate.
 6. **Missing count.** `data_quality.missing` is large because per-contract greeks are missing.
-7. **Run phases (ruling 6).** These are premarket 04:00–08:30, preopen < 09:30, open < 09:45, then intraday until the close (16:00, or 13:00 on early closes). Anything else, including weekends and NYSE holidays, is `closed`. Records (1.1.0) write `closed`; only the v1 compat view maps it to `afterhours`.
+7. **Run phases (ruling 6).** These are premarket 04:00–08:30, preopen < 09:30, open < 09:45, then intraday until the close (16:00, or 13:00 on early closes). Anything else, including weekends and NYSE holidays, is `closed`. Records (1.1.x) write `closed`; only the v1 compat view maps it to `afterhours`.
 8. **R08 differs from the example.** With real Fed/BLS calendars, R08 can PASS or FLAG. Doodle's example has UNKNOWN (no coverage). The R08/R09 window is clipped at the earliest leg expiry.

@@ -178,7 +178,15 @@ def main(argv: list[str] | None = None) -> int:
         mod = discover(settings.spec_path).load_module("session_validator")
         if mod is None:
             print("spec validate_session.py not found"); return 2
-        errs = mod.validate(json.loads(Path(a.file).read_text()), base_dir=Path(a.file).resolve().parent)
+        errs = list(mod.validate(json.loads(Path(a.file).read_text()), base_dir=Path(a.file).resolve().parent))
+        from .records.store import verify_session_ref
+        tp = Path(str(a.file).replace(".json", ".trace.json"))
+        if tp.exists():
+            ok, msg = verify_session_ref(a.file, json.loads(tp.read_text()))
+            if ok is False:
+                errs.append(f"session_ref: {msg}")
+            elif ok:
+                print(msg)
         print("\n".join(errs) if errs else "OK: 0 errors")
         return 1 if errs else 0
 
@@ -201,7 +209,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"wrote {w.json}  sha256 {w.json_sha256}  (schema {rec['schema_version']}, trace_ref -> {w.trace.name})\n"
           f"wrote {w.trace}  sha256 {w.trace_sha256}\nwrote {w.md}")
     if ferrs is not None:
-        print(f"validate_session {w.json.name}: " + ("OK (schema + invariants INV-01..13)" if not ferrs
+        print(f"validate_session {w.json.name}: " + (f"OK as {rec['schema_version']} (schema + invariants INV-01..{'14' if rec['schema_version'] == '1.1.1' else '13'})" if not ferrs
                                                      else f"{len(ferrs)} error(s)\n  " + "\n  ".join(ferrs[:20])))
     v = trace.runs[-1].validation
     return 1 if (v.get("errors") or ferrs) else 0

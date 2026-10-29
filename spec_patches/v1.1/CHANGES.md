@@ -1,6 +1,6 @@
 # Session schema v1.1: proposal for Doodle
 
-Status: **PROPOSAL**. Doodle's locked spec in `/workspace/trading/spec/` is unchanged and is still canonical.
+Status: **PROPOSAL**. Doodle's locked spec in `../trading/spec/` is unchanged and is still canonical.
 These files are a patched **copy** (ruling 5): `make_spec_patch.py` builds them from the locked
 files, and `scripts/make_spec_patch.py --check` fails if they drift.
 

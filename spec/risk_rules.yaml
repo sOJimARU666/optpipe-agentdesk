@@ -1,7 +1,7 @@
 # Deterministic Risk Officer rules for the PAPER-ONLY US options app.
 # Human-readable companion: risk_rules.md. Reference implementation: risk_reference.py.
 # All quoted: never let YAML auto-convert timestamps/dates.
-ruleset_version: "1.1.0"   # 1.1.0: R11 sector cap, R12 defined-risk structure, R13 hold period, profiles.demo
+ruleset_version: "1.1.1"   # 1.1.1: R04 max loss for verticals from the INV-14 formula (verticals.py); 1.1.0: R11 sector cap, R12 defined-risk structure, R13 hold period, profiles.demo
 
 config:
   # --- placeholders pending Eugene: keep labelled until he confirms ---
@@ -36,7 +36,9 @@ config:
     threshold: "3.00"                  # tier chosen by the RAW price
     penny_ticks: ["0.01", "0.05"]      # below / at-or-above threshold
     standard_ticks: ["0.05", "0.10"]
-    directions: {debit_limit: down, stop: up, target: down}
+    directions:                        # INV-13; credit directions enforced for schema 1.1.1 records only
+      debit: {limit: down, stop: up, target: down}    # pay at most; stop and target trigger no later than the raw level
+      credit: {limit: up, stop: down, target: up}     # receive at least; stop and target (buy-back cost) trigger no later than raw
   market_hours:
     timezone: America/New_York         # ALWAYS compute here; Berlin is display only
     open: "09:30"

@@ -7,12 +7,15 @@ Without --out-dir it builds a fresh offline fixture session (premarket run + --a
 replay `optpipe watch` over the hand-made fictional tape) in a temp dir, so the snapshots are reproducible. Pages are rendered by the same FastAPI app (export mode:
 relative links, no HTMX round-trips, all reviews/steps inline in <details>). The timeline and today PNGs are taken with
 playwright using an installed Chrome/Chromium (PLAYWRIGHT_CHROME or /usr/bin/google-chrome); skipped if absent.
+Pages are rendered against the pinned spec/ (OPTIONS_SPEC_DIR, overridable). Absolute box paths are never written:
+records use repo-relative paths, and the export refuses to write a page that still contains one.
 Paper only: reads local files, writes HTML/PNG. No network.
 """
 from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import sys
 import tempfile
@@ -21,12 +24,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
+# Snapshots are rendered against the pinned spec copy (spec/, identical to Doodle's release per sync_spec --check),
+# so exported pages show repo-relative spec paths such as spec/risk_rules.yaml. Override with OPTIONS_SPEC_DIR.
+os.environ.setdefault("OPTIONS_SPEC_DIR", str(ROOT / "spec"))
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 from optpipe.cli import main as cli_main  # noqa: E402
 from optpipe.dashboard.app import PAGES, create_app  # noqa: E402
 from optpipe.dashboard.data import OutDir  # noqa: E402
 
+ABS_PATH = re.compile(r"(?<![\w.~-])/(?:workspace|home|tmp|root|cursor|Users|var/folders)/[^\s\"'<]*")
 CHROME_CANDIDATES = [os.environ.get("PLAYWRIGHT_CHROME", ""), "/usr/bin/google-chrome", "/usr/bin/chromium",
                      "/usr/bin/chromium-browser"]
 
@@ -58,6 +65,9 @@ def export_html(out_dir: Path, dest: Path) -> dict[str, Path]:
         r = c.get(url)
         r.raise_for_status()
         html = r.text.replace(str(out_dir), "out")          # don't leak the temp path
+        leak = ABS_PATH.search(html)
+        if leak:
+            raise SystemExit(f"{page}.html would contain an absolute path: {leak.group(0)!r}")
         p = dest / f"{page}.html"
         p.write_text(html)
         written[page] = p

@@ -10,6 +10,23 @@ from pydantic import BaseModel, ConfigDict, Field
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = REPO_ROOT / "config"
+# Doodle's live spec folder: the sibling `trading/spec` next to this repo (no absolute box paths in tracked files).
+DEFAULT_SPEC_DIR = "../trading/spec"
+
+
+def display_path(p: str | Path | None) -> str | None:
+    """Path as written into records, traces and exports: relative to the repo root (e.g. spec/risk_rules.yaml or
+    ../trading/spec/risk_rules.yaml), never an absolute box path. Falls back to the bare file name."""
+    if p is None:
+        return None
+    q = Path(p).resolve()
+    try:
+        return q.relative_to(REPO_ROOT).as_posix()
+    except ValueError:
+        pass
+    rel = Path(os.path.relpath(q, REPO_ROOT)).as_posix()
+    # a sibling of the repo (e.g. ../trading/spec/...) is fine; anything further out is reduced to its name
+    return rel if not rel.startswith("../..") else q.name
 
 
 class _M(BaseModel):
@@ -116,7 +133,7 @@ class Settings(_M):
     watchlist: list[str] = Field(default_factory=list)
     sectors: list[str] = Field(default_factory=list)
     scenario: ScenarioCfg | None = None
-    spec_dir: str = "/workspace/trading/spec"
+    spec_dir: str = DEFAULT_SPEC_DIR     # relative paths resolve against the repo root
     market: MarketCfg = Field(default_factory=MarketCfg)
     discovery: DiscoveryCfg
     http: HttpCfg
@@ -129,7 +146,8 @@ class Settings(_M):
 
     @property
     def spec_path(self) -> Path:
-        return Path(os.environ.get("OPTIONS_SPEC_DIR", self.spec_dir))
+        env = os.environ.get("OPTIONS_SPEC_DIR")
+        return Path(env).resolve() if env else repo_path(self.spec_dir).resolve()
 
 
 def repo_path(p: str | Path) -> Path:

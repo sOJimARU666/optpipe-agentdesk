@@ -7,8 +7,8 @@ permissions:
   contents: read
 
 env:
-  # spec/ is the pinned copy of Doodle's spec (scripts/sync_spec.py: VERSION 1.1.0 + MANIFEST sha256 3b25cfe5...).
-  # Doodle owns it; changes go through Doodle in /workspace/trading/spec and a re-sync, never an edit here.
+  # spec/ is the pinned copy of Doodle's spec (scripts/sync_spec.py: VERSION 1.1.1 + MANIFEST sha256 477401b6...).
+  # Doodle owns it; changes go through Doodle in ../trading/spec and a re-sync, never an edit here.
   OPTIONS_SPEC_DIR: ${{ github.workspace }}/spec
   PYTHONDONTWRITEBYTECODE: "1"
 
@@ -31,13 +31,13 @@ jobs:
       - name: spec_patches/v1.1 matches the locked spec + ruling 5
         run: python scripts/make_spec_patch.py --check
       - name: Test suite (offline)
-        run: python -m pytest -p no:cacheprovider
+        run: python -m pytest -p no:cacheprovider          # `live`-marked tests are skipped (opt-in only)
       - name: Doodle's spec tests
         working-directory: ${{ env.OPTIONS_SPEC_DIR }}
         run: |
           pip install pyyaml jsonschema pytest
           python -m pytest -q -p no:cacheprovider
-      - name: CLI fixture run validates (schema 1.1.0 with Doodle's validator, INV-01..13)
+      - name: CLI fixture run validates (schema 1.1.1 with Doodle's validator, INV-01..14)
         run: |
           optpipe run --out "$RUNNER_TEMP/out"
           optpipe validate "$RUNNER_TEMP/out/session-2026-10-13.json"

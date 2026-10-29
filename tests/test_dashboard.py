@@ -13,7 +13,7 @@ from optpipe.dashboard.app import timeline_model, tickets_model  # noqa: E402
 from optpipe.dashboard.data import OutDir, berlin, clock, pair  # noqa: E402
 
 DATE = "2026-10-13"
-SV = "1.1.0"                     # Doodle's spec 1.1.0: the record is written as 1.1.0 (with trace_ref)
+SV = "1.1.1"                     # Doodle's spec 1.1.1: the record is written as 1.1.1 (with trace_ref)
 ROOT = Path(__file__).resolve().parents[1]
 
 

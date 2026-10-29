@@ -13,8 +13,9 @@ from typing import Optional
 from pydantic import AwareDatetime, Field
 
 from .common import Bias, Model
-from .schema_v1_1 import (Candidate, EventCalendar, GlobalSnapshot, IdeaLogItem, PremarketScan, RiskReview,
-                        SessionRecordV11, Source, Ticket, WatcherRule)
+# Runtime contracts use the PINNED spec schema (1.1.1); schema_v1_1 (the spec_patches proposal) is tooling only.
+from .schema_spec import (Candidate, EventCalendar, GlobalSnapshot, IdeaLogItem, PremarketScan, RiskReview,
+                          SessionRecordSpec, Source, Ticket, WatcherRule)
 
 HYPOTHETICAL_LABEL = "HYPOTHETICAL - paper only, not an order"   # schema const on every ticket
 
@@ -149,7 +150,7 @@ class PlannerOutput(Model):
 # ---------------- Risk Officer ----------------
 class RiskInput(Model):
     """The draft record (everything up to tickets) plus when/for which run to review."""
-    record: SessionRecordV11
+    record: SessionRecordSpec
     run_id: str
     evaluated_at: AwareDatetime
 

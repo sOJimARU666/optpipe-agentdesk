@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """Pin Doodle's spec into this repo's spec/ folder (approved by Moodle and Doodle, 2026-10-29).
 
-  python scripts/sync_spec.py            copy /workspace/trading/spec -> spec/ after verifying it is exactly the
+  python scripts/sync_spec.py            copy ../trading/spec -> spec/ after verifying it is exactly the
                                          pinned release (VERSION + sha256 of MANIFEST.sha256 + every listed file)
   python scripts/sync_spec.py --check    CI: verify spec/ is untouched (manifest sha == pin, every file matches,
                                          nothing extra, nothing missing). Exit 1 on any mismatch or edit.
 
-Doodle owns spec/. Never edit it here: changes go through Doodle in /workspace/trading/spec, a new VERSION and
+Doodle owns spec/. Never edit it here: changes go through Doodle in ../trading/spec, a new VERSION and
 MANIFEST, then a new pin below (EXPECTED_*) and a re-run of this script. The live folder stays the source of
-truth; local/default runs keep reading /workspace/trading/spec directly, CI sets OPTIONS_SPEC_DIR=spec/.
+truth; local/default runs keep reading ../trading/spec directly, CI sets OPTIONS_SPEC_DIR=spec/.
 
 Copied: the files listed in MANIFEST.sha256, the manifest itself, and the two frozen v1.0.0 files from
 _v1_backup/ that gen_models.py / make_spec_patch.py need (not covered by the manifest, so pinned by their
@@ -29,10 +29,10 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_SOURCE = Path("/workspace/trading/spec")
+DEFAULT_SOURCE = ROOT.parent / "trading" / "spec"     # Doodle's live folder, the sibling of this repo
 DEFAULT_DEST = ROOT / "spec"
-EXPECTED_VERSION = "1.1.0"
-EXPECTED_MANIFEST_SHA256 = "3b25cfe562bbd818589e82e069235b188c4f2b4aac434c04fce54d238fd95e07"
+EXPECTED_VERSION = "1.1.1"
+EXPECTED_MANIFEST_SHA256 = "477401b68298f5b4513aa9b46eed9a56df5d1097e85175bdcf8a166cd3d4f489"
 MANIFEST, VERSION, PIN = "MANIFEST.sha256", "VERSION", "PIN.json"
 V1_FILES = ("_v1_backup/session.schema.json", "_v1_backup/session.example.json")
 IGNORED_DIRS = {"__pycache__", ".pytest_cache"}          # never pinned; created by running Doodle's tests
@@ -88,9 +88,9 @@ def sync(source: Path, dest: Path, version: str, manifest_sha: str) -> dict:
         v1[name] = sha256(source / name)
     pin = {
         "owner": "Doodle",
-        "note": "Pinned copy of Doodle's spec. Do not edit: changes go through Doodle in /workspace/trading/spec, "
+        "note": "Pinned copy of Doodle's spec. Do not edit: changes go through Doodle in ../trading/spec, "
                 "then scripts/sync_spec.py with a new pin. CI (OPTIONS_SPEC_DIR=spec/) fails on any edit.",
-        "source": str(source),
+        "source": os.path.relpath(source.resolve(), ROOT) if source.is_absolute() else str(source),
         "version": version,
         "manifest_sha256": manifest_sha,
         "files": dict(sorted(files.items())),

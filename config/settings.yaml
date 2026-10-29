@@ -22,7 +22,7 @@ scenario:                    # FICTIONAL demo scenario -> "FICTIONAL DEMO" tag o
 
 # Doodle's spec folder (schema, risk rules, test cases). Loaded read-only from code, never copied.
 # Override with env OPTIONS_SPEC_DIR.
-spec_dir: /workspace/trading/spec
+spec_dir: ../trading/spec
 
 market:
   timezone: America/New_York

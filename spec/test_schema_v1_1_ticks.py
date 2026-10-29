@@ -70,7 +70,7 @@ def test_inv12_arrays_require_1_1_0():
     assert vs.validate(s) == []
     s["global_snapshots"] = [copy.deepcopy(s["global_snapshot"])]
     requality(s)
-    assert errs(s, "INV-12") == ["INV-12 global_snapshots requires schema_version 1.1.0"]
+    assert errs(s, "INV-12") == ["INV-12 global_snapshots requires schema_version 1.1.0 or 1.1.1"]
 
 
 def test_inv12_items_are_schema_checked():

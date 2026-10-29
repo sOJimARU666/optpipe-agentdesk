@@ -83,7 +83,7 @@ def targets(spec_dir: Path):
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--check", action="store_true", help="exit 1 if committed models differ from a fresh generation")
-    ap.add_argument("--spec-dir", default=os.environ.get("OPTIONS_SPEC_DIR", "/workspace/trading/spec"))
+    ap.add_argument("--spec-dir", default=os.environ.get("OPTIONS_SPEC_DIR", str(Path(__file__).resolve().parents[1].parent / "trading" / "spec")))
     ap.add_argument("legacy_spec_dir", nargs="?")
     a = ap.parse_args(argv)
     spec_dir = Path(a.legacy_spec_dir or a.spec_dir)

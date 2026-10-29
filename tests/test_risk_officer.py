@@ -120,7 +120,8 @@ def test_adapter_parity_with_reference_inputs(example, ref, raw_rules, ruleset):
 
 
 def test_ruleset_is_loaded_in_place_not_copied(spec, ruleset):
-    assert ruleset.source == str(spec.path("risk_rules"))
+    from optpipe.config import display_path
+    assert ruleset.source == display_path(spec.path("risk_rules"))      # repo-relative, no box paths in records
     assert [r.id for r in ruleset.rules] == [r["id"] for r in spec.risk_rules()["rules"]]
 
 

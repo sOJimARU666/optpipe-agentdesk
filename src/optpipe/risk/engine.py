@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 from pydantic import BaseModel, ConfigDict
 
+from ..planner.verticals import from_ticket, is_vertical
 from .review_input import REvent, RField, RLeg, ReviewInput
 from .ruleset import MarketHours, RuleDef, Ruleset
 
@@ -173,6 +174,13 @@ def payoff_max_loss(inp: ReviewInput, c: Ctx) -> dict:
     fees = D(c.raw["fees_per_contract_usd"]) * qty * sum(D(l.ratio) for l in legs)
     if call_slope < 0:
         return {"max_loss_usd": None, "unlimited": True}
+    if tk.strategy and is_vertical(tk.strategy):   # ruleset 1.1.1: INV-14 vertical max loss (legs + limit) + fees, as risk_reference
+        legs_d = [{"type": l.type, "side": l.side, "strike": l.strike, "expiry": str(l.expiry), "ratio": l.ratio,
+                   "multiplier": int(mult)} for l in legs]
+        v, verr = from_ticket({"strategy": tk.strategy, "legs": legs_d, "quantity": tk.quantity,
+                               "limit_price": {"amount": tk.limit_price.amount, "price_type": tk.limit_price.price_type}})
+        if v is not None:
+            return {"max_loss_usd": float(v.max_loss + fees), "unlimited": False}
 
     def pnl(S: Decimal) -> Decimal:
         tot = D(0)

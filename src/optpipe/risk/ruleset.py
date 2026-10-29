@@ -107,8 +107,9 @@ def load_ruleset(spec: SpecFiles | None) -> tuple[Ruleset, list[str]]:
     if spec is None or (raw := spec.risk_rules()) is None:
         raise SpecMissing("Doodle's risk_rules.yaml not found (set spec_dir or OPTIONS_SPEC_DIR); "
                           "the Risk Officer will not run without it")
-    rs = ruleset_from_dict(raw, str(spec.path("risk_rules")))
-    notes = [f"risk rules {rs.ruleset_version} from spec: {spec.path('risk_rules')}"]
+    from ..config import display_path
+    rs = ruleset_from_dict(raw, display_path(spec.path("risk_rules")))
+    notes = [f"risk rules {rs.ruleset_version} from spec: {display_path(spec.path('risk_rules'))}"]
     if rs.config.placeholders:
         notes.append("PLACEHOLDER thresholds pending Eugene: " + ", ".join(
             f"{k}={rs.raw_config.get(k)}" for k in rs.config.placeholders))

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -85,3 +86,13 @@ def ruleset_calendar(spec):
     from optpipe.risk import load_ruleset
     from optpipe.risk.engine import Calendar
     return Calendar(load_ruleset(spec)[0].config.market_hours)
+
+
+def pytest_collection_modifyitems(config, items):
+    """`live` tests are opt-in: they run only with `-m live` (any -m expression naming live) or OPTPIPE_LIVE_TESTS=1."""
+    if os.environ.get("OPTPIPE_LIVE_TESTS") == "1" or "live" in (config.getoption("-m") or ""):
+        return
+    skip = pytest.mark.skip(reason="live test: run with `-m live` or OPTPIPE_LIVE_TESTS=1")
+    for item in items:
+        if "live" in item.keywords:
+            item.add_marker(skip)
