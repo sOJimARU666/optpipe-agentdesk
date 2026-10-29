@@ -5,7 +5,7 @@ Regenerate: .venv/bin/python scripts/gen_models.py
 from __future__ import annotations
 
 SCHEMA_SHA256 = "1f5d863d7a35edf81930937be93b0b2d439439bea9448fe5b23159692bdb1767"
-SCHEMA_SOURCE = "/workspace/trading/spec/session.schema.json"
+SCHEMA_SOURCE = "<spec>/session.schema.json"
 
 from datetime import date as date_aliased
 from enum import Enum, IntEnum

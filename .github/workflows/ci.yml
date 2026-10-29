@@ -7,8 +7,8 @@ permissions:
   contents: read
 
 env:
-  # Doodle's locked spec is the source of truth and is NOT vendored here. It is not public:
-  # provide it at this path (TODO for Eugene: e.g. a private checkout step or a runner with the folder mounted).
+  # spec/ is the pinned copy of Doodle's spec (scripts/sync_spec.py: VERSION 1.1.0 + MANIFEST sha256 3b25cfe5...).
+  # Doodle owns it; changes go through Doodle in /workspace/trading/spec and a re-sync, never an edit here.
   OPTIONS_SPEC_DIR: ${{ github.workspace }}/spec
   PYTHONDONTWRITEBYTECODE: "1"
 
@@ -20,8 +20,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
-      - name: Spec present
-        run: test -f "$OPTIONS_SPEC_DIR/session.schema.json" || { echo "::error::Doodle's spec not found at $OPTIONS_SPEC_DIR"; exit 1; }
+      - name: Pinned spec intact (manifest sha matches the pin, no file edited, nothing extra)
+        run: python scripts/sync_spec.py --check --dest "$OPTIONS_SPEC_DIR"
       - name: Install
         run: pip install -e '.[dev]'
       - name: Paper-only scan (structural - no broker, no order path, GET-only HTTP and dashboard)
@@ -37,7 +37,9 @@ jobs:
         run: |
           pip install pyyaml jsonschema pytest
           python -m pytest -q -p no:cacheprovider
-      - name: CLI fixture run validates (v1 with Doodle's validator)
+      - name: CLI fixture run validates (schema 1.1.0 with Doodle's validator, INV-01..13)
         run: |
           optpipe run --out "$RUNNER_TEMP/out"
           optpipe validate "$RUNNER_TEMP/out/session-2026-10-13.json"
+      - name: Spec still pinned after the run (nothing wrote into spec/)
+        run: python scripts/sync_spec.py --check --dest "$OPTIONS_SPEC_DIR"

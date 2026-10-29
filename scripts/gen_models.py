@@ -69,9 +69,11 @@ def v1_base(spec_dir: Path) -> Path:
 
 def targets(spec_dir: Path):
     v1 = v1_base(spec_dir) / "session.schema.json"
-    yield MODELS / "schema_v1.py", generate(v1, "Doodle's v1.0.0 session.schema.json", "SessionRecordV1", str(v1))
+    yield MODELS / "schema_v1.py", generate(v1, "Doodle's v1.0.0 session.schema.json", "SessionRecordV1",
+                                              "<spec>/" + str(v1.relative_to(spec_dir)))   # live folder or pinned spec/
     live = spec_dir / "session.schema.json"
-    yield MODELS / "schema_spec.py", generate(live, "Doodle's live session.schema.json", "SessionRecordSpec", str(live))
+    yield MODELS / "schema_spec.py", generate(live, "Doodle's live session.schema.json", "SessionRecordSpec",
+                                                  "<spec>/session.schema.json")
     v11 = ROOT / "spec_patches/v1.1/session.schema.json"
     if v11.exists():
         yield MODELS / "schema_v1_1.py", generate(v11, "the v1.1 PROPOSAL spec_patches/v1.1/session.schema.json",

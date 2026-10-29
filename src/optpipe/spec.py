@@ -1,9 +1,12 @@
 """Read-only access to Doodle's spec folder (default /workspace/trading/spec, env OPTIONS_SPEC_DIR).
 
+Local/default runs read Doodle's live folder directly. CI sets OPTIONS_SPEC_DIR=spec/, the pinned copy written by
+scripts/sync_spec.py (VERSION + MANIFEST sha; `sync_spec.py --check` fails on any edit). Doodle owns both.
+
 The folder is the source of truth for the session schema (session.schema.json), the Risk Officer
 rules + test cases (risk_rules.yaml: `config`, `rules`, `fixture`, `tests`), the reference
 implementation (risk_reference.py) and the session validator (validate_session.py).
-This module never writes to the folder and never copies it; it loads files in place.
+This module never writes to the folder and never copies it; it loads files in place (copying is sync_spec.py's job).
 """
 from __future__ import annotations
 
