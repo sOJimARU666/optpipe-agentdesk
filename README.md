@@ -96,11 +96,14 @@ The PNG uses an installed Chrome (`PLAYWRIGHT_CHROME`, or `/usr/bin/google-chrom
 | Source | URL | Used for |
 |---|---|---|
 | Federal Reserve FOMC calendar | federalreserve.gov/monetarypolicy/fomccalendars.htm | FOMC events + coverage (R08) |
-| BLS release schedules | bls.gov/schedule/news_release/{empsit,cpi,ppi}.htm | NFP / CPI / PPI events + coverage (R08) |
+| BLS release calendar | bls.gov/schedule/news_release/bls.ics (one GET; only if `sources.bls_contact_email` is set) | NFP / CPI / PPI events + coverage (R08) |
+| FRED release calendar (fallback) | fred.stlouisfed.org/releases/calendar?rid={10,46,50}&y=<year> | CPI / PPI / NFP when BLS is skipped or fails |
 | U.S. Treasury Daily Treasury Bill Rates (CSV) | home.treasury.gov … `daily_treasury_bill_rates` | Risk-free rate r for Black-Scholes (13-week coupon equivalent, last business day **strictly before** the run, r = ln(1+y·91/365)/(91/365)) |
 
 * **Read only and cached.** Fetching is GET only through `HttpFetcher`. `CachedFetcher` keeps responses in `var/cache` (TTL 12 h) and falls back to a stale copy on errors. Tests are offline (`tests/fixtures/sources/`).
-* **BLS blocks automated clients (HTTP 403 "Access Denied").** When BLS is unavailable, only FOMC is used, the run notes say so, and NFP/CPI/PPI coverage stays missing. R08 is then UNKNOWN, never a false PASS.
+* **BLS needs a contact email in the User-Agent** (Doodle checked 2026-10-29: 403 without one, 200 with one). Live runs send `optpipe/1.1 (calendar fetch; contact: <email>)` with the email from `sources.bls_contact_email`. It is **empty by default**, and no address is hard-coded anywhere (a test scans for one). While it is empty, bls.gov is **not contacted**. The run notes say "BLS live fetch skipped", and CPI/PPI/NFP come from FRED's public release calendar instead (rid 10 CPI, 46 PPI, 50 Employment Situation). FRED lists times in US Central Time, so 7:30 am CT is converted to 08:30 ET. The parser refuses the page if it stops saying "Central Time". To use BLS, set `OPTPIPE_BLS_CONTACT_EMAIL=<an address you monitor>` in your shell (it overrides the empty config value and is never written to the repo).
+* From `bls.ics`, only the VEVENTs whose SUMMARY is exactly `Consumer Price Index`, `Producer Price Index` or `Employment Situation` count. Kinds missing from the ICS fall back to FRED one by one. If both fail, that kind's coverage stays missing and R08 is UNKNOWN, never a false PASS.
+* Remaining 2026 dates (tests use them; BLS = FRED), all at 08:30 ET = 14:30 Berlin (CET): NFP 11-06, CPI 11-10, PPI 11-13, NFP 12-04, CPI 12-10, PPI 12-15.
 * **Fixture replay is HAND-MADE.** `tests/fixtures/2026-10-13/macro_calendars.yaml` is a hand-made replay snapshot built from real 2026-10-29 captures. It is not an actual 2026-10-13 fetch, and every source says so.
 * **Coverage.** `checked_through` = min(last date the calendar lists, as_of + 120 d).
 * **IV (`method: derived`).** Each contract's IV is a Black-Scholes inversion of the chain mid (European, no dividends, with American early exercise ignored and noted). IV30 is the ATM IV per expiry (the call/put mean, linear in strike at spot), interpolated or flat-extrapolated to 30 days. It is stored as one daily point per underlying in `var/state/iv_history/<SYM>.jsonl`. R10 stays a soft UNKNOWN until there are 20 points.
@@ -192,7 +195,7 @@ The global snapshot, single-name events and earnings have no live source and rem
 |---|---|
 | Finviz screens, Nasdaq quote/option chain | Parsers tested on saved responses. Live = experimental GET. |
 | FOMC (Fed) | Parser tested on a real capture (fetched 2026-10-29). Live = GET. |
-| NFP/CPI/PPI (BLS) | Parser tested on captures. **Live GET is blocked (403)**, so coverage stays missing and R08 is UNKNOWN. The fixture uses a HAND-MADE replay. |
+| NFP/CPI/PPI (BLS / FRED) | ICS parser tested on a HAND-MADE `bls.ics` (no email configured, so none was fetched). FRED parser tested on real captures from 2026-10-29. Live BLS runs only with `bls_contact_email` set; otherwise FRED is used. The fixture run uses a HAND-MADE replay of the BLS schedule pages. |
 | Risk-free rate (Treasury) | Parser tested on the 2026 CSV. Live = GET. |
 | Implied volatility | Derived from chain mids (Black-Scholes). R10 is UNKNOWN until 20 daily points exist. |
 | Global snapshot, earnings reports, single-name events | Curated `session_inputs.yaml` / fixtures only |

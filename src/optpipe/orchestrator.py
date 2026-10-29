@@ -32,7 +32,7 @@ from .planner import PlannerAgent
 from .providers.base import Fetcher
 from .providers.cache import CachedFetcher
 from .providers.fetchers import FixtureFetcher, HttpFetcher
-from .providers.macro import LiveMacroCalendars, ReplayMacroCalendars
+from .providers.macro import LiveMacroCalendars, ReplayMacroCalendars, bls_user_agent
 from .providers.treasury import LiveTreasuryRates, ReplayTreasuryRates
 from .research.iv import IvHistoryStore
 from .providers.finviz import FinvizScreener
@@ -144,8 +144,12 @@ def build_pipeline(settings: Settings, fixtures_dir: Optional[Path], inputs: Ses
     # live: read-only public GETs (Finviz, Nasdaq, Fed, BLS, Treasury). Global snapshot has no live provider yet.
     http = HttpFetcher(settings.http.user_agent, settings.http.timeout_s)
     cached = CachedFetcher(http, cache_dir(settings), sc.cache_ttl_hours)
+    bls_ua = bls_user_agent(sc.bls_contact_email)            # None (skip BLS) unless an email is configured
+    bls = CachedFetcher(HttpFetcher(bls_ua, settings.http.timeout_s), cache_dir(settings),
+                        sc.cache_ttl_hours) if bls_ua else None
     return Pipeline(settings, http, "live", UnavailableGlobalSnapshot(settings.discovery.global_indexes),
-                    LiveMacroCalendars(cached, sc.fomc_url, sc.bls_urls),
+                    LiveMacroCalendars(cached, sc.fomc_url, bls, sc.bls_ics_url, sc.fred_calendar_url,
+                                       sc.fred_release_ids),
                     LiveTreasuryRates(cached, sc.treasury_url, sc.treasury_tenor),
                     IvHistoryStore(state_dir(settings) / "live" / "iv_history"))
 

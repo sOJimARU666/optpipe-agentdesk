@@ -1,0 +1,72 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Department of Labor//Bureau of Labor Statistics//EN
+X-WR-CALNAME:BLS.gov Economic News Release Schedule
+X-WR-TIMEZONE:US-Eastern
+BEGIN:VEVENT
+UID:optpipe-handmade-00@fixture
+DTSTART;TZID=US-Eastern:20261014T083000
+SUMMARY:Consumer Price Index
+END:VEVENT
+BEGIN:VEVENT
+UID:optpipe-handmade-01@fixture
+DTSTART;TZID=US-Eastern:20261103T100000
+SUMMARY:Job Openings and Labor Turnover Survey
+END:VEVENT
+BEGIN:VEVENT
+UID:optpipe-handmade-02@fixture
+DTSTART;TZID=US-Eastern:20261106T083000
+SUMMARY:Employment Situ
+ ation
+END:VEVENT
+BEGIN:VEVENT
+UID:optpipe-handmade-03@fixture
+DTSTART;TZID=US-Eastern:20261110T083000
+SUMMARY:Consumer Price Index
+END:VEVENT
+BEGIN:VEVENT
+UID:optpipe-handmade-04@fixture
+DTSTART;TZID=US-Eastern:20261110T083000
+SUMMARY:Real Earnings
+END:VEVENT
+BEGIN:VEVENT
+UID:optpipe-handmade-05@fixture
+DTSTART;TZID=US-Eastern:20261113T083000
+SUMMARY:Producer Price Index
+END:VEVENT
+BEGIN:VEVENT
+UID:optpipe-handmade-06@fixture
+DTSTART:20261204T133000Z
+SUMMARY:Employment Situation
+END:VEVENT
+BEGIN:VEVENT
+UID:optpipe-handmade-07@fixture
+DTSTART;TZID=US-Eastern:20261210T083000
+SUMMARY:Consumer Price Index
+END:VEVENT
+BEGIN:VEVENT
+UID:optpipe-handmade-08@fixture
+DTSTART;TZID=US-Eastern:20261215T083000
+SUMMARY:Producer Price Index
+END:VEVENT
+BEGIN:VEVENT
+UID:optpipe-handmade-09@fixture
+DTSTART;TZID=US-Eastern:20261217T100000
+SUMMARY:State Employment and Unemployment
+END:VEVENT
+BEGIN:VEVENT
+UID:optpipe-handmade-10@fixture
+DTSTART;TZID=US-Eastern:20270108T083000
+SUMMARY:Employment Situation
+END:VEVENT
+BEGIN:VEVENT
+UID:optpipe-handmade-11@fixture
+DTSTART;TZID=US-Eastern:20270113T083000
+SUMMARY:Consumer Price Index
+END:VEVENT
+BEGIN:VEVENT
+UID:optpipe-handmade-12@fixture
+DTSTART;TZID=US-Eastern:20270114T083000
+SUMMARY:Producer Price Index
+END:VEVENT
+END:VCALENDAR

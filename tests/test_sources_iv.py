@@ -110,11 +110,26 @@ class FakeFetcher:
         return FetchResult((SRC / BLS[kind][0]).read_text(), url, self.at, "live")
 
 
-def test_live_calendars_survive_bls_403():
-    p = LiveMacroCalendars(FakeFetcher(), FOMC_URL, {k: v[1] for k, v in BLS.items()})
+def test_live_calendars_survive_bls_403_and_fall_back_to_fred():
+    """BLS ICS answers 403 -> every BLS kind comes from FRED; nothing is lost."""
+    fred_pages = {10: "fred_calendar_rid10_2026.html", 46: "fred_calendar_rid46_2026.html",
+                  50: "fred_calendar_rid50_2026.html"}
+
+    class Fred(FakeFetcher):
+        def get(self, resource, key, url):
+            if key.startswith("fred-"):
+                self.calls += 1
+                rid = int(url.split("rid=")[1].split("&")[0])
+                if "y=2026" not in url:
+                    raise DataUnavailable(f"HTTP 404 for {url}")
+                return FetchResult((SRC / fred_pages[rid]).read_text(), url, self.at, "live")
+            return super().get(resource, key, url)
+
+    p = LiveMacroCalendars(Fred(blocked=()), FOMC_URL, bls_fetcher=FakeFetcher(blocked=("bls",)))
     snaps, notes = p.get_calendars(CAPTURED)
-    assert [s.kind for s in snaps] == ["FOMC"]
-    assert len(notes) == 3 and all("403" in n for n in notes)
+    assert [s.kind for s in snaps] == ["FOMC", "CPI", "PPI", "NFP"]
+    assert any("bls.ics unavailable" in n and "403" in n for n in notes)
+    assert all(s.source["id"].startswith("src-fred-") for s in snaps[1:])
 
 
 # ---------------------------------------------------------------- cache

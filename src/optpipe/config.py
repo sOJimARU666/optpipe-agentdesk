@@ -75,10 +75,12 @@ class SourcesCfg(_M):
     cache_dir: str = "var/cache"                 # relative to the repo root unless absolute
     cache_ttl_hours: float = 12
     fomc_url: str = "https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm"
-    bls_urls: dict[str, str] = Field(default_factory=lambda: {
-        "CPI": "https://www.bls.gov/schedule/news_release/cpi.htm",
-        "NFP": "https://www.bls.gov/schedule/news_release/empsit.htm",
-        "PPI": "https://www.bls.gov/schedule/news_release/ppi.htm"})
+    # BLS: bls.gov only serves scripted GETs whose User-Agent carries a contact email. Empty -> BLS is skipped
+    # (FRED fallback). Never hard-code a real address here; set it in a local settings file.
+    bls_contact_email: str = ""
+    bls_ics_url: str = "https://www.bls.gov/schedule/news_release/bls.ics"
+    fred_calendar_url: str = "https://fred.stlouisfed.org/releases/calendar?rid={rid}&y={year}"
+    fred_release_ids: dict[str, int] = Field(default_factory=lambda: {"CPI": 10, "PPI": 46, "NFP": 50})
     treasury_url: str = ("https://home.treasury.gov/resource-center/data-chart-center/interest-rates/"
                          "daily-treasury-rates.csv/{year}/all?type=daily_treasury_bill_rates"
                          "&field_tdr_date_value={year}&page&_format=csv")
@@ -137,4 +139,8 @@ def repo_path(p: str | Path) -> Path:
 
 def load_settings(path: str | Path | None = None) -> Settings:
     p = Path(path) if path else CONFIG_DIR / "settings.yaml"
-    return Settings.model_validate(yaml.safe_load(p.read_text()))
+    raw = yaml.safe_load(p.read_text())
+    email = os.environ.get("OPTPIPE_BLS_CONTACT_EMAIL")      # local override; never committed
+    if email is not None:
+        raw.setdefault("sources", {})["bls_contact_email"] = email.strip()
+    return Settings.model_validate(raw)

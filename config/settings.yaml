@@ -64,15 +64,18 @@ planner:
 
 # Macro calendars (R08) and the risk-free rate for derived IV. Read-only GETs in --live mode, cached under
 # cache_dir with a TTL; fixture runs read <fixtures>/macro_calendars.yaml instead (no network).
-# bls.gov answers scripted GETs with HTTP 403 (seen 2026-10-29), so live BLS coverage will usually be missing.
+# BLS: bls.gov returns 403 unless the User-Agent carries a contact email (Doodle, spec bls_release_sources.md).
+# Live runs send `optpipe/1.1 (calendar fetch; contact: <bls_contact_email>)` for ONE GET of bls.ics.
+# bls_contact_email is EMPTY on purpose: while empty, BLS is not contacted and CPI/PPI/NFP come from FRED's
+# public release calendar (rid 10 CPI, 46 PPI, 50 Employment Situation; times listed in US Central Time).
 sources:
   cache_dir: var/cache
   cache_ttl_hours: 12
   fomc_url: https://www.federalreserve.gov/monetarypolicy/fomccalendars.htm
-  bls_urls:
-    CPI: https://www.bls.gov/schedule/news_release/cpi.htm
-    NFP: https://www.bls.gov/schedule/news_release/empsit.htm
-    PPI: https://www.bls.gov/schedule/news_release/ppi.htm
+  bls_contact_email: ""          # e.g. set locally to an address you monitor; empty = skip BLS
+  bls_ics_url: https://www.bls.gov/schedule/news_release/bls.ics
+  fred_calendar_url: "https://fred.stlouisfed.org/releases/calendar?rid={rid}&y={year}"
+  fred_release_ids: {CPI: 10, PPI: 46, NFP: 50}
   treasury_tenor: "13 WEEKS COUPON EQUIVALENT"   # home.treasury.gov Daily Treasury Bill Rates
 
 # Derived IV (Black-Scholes from chain mids). R10 needs min_history_points daily observations.
