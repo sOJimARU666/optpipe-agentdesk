@@ -1,0 +1,59 @@
+# Pipeline settings. Owner: Moodle (structure) / Eugene (values).
+# Everything marked PLACEHOLDER is unknown until Eugene answers.
+mode: paper_only            # the ONLY supported mode. There is no broker integration and no order path.
+
+user:
+  name: Eugene Ward
+  display_timezone: Europe/Berlin
+
+broker:
+  name: UNKNOWN             # PLACEHOLDER - informational only; never connected, never used to send anything
+trade_style: UNKNOWN        # PLACEHOLDER - e.g. "defined-risk debit spreads, 1-4 week holds"
+watchlist: []               # PLACEHOLDER - symbols always researched, e.g. [JPM, WDC]
+sectors: []                 # PLACEHOLDER - e.g. [Financial, Technology]
+
+# Doodle's spec folder (schema, risk rules, test cases). Loaded read-only from code, never copied.
+# Override with env OPTIONS_SPEC_DIR.
+spec_dir: /workspace/trading/spec
+
+market:
+  timezone: America/New_York
+  open_time: "09:30"
+  entry_not_before: "09:45"
+
+discovery:
+  screens: [ta_unusualvolume, ta_topgainers, ta_toplosers, ta_newhigh, ta_newlow]
+  finviz_filters: sh_avgvol_o1000,sh_opt_option,sh_price_o10
+  max_candidates: 4
+  global_indexes: [Nikkei225, TOPIX, KOSPI, HangSeng, Shanghai, Taiex, ASX200, STOXX600, DAX, CAC40, FTSE100]
+
+http:
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
+  timeout_s: 20
+
+providers:
+  quotes: nasdaq            # future: eodhd, broker_readonly
+  options: nasdaq
+
+research:
+  strike_window_pct: 10     # keep strikes within +/-10% of spot in the session record
+
+planner:
+  max_risk_per_trade_usd: null  # null = size to the Risk Officer's per_trade_max_loss_usd (spec: 500, PLACEHOLDER)
+  preferred_dte_min: 14
+  preferred_dte_max: 45
+  strike_step: 5
+  spread_width: 10
+  stop_fraction_of_debit: 0.5
+  target_multiple_of_debit: 2.0
+  entry_slippage_pct: 2.5
+  time_stop_days_before_expiry: 3
+
+# Overrides on top of Doodle's spec/risk_rules.yaml `config` (the spec file itself is never edited).
+# Each override is recorded in every risk review's `config_overrides`. The spec's own PLACEHOLDERS,
+# all pending Eugene:
+#   per_trade_max_loss_usd: 500      max_underlying_risk_usd: 1000
+#   max_total_open_risk_usd: 2000    max_open_positions: 5
+# Also unconfirmed in the spec: NYSE 2026 holidays/early closes (market_hours), and there is no
+# FOMC/NFP calendar source, so those coverages stay `missing` (R08 cannot fully PASS).
+risk_overrides: {}

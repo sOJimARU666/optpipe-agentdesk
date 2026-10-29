@@ -1,0 +1,87 @@
+# Offline session inputs for 2026-10-13 (premarket run, 07:52 ET = 13:52 CEST).
+# Hand-curated from Doodle's session-2026-10-13.md / spec/session.example.json: things with no
+# automated source yet (catalyst picks, earnings timing, macro calendar, ex-div, earnings actuals).
+# Each value cites a source with its real fetch time; sources fetched AFTER the run (e.g. 09:09 ET)
+# are recorded but invisible to the 07:52 risk review (point-in-time rule) -> UNKNOWN there.
+as_of: "2026-10-13T07:52:00-04:00"
+run: {run_id: run-premarket, phase: premarket, summary: "Offline fixture replay of the 07:52 ET premarket run"}
+# Global index snapshot: read-only from an existing schema-v1 record ("spec:" = Doodle's spec dir).
+global_snapshot_record: "spec:session.example.json"
+
+sources:
+  - {id: src-sec-jpm-q3, kind: filing, publisher: SEC EDGAR, fetched_at: "2026-10-13T07:52:00-04:00",
+     url: "https://www.sec.gov/Archives/edgar/data/19617/000162828026065582/jpm-20261013.htm"}
+  - {id: src-newsquawk-jpm, kind: news, publisher: Newsquawk, fetched_at: "2026-10-13T07:52:00-04:00",
+     url: "https://www.newsquawk.com/headlines/jpmorgan-chase--co-jpm-q3-2026-usd-eps-557-exp-593-revenue-502bln-exp-5123bln"}
+  - {id: src-wsj-jpm, kind: news, publisher: WSJ, fetched_at: "2026-10-13T07:52:00-04:00",
+     url: "urn:poodle:unrecorded:wsj-jpm-premarket", title: "WSJ JPM premarket print (URL not recorded in sample)"}
+  - {id: src-wd-ir, kind: company_ir, publisher: Western Digital, fetched_at: "2026-10-13T07:52:00-04:00",
+     url: "https://www.westerndigital.com/company/newsroom/press-releases/2026/2026-10-08-wd-to-announce-first-quarter-fiscal-year-2027-financial-results"}
+  - {id: src-finviz-wdc-news, kind: news, publisher: Finviz, fetched_at: "2026-10-13T07:52:00-04:00",
+     url: "https://finviz.com/news/401543/western-digital-shares-fall-36-as-ubs-cuts-price-target-amid-hdd-supply-concerns"}
+  - {id: src-investing-wdc, kind: news, publisher: Investing.com, fetched_at: "2026-10-13T07:52:00-04:00",
+     url: "https://www.investing.com/news/stock-market-news/why-is-western-digital-stock-falling-today-93CH-4945879"}
+  - {id: src-bls-cpi, kind: economic_calendar, publisher: BLS, fetched_at: "2026-10-13T09:09:00-04:00",
+     url: "https://www.bls.gov/schedule/news_release/cpi.htm"}
+  - {id: src-jpm-ir-dividend, kind: company_ir, publisher: JPMorganChase IR, fetched_at: "2026-10-13T09:09:00-04:00",
+     url: "https://www.jpmorganchase.com/ir/news/2026/jpmc-declares-increased-common-stock-dividend-9-15"}
+
+manual_candidates:
+  - symbol: JPM
+    bias: bullish
+    company_name: "JPMorgan Chase & Co."
+    exchange: NYSE
+    catalysts:
+      - {text: "Q3 EPS 5.57 vs 5.93 est and revenue 50.2bn vs 51.23bn (miss); NII 27.0bn beat", source_id: src-newsquawk-jpm}
+      - {text: "Premarket reversal from about -3.7% to positive", source_id: src-nasdaq-jpm-info-0752}
+  - symbol: WDC
+    bias: bearish
+    company_name: "Western Digital Corp."
+    exchange: NASDAQ
+    catalysts:
+      - {text: "Memory/storage selloff after Chinese CXMT chip news", source_id: src-investing-wdc}
+      - {text: "UBS price-target cut on HDD supply", source_id: src-finviz-wdc-news}
+
+events:
+  - {event_id: ev-jpm-earn-q3, kind: earnings, underlying: JPM, timing: bmo, scheduled_at: "2026-10-13T00:00:00-04:00",
+     source_id: src-sec-jpm-q3, description: "JPM Q3 2026 results (already reported before the open)"}
+  - {event_id: ev-wdc-earn-q1fy27, kind: earnings, underlying: WDC, timing: amc, scheduled_at: "2026-10-22T00:00:00-04:00",
+     source_id: src-wd-ir, description: "WDC fiscal Q1 2027 results after close"}
+  - {event_id: ev-cpi-2026-10-14, kind: CPI, timing: at_time, scheduled_at: "2026-10-14T08:30:00-04:00",
+     source_id: src-bls-cpi, description: "CPI (September data)"}
+  - {event_id: ev-ppi-2026-10-15, kind: PPI, timing: at_time, scheduled_at: "2026-10-15T08:30:00-04:00",
+     source_id: src-bls-cpi, description: "PPI", note: "date noted next to CPI without its own citation; verify at bls.gov PPI schedule"}
+  - {event_id: ev-jpm-exdiv-2026-10-06, kind: ex_dividend, underlying: JPM, timing: unknown, scheduled_at: "2026-10-06T00:00:00-04:00",
+     source_id: src-jpm-ir-dividend, dividend_amount: 1.65, description: "$1.65 payable 2026-10-31"}
+
+coverage:   # how far each calendar is known complete; missing => the risk rule sees UNKNOWN
+  - {kind: earnings, underlying: JPM, checked_through: "2026-12-31", source_id: src-sec-jpm-q3,
+     formula: "Q3 reported 2026-10-13; quarterly cadence -> next report not before January 2027"}
+  - {kind: earnings, underlying: WDC, checked_through: "2026-12-31", source_id: src-wd-ir,
+     formula: "next report announced for 2026-10-22; following one ~3 months later"}
+  - {kind: ex_dividend, underlying: JPM, checked_through: "2026-12-31", source_id: src-jpm-ir-dividend,
+     formula: "ex-date 2026-10-06 passed; next quarterly ex-date expected January 2027"}
+  - {kind: ex_dividend, underlying: WDC, note: "not checked"}
+  - {kind: CPI, checked_through: "2026-12-31", source_id: src-bls-cpi, note: "BLS annual release schedule"}
+  - {kind: PPI, note: "PPI schedule page not opened; only one date noted"}
+  - {kind: FOMC, note: "PLACEHOLDER: no FOMC calendar source configured"}
+  - {kind: NFP, note: "PLACEHOLDER: no NFP calendar source configured"}
+
+earnings_reports:   # schema premarket_scan.earnings_reports[] (run_id filled by Discovery)
+  - ticker: JPM
+    fiscal_period: Q3 2026
+    reported: {value: true, source_id: src-sec-jpm-q3, as_of: "2026-10-13T07:52:00-04:00", status: ok}
+    eps_actual: {value: 5.57, source_id: src-sec-jpm-q3, as_of: "2026-10-13T07:52:00-04:00", status: ok, note: diluted}
+    eps_estimate: {value: 5.93, source_id: src-newsquawk-jpm, as_of: "2026-10-13T07:52:00-04:00", status: ok}
+    revenue_actual_usd_bn: {value: 50.172, source_id: src-sec-jpm-q3, as_of: "2026-10-13T07:52:00-04:00", status: ok}
+    revenue_estimate_usd_bn: {value: 51.23, source_id: src-newsquawk-jpm, as_of: "2026-10-13T07:52:00-04:00", status: ok}
+    premarket_change_pct:
+      value: null
+      source_id: null
+      as_of: null
+      status: conflicting
+      conflicts:
+        - {value: -3.7, source_id: src-wsj-jpm, as_of: "2026-10-13T07:03:00-04:00", note: "~$322"}
+        - {value: 0.78, source_id: src-nasdaq-jpm-info-0752, as_of: "2026-10-13T07:52:00-04:00", note: "$336.91 realtime"}
+    extra_metrics:
+      nii_usd_bn: {value: 27.036, source_id: src-sec-jpm-q3, as_of: "2026-10-13T07:52:00-04:00", status: ok}

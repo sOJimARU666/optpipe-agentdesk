@@ -1,0 +1,35 @@
+"""Priority 1: generated models match Doodle's session.schema.json and round-trip session.example.json."""
+import hashlib
+
+from optpipe.models.schema_v1 import SCHEMA_SHA256, SessionRecordV1
+
+
+def test_models_generated_from_current_schema(spec):
+    sha = hashlib.sha256(spec.path("session_schema").read_bytes()).hexdigest()
+    assert sha == SCHEMA_SHA256, "schema changed: re-run scripts/gen_models.py"
+
+
+def test_example_round_trip(example):
+    m = SessionRecordV1.model_validate(example)
+    assert m.model_dump(mode="json", exclude_unset=True) == example
+    assert SessionRecordV1.model_validate_json(m.model_dump_json(exclude_unset=True)) == m
+
+
+def test_example_passes_doodle_validator(example, validator):
+    assert validator.validate(example) == []
+
+
+def test_legacy_v0_record_still_reads():
+    from pathlib import Path
+    from optpipe.records import read_legacy_session
+    p = Path(__file__).parent / "fixtures" / "2026-10-13" / "session-2026-10-13.json"
+    assert read_legacy_session(p) is not None
+
+
+def test_spec_is_not_vendored():
+    """The spec lives only in Doodle's folder; no copies of its files inside this repo."""
+    from pathlib import Path
+    root = Path(__file__).resolve().parents[1]
+    names = {"risk_rules.yaml", "session.schema.json", "risk_reference.py", "validate_session.py"}
+    hits = [p for p in root.rglob("*") if p.name in names and ".venv" not in p.parts]
+    assert hits == []

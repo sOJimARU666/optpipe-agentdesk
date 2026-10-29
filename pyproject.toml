@@ -1,0 +1,29 @@
+[project]
+name = "optpipe"
+version = "0.1.0"
+description = "Paper-only options research pipeline (Moodle / Doodle / Poodle multi-agent project). No broker, no orders."
+requires-python = ">=3.11"
+dependencies = [
+  "pydantic>=2.6",
+  "pyyaml>=6",
+  "requests>=2.31",
+  "beautifulsoup4>=4.12",
+  "lxml>=5",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "jsonschema>=4", "datamodel-code-generator>=0.25"]
+
+[project.scripts]
+optpipe = "optpipe.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
