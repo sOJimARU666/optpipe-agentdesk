@@ -46,18 +46,33 @@ def _hits(rx, allow=lambda n, m: False):
             for m in rx.finditer(line) if not allow(n, m)]
 
 
-# Doodle's pinned spec 1.1.3 (byte-checked by scripts/sync_spec.py --check, never edited here) has one optional,
-# local-only fixture location in its back-compat test (`if p.is_file()`). Allowed for that file and prefix only;
-# raised with Doodle to drop in the next release.
-PINNED_SPEC_ABS_ALLOW = {("spec/test_invariants_v1_1_3.py", "/tmp/pv2/")}
-
-
-def _abs_allowed(n, m):
-    return n in ABS_ALLOW or any(n == f and m.group(0).startswith(pre) for f, pre in PINNED_SPEC_ABS_ALLOW)
+def _frozen_release_copy(n):
+    """True only for a file of a FROZEN earlier spec release (scripts/sync_spec.py FROZEN_RELEASES) that is byte-identical
+    to that release's own MANIFEST.sha256 and that Doodle's conftest keeps out of collection: an archived copy that is
+    never run or edited (spec 1.1.4 ships _v1_1_3_backup/ as-is). The live pinned spec gets NO exception."""
+    import hashlib
+    import sys
+    sys.path.insert(0, str(ROOT / "scripts"))
+    import sync_spec
+    parts = n.split("/")
+    if len(parts) != 3 or parts[0] != "spec" or parts[1] not in sync_spec.FROZEN_RELEASES:
+        return False
+    sub = ROOT / "spec" / parts[1]
+    want = sync_spec.parse_manifest((sub / "MANIFEST.sha256").read_text()).get(parts[2])
+    ignored = parts[1] in (ROOT / "spec" / "conftest.py").read_text()
+    return ignored and want == hashlib.sha256((ROOT / n).read_bytes()).hexdigest()
 
 
 def test_no_absolute_box_paths():
-    assert _hits(ABS_PATH, _abs_allowed) == []
+    # no exception for the live pinned spec (spec 1.1.4 vendors its fixtures under spec/fixtures/), so the old
+    # PINNED_SPEC_ABS_ALLOW for spec/test_invariants_v1_1_3.py is gone; only frozen archived release copies are exempt
+    assert _hits(ABS_PATH, lambda n, m: n in ABS_ALLOW or _frozen_release_copy(n)) == []
+
+
+def test_live_pinned_spec_has_no_absolute_paths():
+    hits = [h for h in _hits(ABS_PATH) if h.startswith("spec/") and not _frozen_release_copy(h.split(":")[0])]
+    assert hits == []
+    assert not _frozen_release_copy("spec/test_invariants_v1_1_3.py")      # the live file is not exempt
 
 
 def test_no_secrets_or_tokens():

@@ -78,7 +78,7 @@ def test_inv12_items_are_schema_checked():
     assert any(e.startswith("schema premarket_scans/0") for e in vs.validate(s))
 
 
-# ---------------------------------------------------------------- tick rule vectors (mirrors options-pipeline ticks tests)
+# ---------------------------------------------------------------- tick rule vectors (mirrors the pipeline repo's ticks tests)
 @pytest.mark.parametrize("und,raw,direction,out,tick", [
     ("JPM", 3.1006, "down", "3.10", "0.05"), ("JPM", 3.149, "down", "3.10", "0.05"), ("JPM", 2.987, "down", "2.98", "0.01"),
     ("JPM", 1.512, "up", "1.52", "0.01"), ("JPM", 6.07, "down", "6.05", "0.05"), ("WDC", 2.93, "down", "2.90", "0.05"),
@@ -154,7 +154,7 @@ def test_inv13_raw_fields_require_1_1_0():
     assert any("require schema_version 1.1.0" in e for e in errs(s, "INV-13"))
 
 
-# ---------------------------------------------------------------- pipeline-shaped 1.1.0 preview (shape of options-pipeline record)
+# ---------------------------------------------------------------- pipeline-shaped 1.1.0 preview (shape of the pipeline repo's record)
 def test_pipeline_shaped_values_with_float_noise():
     s = ex(); t = ticket(s)
     t["limit_price"]["raw_amount"] = 3.025 * 1.025          # 3.1006249999999995 as the pipeline writes it

@@ -1,7 +1,7 @@
 # Deterministic Risk Officer rules for the PAPER-ONLY US options app.
 # Human-readable companion: risk_rules.md. Reference implementation: risk_reference.py.
 # All quoted: never let YAML auto-convert timestamps/dates.
-ruleset_version: "1.1.3"   # labels track spec VERSION from 1.1.3 (no 1.1.2 ruleset); 1.1.3: combine([]) of zero per-leg/per-quote results is UNKNOWN (fail closed, was PASS), approvals must acknowledge every flag (INV-05); 1.1.1: R04 max loss for verticals from the INV-14 formula (verticals.py); 1.1.0: R11 sector cap, R12 defined-risk structure, R13 hold period, profiles.demo
+ruleset_version: "1.1.4"   # labels track spec VERSION from 1.1.3 (no 1.1.2 ruleset); 1.1.4: label only, no rule or case change; 1.1.3: combine([]) of zero per-leg/per-quote results is UNKNOWN (fail closed, was PASS), approvals must acknowledge every flag (INV-05); 1.1.1: R04 max loss for verticals from the INV-14 formula (verticals.py); 1.1.0: R11 sector cap, R12 defined-risk structure, R13 hold period, profiles.demo
 
 config:
   # --- placeholders pending Eugene: keep labelled until he confirms ---

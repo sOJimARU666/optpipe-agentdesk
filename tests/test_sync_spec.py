@@ -34,20 +34,23 @@ def pinned(source, tmp_path):
 
 
 def test_pin_constants():
-    assert sync_spec.EXPECTED_VERSION == "1.1.3"
-    assert sync_spec.EXPECTED_MANIFEST_SHA256 == "8785ee8b2f9f3bbc993bfbad0ff3ae8e7535cf15b42c507e32d145a25d6836c0"
+    assert sync_spec.EXPECTED_VERSION == "1.1.4"
+    assert sync_spec.EXPECTED_MANIFEST_SHA256 == "f58db767b1c631d9d7c08d15df1e7bbedaa2215c5b2efa3b1a5f4b596a2d2610"
     assert sync_spec.FROZEN_RELEASES == {          # the earlier pins of this file, in order (git history)
         "_v1_1_0_backup": ("1.1.0", "3b25cfe562bbd818589e82e069235b188c4f2b4aac434c04fce54d238fd95e07"),
         "_v1_1_1_backup": ("1.1.1", "477401b68298f5b4513aa9b46eed9a56df5d1097e85175bdcf8a166cd3d4f489"),
         "_v1_1_2_backup": ("1.1.2", "9fcc55b0b84b6a8be43d9e5fefda22c7f05102aef9991089b851d6946cde0fdd"),
+        "_v1_1_3_backup": ("1.1.3", "8785ee8b2f9f3bbc993bfbad0ff3ae8e7535cf15b42c507e32d145a25d6836c0"),
     }
 
 
 def test_sync_writes_manifest_files_and_pin_record(pinned, source):
     files = sync_spec.parse_manifest((source / "MANIFEST.sha256").read_text())
-    assert len(files) == 23 and {"test_invariants_v1_1_3.py", "session_fixtures.py"} <= set(files)
+    assert len(files) == 29 and {"test_invariants_v1_1_3.py", "session_fixtures.py", "test_release_v1_1_4.py"} <= set(files)
+    vendored = [n for n in files if n.startswith("fixtures/")]          # spec 1.1.4: hermetic fixtures in a subdirectory
+    assert vendored and all((pinned / n).is_file() for n in vendored)
     pin = json.loads((pinned / "PIN.json").read_text())
-    assert pin["version"] == "1.1.3" and pin["manifest_sha256"] == sync_spec.EXPECTED_MANIFEST_SHA256
+    assert pin["version"] == "1.1.4" and pin["manifest_sha256"] == sync_spec.EXPECTED_MANIFEST_SHA256
     assert pin["owner"] == "Doodle" and pin["files"] == dict(sorted(files.items()))
     assert pin["synced_at"].endswith(("+01:00", "+02:00"))               # Berlin time
     for name, digest in files.items():
@@ -55,11 +58,11 @@ def test_sync_writes_manifest_files_and_pin_record(pinned, source):
     assert set(pin["v1_backup_files"]) == set(sync_spec.V1_FILES)
     assert not (pinned / ".venv").exists() and not (pinned / "_v1_backup" / "risk_rules.yaml").exists()
     assert {k: v["version"] for k, v in pin["frozen_releases"].items()} == {
-        "_v1_1_0_backup": "1.1.0", "_v1_1_1_backup": "1.1.1", "_v1_1_2_backup": "1.1.2"}
+        "_v1_1_0_backup": "1.1.0", "_v1_1_1_backup": "1.1.1", "_v1_1_2_backup": "1.1.2", "_v1_1_3_backup": "1.1.3"}
     for sub in sync_spec.FROZEN_RELEASES:                  # copied by their own manifest, byte-identical
         for name, digest in sync_spec.parse_manifest((source / sub / "MANIFEST.sha256").read_text()).items():
             assert sync_spec.sha256(pinned / sub / name) == digest
-    assert sync_spec.verify_pinned(pinned)["version"] == "1.1.3"
+    assert sync_spec.verify_pinned(pinned)["version"] == "1.1.4"
 
 
 @pytest.mark.parametrize("tamper", ["edit_file", "edit_manifest", "extra_file", "missing_file", "edit_v1", "edit_pin",
@@ -122,14 +125,14 @@ def test_sync_refuses_a_source_that_is_not_the_pinned_release(source, tmp_path):
 
 
 def test_pipeline_runs_against_the_pinned_copy(pinned, tmp_path):
-    """CI mode: OPTIONS_SPEC_DIR=spec/ - the fixture run validates as 1.1.3 and the copy stays pinned."""
+    """CI mode: OPTIONS_SPEC_DIR=spec/ - the fixture run validates as 1.1.4 and the copy stays pinned."""
     import os
     env = {**os.environ, "OPTIONS_SPEC_DIR": str(pinned), "PYTHONDONTWRITEBYTECODE": "1"}
     out = tmp_path / "out"
     r = subprocess.run([str(Path(sys.executable).parent / "optpipe"), "run", "--out", str(out)], env=env,
                        capture_output=True, text=True, cwd=ROOT)
     assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
-    assert "OK as 1.1.3 (schema + invariants INV-01..16)" in r.stdout
+    assert "OK as 1.1.4 (schema + invariants INV-01..16)" in r.stdout
     sc = subprocess.run([str(Path(sys.executable).parent / "optpipe"), "spec-check"], env=env, capture_output=True,
                         text=True, cwd=ROOT)
     assert f"risk_rules         {pinned}/risk_rules.yaml" in sc.stdout, sc.stdout

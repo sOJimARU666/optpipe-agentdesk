@@ -4,11 +4,16 @@ approval pointing at a VETO review, vetoes the ticket; an approval never un-veto
 records, including Moodle's 11-record comparison set (his review parity script, rebuilt here from
 session.example.json).
 
-Decision = (vetoed, really approved). For a record that validates (Doodle's validator: 0 errors)
-the decision must be EQUAL. For an invalid record optpipe may only be stricter (vetoed whenever the reference is,
-approved only when the reference is). Status strings match too, except the documented N4 divergence: a revoked
-approval is `rejected` (shadow) in optpipe and `approved_pending` hypothetical in the reference.
-Negative tests fail on 1d077a74. PAPER ONLY, synthetic records, no network."""
+Decision = (status, vetoed, really approved). Spec 1.1.4 (Doodle's approval-status ruling, watcher_rules.yaml
+scope.approval_status) removed the N4 divergence, so the decision must be EXACTLY equal on every record here, valid
+or not: no N4 status exception and no general "optpipe may be stricter" tolerance for invalid records. One named
+record is outside the reference's reach: `tampered_pass` (overall.verdict PASS over FLAG rule results), which
+Doodle's validator rejects with INV-16-VERDICT but watcher_reference.real_approval does not check (it runs INV-05
+only), so the reference watches it as really approved. optpipe keeps FIX-SEC-001 P0-2 (a tampered review is VETO);
+that single exception is pinned below (must stay INV-16-invalid, optpipe must stay the stricter side). Mapping: a real
+approval (active, in window, INV-05 clean) wins; otherwise ANY revoked approval of the ticket -> rejected (shadow);
+otherwise (expired / consumed / active but out of window or failing INV-05 / none) -> approved_pending hypothetical.
+Negative tests fail on 1d077a74 (R1) or 450c4c2 (PR #6). PAPER ONLY, synthetic records, no network."""
 from __future__ import annotations
 
 import copy
@@ -26,7 +31,6 @@ NY = ZoneInfo("America/New_York")
 NOW = datetime(2026, 10, 13, 12, 30, tzinfo=NY)
 NOWS = "2026-10-13T12:30:00-04:00"
 TID = "tkt-jpm-bcs-340-350"
-N4 = {"revoked"}                                    # documented status-string divergence (decision still equal)
 
 
 def at(hhmm: str) -> dict:
@@ -69,6 +73,25 @@ def cases(ex: dict) -> dict[str, dict]:
     r = approved(ex); r["risk_reviews"][0]["evaluated_at"] = copy.deepcopy(r["risk_reviews"][-1]["evaluated_at"])
     r["risk_reviews"] = r["risk_reviews"][::-1]
     c["tie_veto_listed_last"] = r
+    # PR #6 (spec 1.1.4): the full approval-status mapping, incl. several approvals for one ticket
+    r = approved(ex); r["approvals"] = []
+    c["no_approval"] = r
+    c["active_out_of_window"] = approved(ex, expires_at=at("12:25"))
+    for later in ("expired", "consumed", "active_out_of_window", "active_no_ack"):
+        for order in ("then", "after"):
+            r = approved(ex, status="revoked")
+            a2 = copy.deepcopy(r["approvals"][0])
+            a2.update(approval_id="apr-2", status=later.split("_")[0], approved_at=at("12:22"))
+            if later == "active_out_of_window":
+                a2["expires_at"] = at("12:25")
+            if later == "active_no_ack":
+                del a2["acknowledged_flags"]
+            r["approvals"] = [r["approvals"][0], a2] if order == "then" else [a2, r["approvals"][0]]
+            c[f"revoked_{order}_{later}"] = r
+    r = approved(ex, status="revoked"); a2 = copy.deepcopy(r["approvals"][0])
+    a2.update(approval_id="apr-2", status="active", approved_at=at("12:22"))
+    r["approvals"].append(a2)
+    c["revoked_then_real_approval"] = r                                    # a real approval wins
     return c
 
 
@@ -100,14 +123,17 @@ def errors(ref, r: dict) -> list[str]:
     return list(ref[1].validate(copy.deepcopy(r)))
 
 
+# Records the reference does not cover (see the module doc): name -> the validator error id that puts it out of reach.
+OUT_OF_REFERENCE = {"tampered_pass": "INV-16-VERDICT"}
+
+
 def divergent(ex, ref) -> list[str]:
     out = []
     for k, r in cases(ex).items():
+        if k in OUT_OF_REFERENCE:
+            continue
         (s1, v1, a1), (s2, v2, a2) = ours(r), theirs(ref, r)
-        if errors(ref, r):
-            if (v2 and not v1) or (a1 and not a2):
-                out.append(f"{k}: optpipe {s1} vetoed={v1} approved={a1} vs reference {s2} vetoed={v2} approved={a2}")
-        elif (v1, a1) != (v2, a2) or (s1 != s2 and k not in N4):
+        if (s1, v1, a1) != (s2, v2, a2):
             out.append(f"{k}: optpipe {s1} vetoed={v1} approved={a1} vs reference {s2} vetoed={v2} approved={a2}")
     return out
 
@@ -146,18 +172,67 @@ def test_evaluated_at_tie_break_matches_reference(example, ref, name, vetoed):
     assert ours(r)[1] is vetoed
 
 
-@pytest.mark.parametrize("name", [
+CASE_NAMES = [
     "active_ok", "revoked", "expired", "consumed", "decision_only", "no_ack", "approval_of_old_veto_review",
-    "extra_approval_of_veto_review", "reviews_out_of_order", "tampered_pass", "veto_latest_by_time_but_first_in_array",
-    "later_veto_rereview_listed_first", "tie_flag_listed_last", "tie_veto_listed_last"])
+    "extra_approval_of_veto_review", "reviews_out_of_order", "veto_latest_by_time_but_first_in_array",
+    "later_veto_rereview_listed_first", "tie_flag_listed_last", "tie_veto_listed_last",
+    "no_approval", "active_out_of_window", "revoked_then_real_approval",
+    *[f"revoked_{o}_{x}" for x in ("expired", "consumed", "active_out_of_window", "active_no_ack") for o in ("then", "after")]]
+
+
+def test_case_names_cover_every_case(example):
+    assert sorted([*CASE_NAMES, *OUT_OF_REFERENCE]) == sorted(cases(example))
+
+
+@pytest.mark.parametrize("name", CASE_NAMES)
 def test_parity_per_record(example, ref, name):
+    """Exact parity, valid or invalid record (spec 1.1.4 removed the N4 / 'optpipe may be stricter' tolerances)."""
     r = cases(example)[name]
-    (s1, v1, a1), (s2, v2, a2) = ours(r), theirs(ref, r)
-    if errors(ref, r):                                                    # invalid: optpipe may only be stricter
-        assert (v1 or not v2) and (a2 or not a1), (s1, v1, a1, s2, v2, a2)
-    else:
-        assert (v1, a1) == (v2, a2), (s1, v1, a1, s2, v2, a2)
-        assert s1 == s2 or name in N4, (s1, s2)
+    assert ours(r) == theirs(ref, r), (ours(r), theirs(ref, r))
+
+
+def test_out_of_reference_is_only_tampered_pass(example, ref):
+    """The one record excluded from exact parity: it must stay invalid for exactly that reason, and optpipe must stay
+    fail-closed on it (vetoed, never approved) while the reference would approve it."""
+    assert set(OUT_OF_REFERENCE) == {"tampered_pass"}
+    r = cases(example)["tampered_pass"]
+    errs = errors(ref, r)
+    assert len(errs) == 1 and errs[0].startswith("INV-16-VERDICT "), errs
+    assert theirs(ref, r) == ("approved_pending", False, True)
+    assert ours(r) == ("vetoed", True, False)
+
+
+# The spec 1.1.4 approval-status table (watcher_rules.yaml scope.approval_status), as (status, vetoed, approved).
+REAL, HYPO, REJECTED = ("approved_pending", False, True), ("approved_pending", False, False), ("rejected", False, False)
+MAPPING = {"active_ok": REAL, "active_out_of_window": HYPO, "no_ack": HYPO, "revoked": REJECTED,
+           "expired": HYPO, "consumed": HYPO, "no_approval": HYPO, "revoked_then_real_approval": REAL}
+
+
+@pytest.mark.parametrize("name,want", sorted(MAPPING.items()))
+def test_approval_status_mapping(example, ref, name, want):
+    r = cases(example)[name]
+    assert theirs(ref, r) == want                                         # the table is the reference's
+    assert ours(r) == want
+
+
+@pytest.mark.parametrize("name", [f"revoked_{o}_{x}" for x in ("expired", "consumed", "active_out_of_window",
+                                                               "active_no_ack") for o in ("then", "after")])
+def test_any_revoked_approval_rejects_unless_really_approved(example, ref, name):
+    """NEGATIVE (fails on 450c4c2): a revoked approval followed (or preceded) by an expired / consumed / blocked active
+    approval of the same ticket came out approved_pending HYPOTHETICAL (a watched what-if) in optpipe, because only
+    the one picked approval's status was read. Spec 1.1.4: without a real approval, ANY revoked one -> rejected."""
+    r = cases(example)[name]
+    assert theirs(ref, r) == REJECTED
+    t = next(t for t in targets_from_session(r, NOW) if t.kind == "ticket" and t.ticket_id == TID)
+    assert (t.status, t.vetoed, t.hypothetical) == ("rejected", False, False), t.note
+
+
+def test_reference_mapping_is_the_yaml_table(spec, ref):
+    """The pinned spec's YAML table and reference agree, and revoked is rejected (no N4 divergence left to document)."""
+    m = spec.watcher_rules()["scope"]["approval_status"]
+    assert m == ref[0].APPROVAL_STATUS_TARGET and m["revoked"] == "rejected"
+    import optpipe.watcher.runtime as rt
+    assert "N4" not in (rt.targets_from_session.__doc__ or "") and "divergence" not in (rt.targets_from_session.__doc__ or "")
 
 
 def test_now_is_required():

@@ -1,4 +1,5 @@
-"""Reference evaluator for watcher_rules.yaml (alert-only Watcher, spec v1.1; target_from_session added in spec 1.1.3).
+"""Reference evaluator for watcher_rules.yaml (alert-only Watcher, spec v1.1; target_from_session added in spec 1.1.3;
+spec 1.1.4: a revoked approval makes the ticket target 'rejected', see APPROVAL_STATUS_TARGET).
 
 Purpose: prove the watcher rules are unambiguous. Not production code.
 poll(inp, state) is a pure function: it returns the alerts to SEND for this poll, the new
@@ -305,7 +306,18 @@ def poll(inp: dict, state: dict | None = None, wr: dict | None = None, cal: rr.C
     return sent_alerts, state, nxt
 
 
-# ------------------------------------------------- session -> ticket target (spec 1.1.3, FIX-SEC-001)
+# ------------------------------------------------- session -> ticket target (spec 1.1.3, FIX-SEC-001; 1.1.4 revoked ruling)
+# Approval status -> ticket target when the ticket is not vetoed and its idea is not 'rejected' (spec 1.1.4 ruling; mirrors
+# watcher_rules.yaml scope.approval_status). 'real' = watched as approved_pending with approved=True (only if the approval
+# also passes real_approval: inside its window, clean INV-05); an active approval that fails those checks is hypothetical.
+# 'revoked' is fail closed: Eugene withdrew the approval, so the ticket is a rejected shadow, never a watched what-if.
+APPROVAL_STATUS_TARGET = {
+    "active": "real",               # approved_pending, approved=True (else hypothetical if outside window / INV-05 fails)
+    "revoked": "rejected",          # spec 1.1.4: shadow only (was hypothetical in 1.1.3)
+    "expired": "hypothetical",      # approved_pending, approved=False
+    "consumed": "hypothetical",     # approved_pending, approved=False (an entered trade is watched as its paper position)
+    "none": "hypothetical",         # missing: no approval for the ticket
+}
 # APPROVAL STATE IS READ ONLY FROM approvals[].status. There is no 'decision' field in the schema (approval objects have
 # additionalProperties: false, so a record carrying 'decision' is schema-invalid); never read, trust or fall back to it.
 def real_approval(sess: dict, ticket_id: str, now: str | None = None) -> dict | None:
@@ -315,7 +327,7 @@ def real_approval(sess: dict, ticket_id: str, now: str | None = None) -> dict | 
     status == 'active', it is for this ticket, it is not expired at `now` (approved_at <= now < expires_at; any time
     when now is None), and it passes the 1.1.3 approval checks (validate_session.approval_errors: not a VETO review,
     same ticket, legs/qty/limit equal the ticket, every flag acknowledged). 'expired', 'revoked', 'consumed' or no
-    approval -> None."""
+    approval -> None (target_from_session then maps a revoked approval to 'rejected', the rest to hypothetical)."""
     import validate_session as vs  # local import: the validator loads the schema at import time
 
     tk = next((t for t in sess.get("tickets", []) if t["ticket_id"] == ticket_id), None)
@@ -340,8 +352,11 @@ def target_from_session(sess: dict, ticket_id: str, now: str | None = None) -> d
       1. the latest risk review of the ticket is VETO (recorded verdict or what its rule results give), or any approval of
          the ticket points at a VETO review, or the idea is 'vetoed'  -> status 'vetoed'   (shadow only)
       2. idea 'rejected'                                               -> status 'rejected' (shadow only)
-      3. idea 'approved_pending' / 'approved' / no idea               -> status 'approved_pending' (watched pre-entry);
-         approved = a real approval exists (real_approval), hypothetical = not approved
+      3. idea 'approved_pending' / 'approved' / no idea:
+         a. a real approval exists (real_approval)                     -> 'approved_pending', approved, not hypothetical
+         b. else any approval of the ticket has status 'revoked'       -> status 'rejected' (shadow only; spec 1.1.4,
+            fail closed: a revoked approval is never a watched what-if)
+         c. else (expired / consumed / active but not real / none)     -> 'approved_pending', hypothetical
       4. any other idea status (proposed, simulated, executed, closed) -> that status (not watched as a ticket;
          an entered trade is watched as its paper position)."""
     reviews = sorted((r for r in sess.get("risk_reviews", []) if r["ticket_id"] == ticket_id),
@@ -363,6 +378,9 @@ def target_from_session(sess: dict, ticket_id: str, now: str | None = None) -> d
         return {**base, "status": "rejected", "approved": False, "hypothetical": True, "approval_id": None}
     if istatus in (None, "approved_pending", "approved"):
         a = real_approval(sess, ticket_id, now)
+        if a is None and any(x.get("status") == "revoked" for x in sess.get("approvals", [])
+                             if x.get("ticket_id") == ticket_id):
+            return {**base, "status": "rejected", "approved": False, "hypothetical": True, "approval_id": None}
         return {**base, "status": "approved_pending", "approved": a is not None, "hypothetical": a is None,
                 "approval_id": a["approval_id"] if a else None}
     return {**base, "status": istatus, "approved": False, "hypothetical": True, "approval_id": None}

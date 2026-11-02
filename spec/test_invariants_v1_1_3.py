@@ -1,6 +1,8 @@
 """Spec 1.1.3 (FIX-SEC-001): INV-03/04 tightening, INV-05 flag acknowledgement, INV-06 approval status/ticket/terms,
 INV-16 overall-verdict consistency, combine() precedence, fail-closed CLI, and back-compat with the frozen 1.1.2 validator.
-pytest-only (no new YAML cases: risk_rules.yaml / watcher_rules.yaml case counts are unchanged). PAPER ONLY."""
+pytest-only (no new YAML cases: risk_rules.yaml / watcher_rules.yaml case counts are unchanged). PAPER ONLY.
+Spec 1.1.4: hermetic back-compat records (vendored under fixtures/, resolved relative to this file; a missing fixture
+FAILS), revoked approval -> watcher target 'rejected', VERSION / labels 1.1.4 (see test_release_v1_1_4.py)."""
 from __future__ import annotations
 
 import copy
@@ -56,10 +58,10 @@ def tk(s):
 
 
 # ------------------------------------------------------------------ fixtures sanity
-def test_example_is_1_1_3_and_valid():
+def test_example_is_1_1_4_and_valid():
     s = fx.example()
-    assert s["schema_version"] == "1.1.3" and errs(s) == []
-    assert (SPEC / "VERSION").read_text().strip() == "1.1.3"
+    assert s["schema_version"] == "1.1.4" and errs(s) == []
+    assert (SPEC / "VERSION").read_text().strip() == "1.1.4"
 
 
 def test_approved_record_is_valid_positive_control():
@@ -404,15 +406,15 @@ def test_watcher_active_acknowledged_approval_is_real():
 def test_watcher_ignores_decision_field():
     s = rec(); a = appr(s); a["status"], a["status_changed_at"], a["decision"] = "revoked", fx.at("12:40"), "approved"
     t = wr.target_from_session(s, fx.TK, now="2026-10-13T13:00:00-04:00")
-    assert not t["approved"] and t["hypothetical"]
+    assert t["status"] == "rejected" and not t["approved"] and t["hypothetical"]   # 1.1.4: revoked -> rejected
     src = (SPEC / "watcher_reference.py").read_text()
     assert 'get("decision")' not in src and '["decision"]' not in src
 
 
-@pytest.mark.parametrize("change", ["revoked", "expired", "consumed", "time_expired", "no_ack", "none"])
+@pytest.mark.parametrize("change", ["expired", "consumed", "time_expired", "no_ack", "none"])
 def test_watcher_not_approved(change):
     s = rec(); a = appr(s); now = "2026-10-13T13:00:00-04:00"
-    if change in ("revoked", "expired", "consumed"):
+    if change in ("expired", "consumed"):
         a["status"], a["status_changed_at"] = change, fx.at("12:40")
     elif change == "time_expired":
         now = "2026-10-13T16:00:00-04:00"
@@ -432,8 +434,47 @@ def test_watcher_veto_wins_over_approval():
     assert wr.target_from_session(fx.example(), fx.TK)["status"] == "vetoed"
 
 
+@pytest.mark.parametrize("with_position", [True, False])
+def test_watcher_revoked_is_rejected(with_position):
+    """spec 1.1.4 ruling: a revoked approval makes the ticket a rejected shadow (fail closed), not a hypothetical"""
+    s = fx.approved_record(with_position=with_position); a = appr(s)
+    a["status"], a["status_changed_at"] = "revoked", fx.at("12:40")
+    t = wr.target_from_session(s, fx.TK, now="2026-10-13T13:00:00-04:00")
+    assert t == {**t, "status": "rejected", "approved": False, "hypothetical": True, "approval_id": None}
+    assert t["status"] in wr.SHADOW
+
+
+def test_watcher_real_approval_wins_over_older_revoked():
+    s = rec(); old = appr(s); old["status"], old["status_changed_at"] = "revoked", fx.at("12:40")
+    new = copy.deepcopy(old); new.update(approval_id="ap-2", status="active", approved_at=fx.at("12:45"))
+    new.pop("status_changed_at", None); s["approvals"].append(new)
+    t = wr.target_from_session(s, fx.TK, now="2026-10-13T13:00:00-04:00")
+    assert t["status"] == "approved_pending" and t["approved"] and t["approval_id"] == "ap-2"
+
+
+def test_watcher_revoked_beats_expired_or_consumed():
+    """no real approval: any revoked approval of the ticket -> rejected, whatever the other approvals say"""
+    for other in ("expired", "consumed"):
+        s = rec(); a = appr(s); a["status"], a["status_changed_at"] = "revoked", fx.at("12:40")
+        b = copy.deepcopy(a); b.update(approval_id="ap-2", status=other, status_changed_at=fx.at("12:50"))
+        s["approvals"].append(b)
+        assert wr.target_from_session(s, fx.TK, now="2026-10-13T13:00:00-04:00")["status"] == "rejected", other
+
+
+def test_watcher_veto_still_wins_over_revoked():
+    s = rec(); a = appr(s); a["status"], a["status_changed_at"] = "revoked", fx.at("12:40")
+    rvw(s)["results"][0]["result"] = "VETO"
+    assert wr.target_from_session(s, fx.TK, now="2026-10-13T13:00:00-04:00")["status"] == "vetoed"
+
+
 # ------------------------------------------------------------------ back-compat: 1.0.0 .. 1.1.2 unchanged
 BACKUP = SPEC / "_v1_1_2_backup"
+FIXTURES = SPEC / "fixtures"   # vendored, trimmed historical records (spec 1.1.4); resolved from this file only
+# historical records that must validate identically under every frozen validator; a missing file FAILS (no skip)
+OLD_RECORD_FILES = [SPEC / "_v1_backup/session.example.json", SPEC / "_v1_1_0_backup/session.example.json",
+                    SPEC / "_v1_1_1_backup/session.example.json", BACKUP / "session.example.json",
+                    FIXTURES / "session-2026-10-13.json", FIXTURES / "session-2026-10-13.v1_1.json",
+                    FIXTURES / "spec_patches_v1_1.session.example.json"]
 _RUNNER = r"""
 import json, sys
 sys.dont_write_bytecode = True
@@ -452,14 +493,9 @@ def frozen_validate(records):
 
 
 def _old_records():
-    out = []
-    for p in [SPEC / "_v1_backup/session.example.json", SPEC / "_v1_1_0_backup/session.example.json",
-              SPEC / "_v1_1_1_backup/session.example.json", BACKUP / "session.example.json",
-              Path("/tmp/pv2/session-2026-10-13.json"), Path("/tmp/pv2/session-2026-10-13.v1_1.json"),
-              SPEC.parent.parent / "options-pipeline/spec_patches/v1.1/session.example.json"]:
-        if p.is_file():
-            out.append(json.loads(p.read_text()))
-    return out
+    missing = [str(p.relative_to(SPEC)) for p in OLD_RECORD_FILES if not p.is_file()]
+    assert not missing, f"back-compat record(s) missing: {missing}"
+    return [json.loads(p.read_text()) for p in OLD_RECORD_FILES]
 
 
 def _mutated(version):
@@ -480,7 +516,7 @@ def _mutated(version):
 
 def test_backcompat_old_records_identical_to_frozen_1_1_2():
     recs = _old_records()
-    assert len(recs) >= 5
+    assert len(recs) == len(OLD_RECORD_FILES) == 7
     assert [vs.validate(r) for r in recs] == frozen_validate(recs)
     assert all(vs.validate(r) == [] for r in recs)
 
@@ -599,7 +635,7 @@ def test_watcher_md_case_count_matches_yaml():          # row 16
     import re
     n = len(_yaml("watcher_rules.yaml")["tests"])
     m = re.search(r"(\d+) test cases", (HERE / "watcher_rules.md").read_text())
-    assert m and int(m.group(1)) == n == 45
+    assert m and int(m.group(1)) == n == 48   # 1.1.4: + SCOPE-e/f/g (approval status -> target)
 
 
 def test_message_format_placeholders_are_alert_fields():  # row 17
@@ -611,7 +647,7 @@ def test_message_format_placeholders_are_alert_fields():  # row 17
 
 def test_rule_file_labels_equal_version():                 # row 19
     v = (HERE / "VERSION").read_text().strip()
-    assert v == "1.1.3"
+    assert v == "1.1.4"
     assert _yaml("risk_rules.yaml")["ruleset_version"] == v
     assert _yaml("watcher_rules.yaml")["watcher_version"] == v
     assert (HERE / "risk_rules.md").read_text().splitlines()[0].startswith(f"# Risk rules v{v} ")

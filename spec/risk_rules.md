@@ -1,4 +1,4 @@
-# Risk rules v1.1.3 (paper-only US options)
+# Risk rules v1.1.4 (paper-only US options)
 
 The machine-readable source of truth is `risk_rules.yaml`. It holds the config, definitions, rules, profiles, fixture and 78 test cases. `risk_reference.py` is the reference implementation, and `test_risk_reference.py` runs the YAML tests (`.venv/bin/python -m pytest -q`). If this document and the YAML disagree, the YAML wins.
 
@@ -8,8 +8,8 @@ The machine-readable source of truth is `risk_rules.yaml`. It holds the config, 
 - **Missing input gives UNKNOWN, never PASS.** An UNKNOWN on a **hard** rule blocks the trade, the same as a VETO. An UNKNOWN on a **soft** rule is shown to the approver as a flag.
 - **Precedence within a rule** (for example per leg): VETO > UNKNOWN > FLAG > PASS (`risk_reference.combine`). **1.1.3: no results at all combine to UNKNOWN (fail closed; was PASS)**, so a rule that combines per-leg / per-quote / per-event results (R01–R03, R07–R09) can never pass silently on zero items: it returns UNKNOWN, which blocks for hard rules (VETO overall) and flags for soft ones. No YAML case outcome changed (all 78 still pass). R09's explicit "no short legs → PASS" is unchanged.
 - **Overall verdict:** VETO if any rule returns VETO or any hard rule returns UNKNOWN. Otherwise FLAG if any rule returns FLAG or any soft rule returns UNKNOWN. Otherwise PASS. `blocking_rule_ids` lists the rules behind a VETO, and `flag_rule_ids` lists the FLAGs and soft UNKNOWNs. **Eugene must still approve the exact contracts, even on a PASS.** Only a PASS or FLAG review can be approved, and every flag must be acknowledged.
-- **Flag acknowledgement (session INV-05, 1.1.3 records):** an approval's `acknowledged_flags` must list exactly the review's flagged rule_ids (FLAG or soft UNKNOWN results, plus any recorded `flag_rule_ids`): none missing (`INV-05-ACK-MISSING`; an absent field acknowledges nothing), none extra (`INV-05-ACK-EXTRA`; a PASS review needs an empty list), no duplicates (`INV-05-ACK-DUPLICATE`). An approval of a VETO review is `INV-05-VETO`, whatever it acknowledges.
-- **Stored verdict = computed verdict (session INV-16, 1.1.3 records):** `overall.verdict`, `blocking_rule_ids` and `flag_rule_ids` must equal `risk_reference.overall(results)` (ids as sets). A stored PASS or FLAG over any VETO or hard UNKNOWN is `INV-16-VERDICT`; consumers must never trust a stored verdict the results do not support.
+- **Flag acknowledgement (session INV-05, 1.1.3 and 1.1.4 records):** an approval's `acknowledged_flags` must list exactly the review's flagged rule_ids (FLAG or soft UNKNOWN results, plus any recorded `flag_rule_ids`): none missing (`INV-05-ACK-MISSING`; an absent field acknowledges nothing), none extra (`INV-05-ACK-EXTRA`; a PASS review needs an empty list), no duplicates (`INV-05-ACK-DUPLICATE`). An approval of a VETO review is `INV-05-VETO`, whatever it acknowledges.
+- **Stored verdict = computed verdict (session INV-16, 1.1.3 and 1.1.4 records):** `overall.verdict`, `blocking_rule_ids` and `flag_rule_ids` must equal `risk_reference.overall(results)` (ids as sets). A stored PASS or FLAG over any VETO or hard UNKNOWN is `INV-16-VERDICT`; consumers must never trust a stored verdict the results do not support.
 - **Time zones.** Market hours, DTE and event days are all computed in **America/New_York**, never Europe/Berlin. Their DST changes fall on different dates. In 2026 the EU switches back on Oct 25 and the US on Nov 1. During that week NY is 5 hours behind Berlin instead of 6, so the 09:30 ET open is 14:30 Berlin rather than 15:30 (test R01-f). Timestamps without a zone are rejected.
 
 ## Config (risk_rules.yaml → `config`, overridable per review via `config_overrides`)
@@ -97,12 +97,12 @@ Applies to the 1.1.0+ raw tick fields: `limit_price.raw_amount` and `Condition.r
 | ticket | limit | stop (`stop_rules`) | target (`target_rules`) |
 |---|---|---|---|
 | debit (all versions) | down (pay at most the cap) | up (exit no later) | down (take profit no later) |
-| credit vertical (1.1.1 / 1.1.2 / 1.1.3 records) | **up** (receive at least the min credit) | **down** (buy back no later) | **up** (buy back no later) |
+| credit vertical (1.1.1 / 1.1.2 / 1.1.3 / 1.1.4 records) | **up** (receive at least the min credit) | **down** (buy back no later) | **up** (buy back no later) |
 
 - Entry, exit and watcher conditions are only checked for consistency, with no forced direction.
 - 1.1.0 records keep the 1.1.0 rule: no direction on a credit limit, and stop up / target down for every ticket.
 
-## Vertical consistency (session schema INV-14, 1.1.1, 1.1.2 and 1.1.3 records)
+## Vertical consistency (session schema INV-14, 1.1.1, 1.1.2, 1.1.3 and 1.1.4 records)
 Applies to bull call / bear put debit spreads and bull put / bear call credit spreads.
 - **Structure:** 2 legs of the same type and expiry, ratio 1:1, multiplier 100, one buy and one sell. Strikes must be ordered as the strategy says, and `price_type` must match (debit / credit).
 - **Inputs:** every value comes from the legs.
@@ -124,7 +124,7 @@ Applies to bull call / bear put debit spreads and bull put / bear call credit sp
 - **Precision:** arithmetic is exact Decimal with a 0.01 tolerance on $ amounts and breakevens; the inequalities are exact.
 - **Credit stop check:** the planned loss at the stop is implied by stop < width, so it can only fail together with that clause.
 
-## Stop / target direction (session schema INV-15, 1.1.2 and 1.1.3 records)
+## Stop / target direction (session schema INV-15, 1.1.2, 1.1.3 and 1.1.4 records)
 Applies to the same four verticals. The stop and the target are the same single `position_value` condition (cost to close the spread) in `stop_rules` and in `target_rules` that INV-14 reads; INV-15 checks its comparison operator `op`.
 
 | | stop (`stop_rules`) | target (`target_rules`) |

@@ -12,7 +12,8 @@ watcher_rules.yaml) and writes <session>.watch.json plus a .sha256 sidecar.
                   watch start (approved_at <= now < expires_at), whose flags are all acknowledged and whose
                   review's rule results do not veto (records/guards.py, FIX-SEC-001). Watched as approved_pending.
                   Any other approval (revoked / expired / consumed / out of window / unacknowledged flags) is
-                  NOT honoured: the ticket stays HYPOTHETICAL, except `revoked`, which is a rejected shadow.
+                  NOT honoured. Without a real approval, ANY `revoked` approval of the ticket makes it a
+                  rejected shadow (spec 1.1.4); otherwise the ticket stays HYPOTHETICAL.
       - neither:  HYPOTHETICAL (no approval recorded). Watched as approved_pending and flagged
                   hypothetical=True, which is a paper what-if.
       - open paper_positions are watched as kind=position.
@@ -310,8 +311,14 @@ def targets_from_session(rec: dict, now: datetime) -> list[Target]:
     """Targets at `now` (the watch start). `now` is required: there is no wall-clock default, so a caller can never
     honour an approval against the wrong time (FIX-SEC-001 N7).
 
-    Deliberate divergence from spec/watcher_reference.py (N4): a `revoked` approval maps to `rejected` (shadow only,
-    more conservative) where the reference gives `approved_pending` hypothetical. Neither treats it as approved."""
+    Approval status -> target (spec 1.1.4 ruling, watcher_rules.yaml scope.approval_status, same as
+    spec/watcher_reference.target_from_session), applied after VETO-first and idea `rejected`:
+      - a REAL approval of the ticket wins: status `active`, approved_at <= now < expires_at, INV-05/INV-16 clean
+        -> `approved_pending`, really approved;
+      - otherwise ANY `revoked` approval of the ticket -> `rejected` (shadow only, fail closed), whatever the
+        other approvals say (an expired / consumed / blocked active one does not soften it);
+      - otherwise (expired, consumed, active but out of window or failing INV-05, or no approval)
+        -> `approved_pending` HYPOTHETICAL (a watched paper what-if)."""
     if not isinstance(now, datetime):
         raise TypeError("targets_from_session: `now` must be a datetime (the watch start)")
     ideas = {i.get("ticket_id"): i for i in rec.get("idea_log") or []}
@@ -323,15 +330,21 @@ def targets_from_session(rec: dict, now: datetime) -> list[Target]:
         verdict = effective_verdict(rv) if rv else None      # a tampered/empty review is VETO (INV-16, FIX-SEC-001)
         istat = idea.get("current_status", "proposed")
         appr, blockers = _pick_approval(rec, tid, now)
-        astat = (appr or {}).get("status")
+        real = appr is not None and not blockers
+        revoked = [a.get("approval_id") for a in rec.get("approvals") or []
+                   if a.get("ticket_id") == tid and a.get("status") == "revoked"]
         vetoes = _veto_reasons(rec, tid, rv, istat)
         if vetoes:
             why = "; ".join(vetoes)
             out.append(Target(tid, "ticket", tid, "vetoed", istat, True, False, tk,
                               f"VETOED ({why}): shadow only, end-of-day summary, no intraday alerts"))
-        elif istat == "rejected" or astat == "revoked":
+        elif istat == "rejected":
             out.append(Target(tid, "ticket", tid, "rejected", istat, False, False, tk, "rejected: shadow only"))
-        elif appr and not blockers:
+        elif not real and revoked:
+            out.append(Target(tid, "ticket", tid, "rejected", istat, False, False, tk,
+                              f"rejected: approval {', '.join(map(str, revoked))} revoked and no approval stands at the "
+                              "watch start: shadow only"))
+        elif real:
             out.append(Target(tid, "ticket", tid, "approved_pending", istat, False, False, tk,
                               f"approved for paper ({appr.get('approval_id')}); watched as approved_pending"))
         else:

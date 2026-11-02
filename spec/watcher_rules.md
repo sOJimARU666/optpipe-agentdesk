@@ -1,6 +1,6 @@
-# Watcher rules v1.1.3 (alert-only, paper-only US options)
+# Watcher rules v1.1.4 (alert-only, paper-only US options)
 
-Source of truth: `watcher_rules.yaml` (config, scope, polling, dedupe, definitions, rules W01–W07, fixture, 45 test cases). `watcher_reference.py` is the reference evaluator (`poll(inp, state) -> (alerts, new_state, next_poll_seconds)`), `test_watcher_reference.py` runs the YAML cases. If this file and the YAML disagree, the YAML wins.
+Source of truth: `watcher_rules.yaml` (config, scope, polling, dedupe, definitions, rules W01–W07, fixture, 48 test cases). `watcher_reference.py` is the reference evaluator (`poll(inp, state) -> (alerts, new_state, next_poll_seconds)`), `test_watcher_reference.py` runs the YAML cases. If this file and the YAML disagree, the YAML wins.
 
 **The watcher never places, changes or cancels an order.** Every alert ends with the text `alert only, no order`.
 
@@ -9,11 +9,28 @@ Source of truth: `watcher_rules.yaml` (config, scope, polling, dedupe, definitio
 - Tickets that are `vetoed` or `rejected` are not polled. They get one `SHADOW_EOD` info summary per NY trading day, at or after the close (16:00 NY, or 13:00 on early-close days).
 - Anything else (closed positions, drafts) is ignored.
 
-## Approval state (spec 1.1.3, FIX-SEC-001)
+## Approval state (spec 1.1.3, FIX-SEC-001; revoked ruling spec 1.1.4)
 - **Approval state is read ONLY from `approvals[].status`. There is no `decision` field.** The approval schema has `additionalProperties: false`, so a record carrying `decision` is schema-invalid; a watcher must never read it, trust it or fall back to it.
-- A ticket counts as really approved only if some approval for it has `status: active`, is not expired at the poll time (`approved_at <= now < expires_at`), and passes the 1.1.3 INV-05 checks (not a VETO review, same ticket, legs/qty/limit equal to the ticket, every flagged rule_id in `acknowledged_flags`). `expired`, `revoked`, `consumed` or no approval → hypothetical (watched as `approved_pending`, `approved: false`).
-- VETO comes first: if the ticket's latest review is VETO (recorded, or what its rule results give), or any approval of the ticket points at a VETO review, or the idea is `vetoed`, the target is `vetoed` (shadow only); an approval never un-vetoes a ticket. Then idea `rejected` → `rejected`.
-- Reference: `watcher_reference.target_from_session(sess, ticket_id, now)` / `real_approval(...)`; tests in `test_invariants_v1_1_3.py`.
+- Order of evaluation for a ticket target (`watcher_reference.target_from_session`):
+  1. **VETO first:** if the ticket's latest review is VETO (recorded, or what its rule results give), or any approval of the ticket points at a VETO review, or the idea is `vetoed`, the target is `vetoed` (shadow only); an approval never un-vetoes a ticket.
+  2. Idea `rejected` → `rejected` (shadow only).
+  3. A **real approval** wins: some approval for the ticket has `status: active`, is not expired at the poll time (`approved_at <= now < expires_at`), and passes the 1.1.3 INV-05 checks (not a VETO review, same ticket, legs/qty/limit equal to the ticket, every flagged rule_id in `acknowledged_flags`) → `approved_pending`, `approved: true`.
+  4. Otherwise, **any approval of the ticket with `status: revoked` → `rejected`** (shadow only). Spec 1.1.4 ruling: a revoked approval is fail-closed, never a watched what-if (it was hypothetical in 1.1.3); this matches the pipeline runtime (optpipe).
+  5. Otherwise → hypothetical: watched as `approved_pending` with `approved: false`.
+- Full approval-status mapping (YAML `scope.approval_status`, `watcher_reference.APPROVAL_STATUS_TARGET`), applied after steps 1–2:
+
+  | `approvals[].status` of the ticket's approval | watcher target | polled intraday? |
+  |---|---|---|
+  | `active` (in window, INV-05 clean) | `approved_pending`, `approved: true` (real) | yes |
+  | `active` but outside its window or failing INV-05 | `approved_pending`, `approved: false` (hypothetical) | yes |
+  | `revoked` | `rejected` (shadow; 1.1.4, was hypothetical) | no – `SHADOW_EOD` only |
+  | `expired` | `approved_pending`, `approved: false` (hypothetical) | yes |
+  | `consumed` | `approved_pending`, `approved: false` (hypothetical); the entered trade is watched as its paper position | yes |
+  | missing / none | `approved_pending`, `approved: false` (hypothetical) | yes |
+  | any status, ticket vetoed (step 1) / idea rejected (step 2) | `vetoed` / `rejected` | no – `SHADOW_EOD` only |
+
+  With several approvals for one ticket: a real approval wins (step 3); without one, a single revoked approval makes the ticket `rejected`, whatever the other approvals say.
+- Reference: `watcher_reference.target_from_session(sess, ticket_id, now)` / `real_approval(...)`; tests in `test_invariants_v1_1_3.py` and `test_watcher_reference.py` (YAML cases SCOPE-e..g build the target from a session record via `approval_status`).
 
 ## Polling (America/New_York; calendar from `risk_rules.yaml → config.market_hours`)
 - Only during regular hours, 09:30–16:00 NY (13:00 on early closes). There is no polling on weekends, NYSE holidays or outside the session (`next_poll = None`).
@@ -43,4 +60,4 @@ Message format: `[level] RULE target: detail | value=… threshold=… quote_as_
 | W07_EVENT_EVE | events (CPI, PPI, FOMC, NFP, earnings of this underlying), hold window | – | – | info on the trading session before an event that falls inside the hold window |
 
 ## Tests (watcher_rules.yaml → tests)
-BASE-a, POLL-a..d, SCOPE-a..d, DD-a..e (dedupe, escalation, cooldown), W01-a..e, W02-a..d, W03-a..d, W04-a..f, W05-a..d, W06-a..d, W07-a..d. Every rule has at least 2 alerting cases. The fixture is a JPM 340/350 call debit spread (pos-1), 2026-10-20 11:00 NY (17:00 Berlin CEST). `test_watcher_reference.py` also checks the alert contract (all fields present, message ends with `alert only, no order`), a replay test (warn → duplicate suppressed → exit_signal → duplicate suppressed), and that the evaluator contains no order or network code.
+BASE-a, POLL-a..d, SCOPE-a..g (e..g: approval status → target, 1.1.4), DD-a..e (dedupe, escalation, cooldown), W01-a..e, W02-a..d, W03-a..d, W04-a..f, W05-a..d, W06-a..d, W07-a..d. Every rule has at least 2 alerting cases. The fixture is a JPM 340/350 call debit spread (pos-1), 2026-10-20 11:00 NY (17:00 Berlin CEST). `test_watcher_reference.py` also checks the alert contract (all fields present, message ends with `alert only, no order`), a replay test (warn → duplicate suppressed → exit_signal → duplicate suppressed), and that the evaluator contains no order or network code.

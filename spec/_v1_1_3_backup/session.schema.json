@@ -1,0 +1,2591 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poodle.local/trading/spec/session.schema.json",
+  "title": "Paper US options trading session record",
+  "description": "Canonical per-session record for a PAPER-ONLY US equity options workflow (scan -> candidates -> tickets -> risk review -> approval -> simulated fill -> watch -> close). No broker, no live orders: 'executed' always means a simulated paper fill. Sourced market data is ALWAYS wrapped in a Field object (value + source_id + as_of + status). Identifiers, keys, and decisions (ticket legs, limit prices, verdicts) are plain values because they are authored by the system/user, not observed. Cross-object invariants that JSON Schema cannot express are listed in x-invariants and enforced by validate_session.py. Schema v1.1 / 1.1.1 / 1.1.2 / 1.1.3 (see CHANGELOG.md; 1.1.3 adds flag acknowledgement and specific error ids to INV-05, approval status/ticket/terms checks to INV-06, tighter INV-03/INV-04 and the new INV-16 overall-verdict consistency, same shape as 1.1.2; 1.1.2 adds INV-15 vertical stop/target comparison direction; 1.1.1 adds INV-13 credit rounding and INV-14 vertical consistency; adds per-run premarket_scans/global_snapshots, raw tick fields, trace_ref, integer open interest, 'closed' phase) is a backward-compatible superset of v1.0: every valid 1.0.0 record is a valid record under this schema.",
+  "$comment": "MARKET HOURS: all US market-hours, DTE, expiry, hold-window, and 'during market hours' logic MUST be computed in America/New_York (IANA zone via zoneinfo), never by a fixed offset from Europe/Berlin. US and EU DST transitions differ: e.g. 2026-10-25 (EU ends DST) to 2026-11-01 (US ends DST) the NY-Berlin gap is 5h, so the 09:30 ET open is 14:30 Berlin, not 15:30; likewise in March (US starts 2nd Sunday, EU last Sunday). Berlin times are display-only.",
+  "x-market-hours": {
+    "timezone": "America/New_York",
+    "extended_open": "04:00",
+    "regular_open": "09:30",
+    "regular_close": "16:00",
+    "early_close": "13:00",
+    "days": "Mon-Fri excluding NYSE holidays (holiday/early-close calendar supplied by config, versioned per year)",
+    "display_timezone": "Europe/Berlin",
+    "rule": "Compute in America/New_York; convert to Europe/Berlin only for display. Never derive one from the other with a hardcoded 6h offset.",
+    "closed_definition": "Run phase 'closed' (v1.1): NY wall clock before 04:00 or at/after the regular close (16:00; 13:00 on early-close days) on a trading day, or any time on a weekend / NYSE holiday. Holiday and early-close dates come from risk_rules.yaml config.market_hours."
+  },
+  "x-invariants": [
+    "INV-01 every source_id referenced anywhere exists in sources[].id",
+    "INV-02 every TsPair has ny and berlin denoting the same instant; ny offset is -04:00 or -05:00 and matches America/New_York DST for that instant; berlin offset is +01:00 or +02:00 and matches Europe/Berlin",
+    "INV-03 ids are unique within their array (sources, runs, candidates, contracts, tickets, legs, reviews, approvals, positions, watches, alerts, ideas, events). Enforced for every version on the top-level arrays; 1.1.3 records also: leg_id and contract_id unique within each ticket's legs (INV-03-LEG), contract_id unique within each option_chain_slice (INV-03-CONTRACT), fill_id unique across all paper_positions (INV-03-FILL)",
+    "INV-04 all *_id references resolve (run_id, candidate_id, ticket_id, review_id, approval_id, position_id, watch_id, event_id, contract_id, leg_id). 1.1.3 records also: every paper_positions[].fills[].leg_id is a leg of the position's ticket (INV-04-FILL-LEG) and its contract_id equals that leg's contract_id (INV-04-FILL-CONTRACT); every marks[].leg_marks[].leg_id is a leg of the position's ticket (INV-04-MARK-LEG)",
+    "INV-05 an approval may only reference a review whose overall.verdict is PASS or FLAG, for the same ticket, and its legs/quantity/limit_price must equal the ticket's exactly. 1.1.3 records: expires_at > approved_at, and an approval of a FLAG review must acknowledge every flagged rule_id in acknowledged_flags and nothing else: flagged = results FLAG or UNKNOWN with severity soft (risk_reference.overall) plus any recorded overall.flag_rule_ids (INV-05-ACK-MISSING: a flagged id is not listed, an absent acknowledged_flags lists nothing; INV-05-ACK-EXTRA: a listed id was not flagged, incl. any id on a PASS review; INV-05-ACK-DUPLICATE: an id listed twice). Specific error ids: INV-05-VETO (recorded overall.verdict VETO, or its rule results give VETO, or it has no rule results), INV-05-FOREIGN (review for another ticket), INV-05-TERMS (legs/quantity/limit_price differ from the ticket), INV-05-EXPIRY (expires_at <= approved_at). Acknowledgement is not evaluated for a VETO review (already INV-05-VETO)",
+    "INV-06 a paper_position requires an approval with status active at every fill time; every opening fill price respects the approved limit (debit <= limit, credit >= limit). 1.1.3 records (approvals[].status is the canonical approval state; there is no 'decision' field): the approval must be active at every opening fill: status 'active', or 'revoked'/'expired'/'consumed' with status_changed_at strictly after the fill (INV-06-STATUS: status changed at or before an opening fill, so a 'consumed' stamp must come after the last opening fill; INV-06-STATUS-UNDATED: non-active status without status_changed_at); the approval must be for the position's ticket (INV-06-TICKET) and its legs/quantity/limit_price must equal that ticket's (INV-06-TERMS); it must not approve a VETO review (INV-06-VETO); every opening fill satisfies approved_at <= filled_at <= expires_at (INV-06-BEFORE / INV-06-EXPIRED); opening fills match the approved leg side (buy -> buy_to_open, sell -> sell_to_open) and per leg total opening qty <= approval.quantity * ratio (INV-06-QTY); entry net per spread unit = sum(+price*qty buy_to_open, -price*qty sell_to_open) / approval.quantity respects the limit in exact Decimal (INV-06-LIMIT). Closing fills are not time-limited by expires_at.",
+    "INV-07 idea_log history is chronological and current_status equals the last history entry's status",
+    "INV-08 a ticket's legs reference contract_ids present in the referenced candidate's option_chain_slices",
+    "INV-09 Field.as_of must be <= the fetched_at of its source when status is ok or stale (data cannot be newer than its fetch)",
+    "INV-10 (v1.1) run phase vs NY clock: 'closed' requires schema_version 1.1.0, 1.1.1, 1.1.2 or 1.1.3 and runs[].started (America/New_York) in the closed window (before 04:00, at/after 16:00 or the 13:00 early close, weekend, NYSE holiday per risk_rules.yaml config.market_hours); in 1.1.x records every run started in that window must have phase 'closed' and 'afterhours' is not used",
+    "INV-11 (v1.1) trace_ref requires schema_version 1.1.0, 1.1.1, 1.1.2 or 1.1.3; when validating a file, trace_ref.path resolves inside the record's directory, exists, and its SHA-256 equals trace_ref.sha256",
+    "INV-12 (v1.1) premarket_scans[] and global_snapshots[] require schema_version 1.1.0, 1.1.1, 1.1.2 or 1.1.3; within each array run_id is unique and references an existing runs[].run_id; when the singular premarket_scan / global_snapshot is also present its run_id must appear in the array",
+    "INV-13 (v1.1) raw tick fields (limit_price.raw_amount/tick_size/rounding; Condition.raw_value/tick_size/rounding on ticket entry/exit/stop/target rules and watcher_rules) require schema_version 1.1.0, 1.1.1, 1.1.2 or 1.1.3; tick_size must equal the tick rule for the ticket's underlying at the raw price (risk_rules.yaml config.tick_rules); rounded == round(raw, tick_size, rounding) exactly (Decimal); debit limit rounds down, stop conditions round up, target conditions round down; for 1.1.1, 1.1.2 and 1.1.3 records credit verticals (bull_put_credit_spread, bear_call_credit_spread) must round the min-credit limit up, stop conditions down and target conditions up",
+    "INV-14 (1.1.1, 1.1.2 and 1.1.3 records) vertical tickets (bull_call_debit_spread, bear_put_debit_spread, bull_put_credit_spread, bear_call_credit_spread): legs must form the declared vertical (2 legs, same type and expiry, 1:1, one buy one sell, strikes in the right order, matching price_type); width, strikes and the LIMIT price (max debit / min credit) come from the legs and limit_price; stop/target = the position_value condition (cost to close) in stop_rules/target_rules (exactly one each). Credit: 0 < credit < width; credit < stop < width; 0 <= target < credit; max_loss = (width - credit)*100*qty; max_profit = credit*100*qty; breakeven = short_strike - credit (put) / + credit (call); (stop - credit)*100*qty <= max_loss. Debit: 0 < debit < width; 0 < stop < debit; debit < target <= width; max_loss = debit*100*qty; max_profit = (width - debit)*100*qty; breakeven = long_strike + debit (call) / - debit (put). Stored max_loss/max_profit amount_usd and the breakeven at the limit must equal the computed values (0.01 tolerance on $ amounts), unlimited false, at_price (if set) = limit; any other breakevens[] must match the formula at their own at_price. Exact Decimal arithmetic; inequalities strict as written.",
+    "INV-15 (1.1.2 and 1.1.3 records) vertical tickets: the comparison operator of the single position_value condition (cost to close; the same condition INV-14 reads) in stop_rules and in target_rules. Debit verticals (bull_call_debit_spread, bear_put_debit_spread): stop op 'lte', target op 'gte'. Credit verticals (bull_put_credit_spread, bear_call_credit_spread), where position_value is the cost to buy the spread back: stop op 'gte', target op 'lte'. A missing or duplicate condition is reported by INV-14 only.",
+    "INV-16 (1.1.3 records only) overall-verdict consistency: every risk_reviews[].overall must equal risk_reference.overall(results): verdict exactly (INV-16-VERDICT), blocking_rule_ids as a set without duplicates (INV-16-BLOCKING: VETO or hard UNKNOWN), flag_rule_ids as a set without duplicates (INV-16-FLAGS: FLAG or soft UNKNOWN); so a stored PASS/FLAG over any VETO or hard UNKNOWN fails. A review with no rule results fails (INV-16-EMPTY; risk_reference.combine([]) is UNKNOWN, fail closed). Precedence within a rule: PASS < FLAG < UNKNOWN < VETO (risk_reference.combine)"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "session",
+    "sources",
+    "runs",
+    "premarket_scan",
+    "global_snapshot",
+    "event_calendar",
+    "candidates",
+    "tickets",
+    "risk_reviews",
+    "approvals",
+    "paper_positions",
+    "watcher_rules",
+    "alerts",
+    "idea_log",
+    "data_quality"
+  ],
+  "properties": {
+    "schema_version": {
+      "enum": [
+        "1.0.0",
+        "1.1.0",
+        "1.1.1",
+        "1.1.2",
+        "1.1.3"
+      ],
+      "description": "1.0.0 = v1 record; 1.1.0 = may use v1.1 additions (run phase 'closed', trace_ref, premarket_scans/global_snapshots, raw tick fields); 1.1.1 = same shape as 1.1.0 plus the stricter checks INV-13 credit directions and INV-14 vertical consistency; 1.1.2 = same shape and checks as 1.1.1 plus INV-15 vertical stop/target comparison direction. Integer open_interest applies to all (integral floats like 472.0 still validate). 1.1.3 = same shape as 1.1.2 plus stricter checks on 1.1.3 records only: INV-03 leg/contract/fill uniqueness, INV-04 fill/leg_mark leg and contract resolution, INV-05 flag acknowledgement and specific error ids, INV-06 approval status/ticket/terms at fills, INV-16 overall verdict = aggregate of rule results. Records 1.0.0-1.1.2 validate exactly as before (same error strings)."
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "date",
+        "mode",
+        "created",
+        "updated",
+        "market_calendar"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^sess-\\d{4}-\\d{2}-\\d{2}(-[a-z0-9]+)?$",
+          "description": "sess-YYYY-MM-DD[-suffix]; date part = US trading date in America/New_York"
+        },
+        "date": {
+          "$ref": "#/$defs/Date",
+          "description": "US trading date (America/New_York)"
+        },
+        "mode": {
+          "const": "paper",
+          "description": "Paper only. Any other value is invalid by design."
+        },
+        "created": {
+          "$ref": "#/$defs/TsPair"
+        },
+        "updated": {
+          "$ref": "#/$defs/TsPair"
+        },
+        "risk_ruleset_version": {
+          "type": "string",
+          "description": "version of risk_rules.yaml used by reviews in this session"
+        },
+        "market_calendar": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "timezone",
+            "is_trading_day",
+            "regular_open",
+            "regular_close"
+          ],
+          "properties": {
+            "timezone": {
+              "const": "America/New_York"
+            },
+            "is_trading_day": {
+              "type": "boolean"
+            },
+            "early_close": {
+              "type": "boolean",
+              "default": false
+            },
+            "regular_open": {
+              "$ref": "#/$defs/TsPair",
+              "description": "09:30 ET on session.date, with Berlin equivalent computed via zoneinfo"
+            },
+            "regular_close": {
+              "$ref": "#/$defs/TsPair",
+              "description": "16:00 ET (13:00 on early-close days)"
+            },
+            "ny_berlin_offset_hours": {
+              "type": "integer",
+              "enum": [
+                5,
+                6
+              ],
+              "description": "Informational only: 6 normally, 5 during DST-mismatch weeks. Never used for computation."
+            }
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "url",
+          "fetched_at",
+          "kind"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/$defs/SourceId"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "pattern": "^(https?://|urn:)",
+            "description": "https URL; 'urn:poodle:derived' for values the pipeline computed"
+          },
+          "fetched_at": {
+            "$ref": "#/$defs/Timestamp"
+          },
+          "kind": {
+            "enum": [
+              "screener",
+              "quote_api",
+              "option_chain_api",
+              "news",
+              "filing",
+              "company_ir",
+              "economic_calendar",
+              "exchange_calendar",
+              "data_vendor",
+              "user_input",
+              "derived"
+            ]
+          },
+          "publisher": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "realtime": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "Whether the source claims realtime data"
+          },
+          "http_status": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "notes": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "runs": {
+      "description": "Each pipeline pass within the session (premarket scan, preopen update, post-open requote...). Time-varying records point at a run_id.",
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "run_id",
+          "phase",
+          "started",
+          "market_status"
+        ],
+        "properties": {
+          "run_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "phase": {
+            "enum": [
+              "premarket",
+              "preopen",
+              "open",
+              "intraday",
+              "postopen",
+              "close",
+              "afterhours",
+              "closed"
+            ],
+            "description": "Computed on the America/New_York clock from started. closed (v1.1 only) = before 04:00 or at/after the regular close (16:00, 13:00 on early-close days) on a trading day, or a weekend / NYSE holiday. In 1.1.x records a run started in that window MUST be 'closed' and 'closed' MUST NOT be used outside it (INV-10); 'afterhours' remains valid only in 1.0.0 records."
+          },
+          "started": {
+            "$ref": "#/$defs/TsPair"
+          },
+          "market_status": {
+            "$ref": "#/$defs/StringField",
+            "description": "e.g. Pre-Market / Open / Closed as reported by the quote source"
+          },
+          "summary": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "premarket_scan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "screens",
+        "earnings_reports"
+      ],
+      "properties": {
+        "run_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "screens": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "screen_id",
+              "name",
+              "source_id",
+              "fetched_at",
+              "status",
+              "rows"
+            ],
+            "properties": {
+              "screen_id": {
+                "$ref": "#/$defs/Id"
+              },
+              "name": {
+                "type": "string",
+                "description": "e.g. ta_toplosers"
+              },
+              "source_id": {
+                "$ref": "#/$defs/SourceId"
+              },
+              "filters": {
+                "type": "string"
+              },
+              "fetched_at": {
+                "$ref": "#/$defs/Timestamp"
+              },
+              "status": {
+                "$ref": "#/$defs/Status"
+              },
+              "status_reason": {
+                "type": "string"
+              },
+              "parse_notes": {
+                "type": "string"
+              },
+              "rows": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "rank",
+                    "ticker"
+                  ],
+                  "properties": {
+                    "rank": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "ticker": {
+                      "$ref": "#/$defs/Ticker"
+                    },
+                    "last": {
+                      "$ref": "#/$defs/NumberField"
+                    },
+                    "change_pct": {
+                      "$ref": "#/$defs/NumberField"
+                    },
+                    "volume": {
+                      "$ref": "#/$defs/NumberField"
+                    },
+                    "relative_volume": {
+                      "$ref": "#/$defs/NumberField"
+                    }
+                  }
+                }
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "status": {
+                      "const": "missing"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "rows": {
+                      "maxItems": 0
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "earnings_reports": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "run_id",
+              "ticker",
+              "fiscal_period",
+              "reported",
+              "eps_actual",
+              "eps_estimate",
+              "revenue_actual_usd_bn",
+              "revenue_estimate_usd_bn",
+              "premarket_change_pct"
+            ],
+            "properties": {
+              "run_id": {
+                "$ref": "#/$defs/Id"
+              },
+              "ticker": {
+                "$ref": "#/$defs/Ticker"
+              },
+              "fiscal_period": {
+                "type": "string"
+              },
+              "reported": {
+                "$ref": "#/$defs/BoolField"
+              },
+              "eps_actual": {
+                "$ref": "#/$defs/NumberField"
+              },
+              "eps_estimate": {
+                "$ref": "#/$defs/NumberField"
+              },
+              "revenue_actual_usd_bn": {
+                "$ref": "#/$defs/NumberField"
+              },
+              "revenue_estimate_usd_bn": {
+                "$ref": "#/$defs/NumberField"
+              },
+              "premarket_change_pct": {
+                "$ref": "#/$defs/NumberField"
+              },
+              "extra_metrics": {
+                "type": "object",
+                "additionalProperties": {
+                  "$ref": "#/$defs/NumberField"
+                }
+              }
+            },
+            "description": "One row per (ticker, run_id): later runs append rows rather than overwrite, so history is preserved."
+          }
+        }
+      }
+    },
+    "premarket_scans": {
+      "description": "(v1.1, 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 records only) one premarket scan per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'premarket_scan', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+      "type": "array",
+      "items": {
+        "$ref": "#/properties/premarket_scan"
+      }
+    },
+    "global_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "run_id",
+        "instruments"
+      ],
+      "properties": {
+        "run_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "instruments": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "symbol",
+              "region",
+              "level",
+              "change_pct",
+              "session_state"
+            ],
+            "properties": {
+              "symbol": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "region": {
+                "enum": [
+                  "asia_pacific",
+                  "europe",
+                  "us",
+                  "other"
+                ]
+              },
+              "level": {
+                "$ref": "#/$defs/NumberField"
+              },
+              "change_pct": {
+                "$ref": "#/$defs/NumberField"
+              },
+              "session_state": {
+                "enum": [
+                  "close",
+                  "intraday",
+                  "early",
+                  "futures",
+                  "unknown"
+                ]
+              }
+            }
+          }
+        },
+        "themes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/StringField"
+          }
+        }
+      }
+    },
+    "global_snapshots": {
+      "description": "(v1.1, 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 records only) one global snapshot per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'global_snapshot', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+      "type": "array",
+      "items": {
+        "$ref": "#/properties/global_snapshot"
+      }
+    },
+    "event_calendar": {
+      "description": "Scheduled events the risk rules need (earnings, ex-dividend, CPI, PPI, FOMC, NFP). 'coverage' records how far each calendar was actually checked, so 'no event found' (PASS) is distinguishable from 'never checked' (UNKNOWN).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "events",
+        "coverage"
+      ],
+      "properties": {
+        "events": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "event_id",
+              "kind",
+              "underlying",
+              "scheduled_at",
+              "timing"
+            ],
+            "properties": {
+              "event_id": {
+                "$ref": "#/$defs/Id"
+              },
+              "kind": {
+                "$ref": "#/$defs/EventKind"
+              },
+              "underlying": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/Ticker"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "null for macro events"
+              },
+              "scheduled_at": {
+                "$ref": "#/$defs/TimestampField",
+                "description": "Event instant (America/New_York offset). If time unknown, use 00:00 NY and timing=unknown; rules then treat the whole NY calendar day as the event."
+              },
+              "timing": {
+                "enum": [
+                  "bmo",
+                  "amc",
+                  "during_market",
+                  "at_time",
+                  "unknown"
+                ]
+              },
+              "dividend_amount": {
+                "$ref": "#/$defs/NumberField",
+                "description": "ex_dividend only: cash dividend per share"
+              },
+              "description": {
+                "type": "string"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "ex_dividend"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "dividend_amount"
+                  ]
+                }
+              }
+            ]
+          }
+        },
+        "coverage": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "kind",
+              "underlying",
+              "checked_through"
+            ],
+            "properties": {
+              "kind": {
+                "$ref": "#/$defs/EventKind"
+              },
+              "underlying": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/Ticker"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "checked_through": {
+                "$ref": "#/$defs/DateField",
+                "description": "Calendar verified complete through this NY date (inclusive). status missing => not checked."
+              }
+            }
+          }
+        }
+      }
+    },
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "candidate_id",
+          "underlying",
+          "catalysts",
+          "snapshots"
+        ],
+        "properties": {
+          "candidate_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "underlying": {
+            "$ref": "#/$defs/Ticker"
+          },
+          "company_name": {
+            "type": "string"
+          },
+          "exchange": {
+            "type": "string"
+          },
+          "catalysts": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/StringField"
+            }
+          },
+          "related_event_ids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Id"
+            }
+          },
+          "snapshots": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "run_id",
+                "quote",
+                "volume",
+                "option_chain_slices"
+              ],
+              "properties": {
+                "run_id": {
+                  "$ref": "#/$defs/Id"
+                },
+                "quote": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "last",
+                    "bid",
+                    "ask",
+                    "prev_close",
+                    "change_pct"
+                  ],
+                  "properties": {
+                    "last": {
+                      "$ref": "#/$defs/NumberField"
+                    },
+                    "bid": {
+                      "$ref": "#/$defs/NumberField"
+                    },
+                    "ask": {
+                      "$ref": "#/$defs/NumberField"
+                    },
+                    "prev_close": {
+                      "$ref": "#/$defs/NumberField"
+                    },
+                    "change_pct": {
+                      "$ref": "#/$defs/NumberField"
+                    },
+                    "day_high": {
+                      "$ref": "#/$defs/NumberField"
+                    },
+                    "day_low": {
+                      "$ref": "#/$defs/NumberField"
+                    },
+                    "week52_low": {
+                      "$ref": "#/$defs/NumberField"
+                    },
+                    "week52_high": {
+                      "$ref": "#/$defs/NumberField"
+                    }
+                  }
+                },
+                "volume": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "volume",
+                    "avg_volume",
+                    "volume_vs_avg"
+                  ],
+                  "properties": {
+                    "volume": {
+                      "$ref": "#/$defs/NumberField",
+                      "description": "session-to-date (premarket volume if before 09:30 ET)"
+                    },
+                    "avg_volume": {
+                      "$ref": "#/$defs/NumberField",
+                      "description": "30-day average daily volume"
+                    },
+                    "volume_vs_avg": {
+                      "$ref": "#/$defs/NumberField",
+                      "description": "derived: volume / avg_volume"
+                    }
+                  }
+                },
+                "iv": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": [
+                    "iv30_current",
+                    "iv30_history"
+                  ],
+                  "properties": {
+                    "iv30_current": {
+                      "$ref": "#/$defs/NumberField",
+                      "description": "decimal, 0.25 = 25%"
+                    },
+                    "iv30_history": {
+                      "$ref": "#/$defs/NumberArrayField",
+                      "description": "trailing 30 calendar days of daily IV30 closes, oldest first"
+                    }
+                  }
+                },
+                "option_chain_slices": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "expiry",
+                      "source_id",
+                      "contracts"
+                    ],
+                    "properties": {
+                      "expiry": {
+                        "$ref": "#/$defs/Date"
+                      },
+                      "source_id": {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      "slice_note": {
+                        "type": "string"
+                      },
+                      "contracts": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/OptionContract"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "tickets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "ticket_id",
+          "candidate_id",
+          "label",
+          "created",
+          "underlying",
+          "strategy",
+          "legs",
+          "quantity",
+          "limit_price",
+          "pricing",
+          "hold_window",
+          "entry_rules",
+          "exit_rules",
+          "stop_rules",
+          "target_rules",
+          "max_loss",
+          "max_profit",
+          "breakevens",
+          "intended_event_ids",
+          "dm_alternatives"
+        ],
+        "properties": {
+          "ticket_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "candidate_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "label": {
+            "const": "HYPOTHETICAL - paper only, not an order"
+          },
+          "created": {
+            "$ref": "#/$defs/TsPair"
+          },
+          "underlying": {
+            "$ref": "#/$defs/Ticker"
+          },
+          "strategy": {
+            "enum": [
+              "long_call",
+              "long_put",
+              "bull_call_debit_spread",
+              "bear_put_debit_spread",
+              "bull_put_credit_spread",
+              "bear_call_credit_spread",
+              "iron_condor",
+              "calendar",
+              "other"
+            ]
+          },
+          "direction": {
+            "enum": [
+              "bullish",
+              "bearish",
+              "neutral",
+              "volatility"
+            ]
+          },
+          "thesis": {
+            "type": "string"
+          },
+          "legs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/Leg"
+            }
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "number of spread units; leg contracts = quantity * leg.ratio"
+          },
+          "limit_price": {
+            "$ref": "#/$defs/LimitPrice"
+          },
+          "pricing": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "run_id",
+              "reference_mid",
+              "natural",
+              "status"
+            ],
+            "properties": {
+              "run_id": {
+                "$ref": "#/$defs/Id"
+              },
+              "reference_mid": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "net per-share price at leg mids (debit positive)"
+              },
+              "natural": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "net per-share price crossing the spread"
+              },
+              "status": {
+                "$ref": "#/$defs/Status",
+                "description": "worst status among the leg quotes used"
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          },
+          "risk_basis": {
+            "type": "string",
+            "description": "e.g. which per-trade limit was used (placeholder until Eugene sets one)"
+          },
+          "hold_window": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "start",
+              "end"
+            ],
+            "properties": {
+              "start": {
+                "$ref": "#/$defs/TsPair",
+                "description": "earliest intended entry"
+              },
+              "end": {
+                "$ref": "#/$defs/TsPair",
+                "description": "time stop / latest planned exit (<= expiry 16:00 ET)"
+              }
+            }
+          },
+          "entry_rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/TradeRule"
+            }
+          },
+          "exit_rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/TradeRule"
+            }
+          },
+          "stop_rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/TradeRule"
+            }
+          },
+          "target_rules": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/TradeRule"
+            }
+          },
+          "max_loss": {
+            "$ref": "#/$defs/PayoffAmount"
+          },
+          "max_profit": {
+            "$ref": "#/$defs/PayoffAmount"
+          },
+          "breakevens": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "underlying_price",
+                "at_price"
+              ],
+              "properties": {
+                "underlying_price": {
+                  "type": "number"
+                },
+                "at_price": {
+                  "type": "number"
+                }
+              }
+            }
+          },
+          "intended_event_ids": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/Id"
+            },
+            "description": "events the ticket deliberately holds through (e.g. an earnings play); lets the earnings rule FLAG instead of VETO"
+          },
+          "dm_alternatives": {
+            "type": "array",
+            "minItems": 1,
+            "contains": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "const": "no_trade"
+                }
+              },
+              "required": [
+                "kind"
+              ]
+            },
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "alt_id",
+                "kind",
+                "description",
+                "decision",
+                "reason"
+              ],
+              "properties": {
+                "alt_id": {
+                  "$ref": "#/$defs/Id"
+                },
+                "kind": {
+                  "enum": [
+                    "trade",
+                    "no_trade"
+                  ]
+                },
+                "description": {
+                  "type": "string"
+                },
+                "ticket_id": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/$defs/Id"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "decision": {
+                  "enum": [
+                    "selected",
+                    "preferred",
+                    "not_selected",
+                    "rejected"
+                  ]
+                },
+                "reason": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "risk_reviews": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "review_id",
+          "ticket_id",
+          "run_id",
+          "evaluated_at",
+          "ruleset_version",
+          "market_open_at_evaluation",
+          "results",
+          "overall"
+        ],
+        "properties": {
+          "review_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "ticket_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "run_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "evaluated_at": {
+            "$ref": "#/$defs/TsPair"
+          },
+          "ruleset_version": {
+            "type": "string"
+          },
+          "config_overrides": {
+            "type": "object"
+          },
+          "market_open_at_evaluation": {
+            "type": "boolean",
+            "description": "computed in America/New_York"
+          },
+          "results": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "rule_id",
+                "severity",
+                "result",
+                "measured",
+                "threshold",
+                "reason"
+              ],
+              "properties": {
+                "rule_id": {
+                  "type": "string",
+                  "pattern": "^R\\d{2}_[A-Z0-9_]+$"
+                },
+                "severity": {
+                  "enum": [
+                    "hard",
+                    "soft"
+                  ]
+                },
+                "result": {
+                  "$ref": "#/$defs/RuleResult"
+                },
+                "measured": {
+                  "description": "value the formula produced (number, string, object, or null when UNKNOWN)"
+                },
+                "threshold": {
+                  "description": "threshold compared against (from config)"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "placeholder": {
+                  "type": "boolean",
+                  "description": "threshold is a placeholder default pending Eugene"
+                },
+                "inputs": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "path",
+                      "status"
+                    ],
+                    "properties": {
+                      "path": {
+                        "type": "string"
+                      },
+                      "value": {},
+                      "status": {
+                        "$ref": "#/$defs/Status"
+                      },
+                      "source_id": {
+                        "oneOf": [
+                          {
+                            "$ref": "#/$defs/SourceId"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    }
+                  }
+                },
+                "per_leg": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "leg_id",
+                      "result",
+                      "measured"
+                    ],
+                    "properties": {
+                      "leg_id": {
+                        "$ref": "#/$defs/Id"
+                      },
+                      "result": {
+                        "$ref": "#/$defs/RuleResult"
+                      },
+                      "measured": {},
+                      "reason": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "overall": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "verdict",
+              "blocking_rule_ids",
+              "flag_rule_ids",
+              "approval_required"
+            ],
+            "properties": {
+              "verdict": {
+                "enum": [
+                  "PASS",
+                  "FLAG",
+                  "VETO"
+                ],
+                "description": "VETO if any rule VETO or any hard rule UNKNOWN; else FLAG if any FLAG or soft UNKNOWN; else PASS; 1.1.3 records: must equal risk_reference.overall(results) (INV-16), as must blocking_rule_ids and flag_rule_ids (as sets)"
+              },
+              "blocking_rule_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "rule_ids whose result is VETO, or UNKNOWN with severity hard (1.1.3: INV-16)"
+              },
+              "flag_rule_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "rule_ids whose result is FLAG, or UNKNOWN with severity soft; an approval must acknowledge each (1.1.3: INV-05)"
+              },
+              "approval_required": {
+                "const": true,
+                "description": "Always true: even PASS needs explicit contract-level approval"
+              },
+              "summary": {
+                "type": "string"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "verdict": {
+                      "const": "VETO"
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "blocking_rule_ids": {
+                      "minItems": 1
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "verdict": {
+                      "enum": [
+                        "PASS",
+                        "FLAG"
+                      ]
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "blocking_rule_ids": {
+                      "maxItems": 0
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "approvals": {
+      "description": "Contract-level approvals. Bound to exact legs + quantity + limit; any change requires a new approval. Never valid for a VETO review. The approval state is approvals[].status (canonical; there is no 'decision' field and additionalProperties is false, so a 'decision' key is a schema error): only 'active' is a usable approval; 'expired', 'revoked', 'consumed' or no approval mean NOT approved for a new entry. A rejected idea is idea_log current_status 'rejected', not an approval field.",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "approval_id",
+          "ticket_id",
+          "review_id",
+          "approver",
+          "approved_at",
+          "expires_at",
+          "legs",
+          "quantity",
+          "limit_price",
+          "status"
+        ],
+        "properties": {
+          "approval_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "ticket_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "review_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "approver": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "channel"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1
+              },
+              "channel": {
+                "enum": [
+                  "web_ui",
+                  "chat",
+                  "api",
+                  "other"
+                ]
+              },
+              "evidence": {
+                "type": "string",
+                "description": "message id / UI click log reference"
+              }
+            }
+          },
+          "approved_at": {
+            "$ref": "#/$defs/TsPair"
+          },
+          "expires_at": {
+            "$ref": "#/$defs/TsPair",
+            "description": "default: same NY trading day regular close; must be > approved_at"
+          },
+          "legs": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/Leg"
+            }
+          },
+          "quantity": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "limit_price": {
+            "$ref": "#/$defs/LimitPrice"
+          },
+          "acknowledged_flags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "FLAG rule_ids the approver explicitly accepted. 1.1.3 (INV-05): must equal the review's flagged rule_ids exactly (FLAG or soft UNKNOWN results): no missing, no extra, no duplicates; empty or absent for a PASS review."
+          },
+          "status": {
+            "enum": [
+              "active",
+              "expired",
+              "revoked",
+              "consumed"
+            ],
+            "description": "Canonical approval state (consumers must read this field; there is no 'decision' field). active = approved and usable until expires_at; consumed = used by a paper position; expired / revoked = not approved. 1.1.3 (INV-06): an opening fill is valid only while the approval is active (status_changed_at strictly after the fill for any non-active status)."
+          },
+          "status_changed_at": {
+            "$ref": "#/$defs/TsPair",
+            "description": "when status last changed; 1.1.3: required for any status other than 'active' (INV-06)"
+          }
+        }
+      }
+    },
+    "paper_positions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "position_id",
+          "ticket_id",
+          "approval_id",
+          "status",
+          "fills",
+          "marks"
+        ],
+        "properties": {
+          "position_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "ticket_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "approval_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "status": {
+            "enum": [
+              "pending_fill",
+              "open",
+              "closed",
+              "cancelled"
+            ]
+          },
+          "fill_model": {
+            "enum": [
+              "mid",
+              "natural",
+              "limit_if_touched"
+            ],
+            "description": "how simulated fills are priced"
+          },
+          "fills": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "fill_id",
+                "leg_id",
+                "contract_id",
+                "action",
+                "qty",
+                "price",
+                "filled_at",
+                "quote_source_id",
+                "simulated"
+              ],
+              "properties": {
+                "fill_id": {
+                  "$ref": "#/$defs/Id"
+                },
+                "leg_id": {
+                  "$ref": "#/$defs/Id"
+                },
+                "contract_id": {
+                  "$ref": "#/$defs/OccSymbol"
+                },
+                "action": {
+                  "enum": [
+                    "buy_to_open",
+                    "sell_to_open",
+                    "buy_to_close",
+                    "sell_to_close"
+                  ]
+                },
+                "qty": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "price": {
+                  "type": "number",
+                  "minimum": 0
+                },
+                "fees_usd": {
+                  "type": "number",
+                  "minimum": 0,
+                  "default": 0
+                },
+                "filled_at": {
+                  "$ref": "#/$defs/TsPair"
+                },
+                "quote_source_id": {
+                  "$ref": "#/$defs/SourceId"
+                },
+                "simulated": {
+                  "const": true
+                }
+              }
+            }
+          },
+          "marks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "marked_at",
+                "underlying_last",
+                "position_value",
+                "unrealized_pnl_usd"
+              ],
+              "properties": {
+                "marked_at": {
+                  "$ref": "#/$defs/TsPair"
+                },
+                "underlying_last": {
+                  "$ref": "#/$defs/NumberField"
+                },
+                "leg_marks": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                      "leg_id",
+                      "mid"
+                    ],
+                    "properties": {
+                      "leg_id": {
+                        "$ref": "#/$defs/Id"
+                      },
+                      "mid": {
+                        "$ref": "#/$defs/NumberField"
+                      }
+                    }
+                  }
+                },
+                "position_value": {
+                  "$ref": "#/$defs/NumberField",
+                  "description": "net per-share value of the structure"
+                },
+                "unrealized_pnl_usd": {
+                  "$ref": "#/$defs/NumberField"
+                }
+              }
+            }
+          },
+          "close": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "closed_at",
+              "reason",
+              "realized_pnl_usd"
+            ],
+            "properties": {
+              "closed_at": {
+                "$ref": "#/$defs/TsPair"
+              },
+              "reason": {
+                "enum": [
+                  "target",
+                  "stop",
+                  "time_stop",
+                  "expiry",
+                  "manual",
+                  "assignment_risk",
+                  "other"
+                ]
+              },
+              "realized_pnl_usd": {
+                "type": "number"
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "status": {
+                  "const": "closed"
+                }
+              }
+            },
+            "then": {
+              "required": [
+                "close"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "watcher_rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "watch_id",
+          "target",
+          "kind",
+          "conditions",
+          "severity",
+          "action",
+          "active"
+        ],
+        "properties": {
+          "watch_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "target": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ticket_id"
+            ],
+            "properties": {
+              "ticket_id": {
+                "$ref": "#/$defs/Id"
+              },
+              "position_id": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/Id"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          },
+          "kind": {
+            "enum": [
+              "option_value",
+              "underlying_price",
+              "iv_change",
+              "dte",
+              "assignment",
+              "time",
+              "event"
+            ]
+          },
+          "conditions": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/$defs/Condition"
+            },
+            "description": "ANY condition true -> alert (OR); use separate watches for AND"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warn",
+              "action"
+            ]
+          },
+          "action": {
+            "enum": [
+              "alert",
+              "suggest_close",
+              "force_close_paper"
+            ]
+          },
+          "active": {
+            "type": "boolean",
+            "description": "false = defined only (e.g. ticket not yet approved)"
+          },
+          "schedule": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "cron in America/New_York, or null if no schedule created"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "alerts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "alert_id",
+          "watch_id",
+          "triggered_at",
+          "observed",
+          "message",
+          "acknowledged"
+        ],
+        "properties": {
+          "alert_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "watch_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "triggered_at": {
+            "$ref": "#/$defs/TsPair"
+          },
+          "observed": {
+            "$ref": "#/$defs/NumberField"
+          },
+          "message": {
+            "type": "string"
+          },
+          "acknowledged": {
+            "type": "boolean"
+          },
+          "acknowledged_at": {
+            "$ref": "#/$defs/TsPair"
+          }
+        }
+      }
+    },
+    "idea_log": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "idea_id",
+          "description",
+          "current_status",
+          "history"
+        ],
+        "properties": {
+          "idea_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "description": {
+            "type": "string"
+          },
+          "ticket_id": {
+            "oneOf": [
+              {
+                "$ref": "#/$defs/Id"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "current_status": {
+            "$ref": "#/$defs/IdeaStatus"
+          },
+          "history": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "status",
+                "at",
+                "actor",
+                "reason"
+              ],
+              "properties": {
+                "status": {
+                  "$ref": "#/$defs/IdeaStatus"
+                },
+                "at": {
+                  "$ref": "#/$defs/TsPair"
+                },
+                "actor": {
+                  "enum": [
+                    "scanner",
+                    "decision_maker",
+                    "risk_officer",
+                    "user",
+                    "simulator",
+                    "watcher"
+                  ]
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "ref_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "data_quality": {
+      "description": "Derived index of non-ok Fields (JSON Pointer paths) for the UI; must be regenerable from the record.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "missing",
+        "stale",
+        "conflicting"
+      ],
+      "properties": {
+        "missing": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "stale": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "conflicting": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "trace_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "description": "Optional (v1.1). Hand-off trace written next to this record, not embedded. When validate_session.py is given a file, it checks the trace exists and its SHA-256 matches (INV-11).",
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*(^|/)\\.\\.(/|$)).*\\.trace\\.json$",
+          "description": "relative to this record's directory; no absolute paths or '..' segments"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$",
+          "description": "lowercase hex SHA-256 of the trace file bytes"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{1,63}$"
+    },
+    "SourceId": {
+      "type": "string",
+      "pattern": "^src-[a-z0-9_-]{1,60}$"
+    },
+    "Ticker": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9.]{0,5}$"
+    },
+    "Date": {
+      "type": "string",
+      "format": "date",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "Timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "description": "RFC 3339 with explicit offset (naive timestamps forbidden)"
+    },
+    "TsPair": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ny",
+        "berlin"
+      ],
+      "description": "Same instant in America/New_York and Europe/Berlin (INV-02).",
+      "properties": {
+        "ny": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?-0[45]:00$"
+        },
+        "berlin": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?\\+0[12]:00$"
+        }
+      }
+    },
+    "OccSymbol": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9.]{0,5}\\d{6}[CP]\\d{8}$",
+      "description": "OCC symbol without padding, e.g. JPM261030C00340000"
+    },
+    "Status": {
+      "enum": [
+        "ok",
+        "stale",
+        "missing",
+        "conflicting"
+      ]
+    },
+    "RuleResult": {
+      "enum": [
+        "PASS",
+        "VETO",
+        "FLAG",
+        "UNKNOWN"
+      ]
+    },
+    "IdeaStatus": {
+      "enum": [
+        "proposed",
+        "rejected",
+        "vetoed",
+        "approved_pending",
+        "approved",
+        "simulated",
+        "executed",
+        "closed"
+      ],
+      "description": "simulated = paper order working in simulator; executed = simulated paper fill done (position open); never a broker order"
+    },
+    "EventKind": {
+      "enum": [
+        "earnings",
+        "ex_dividend",
+        "CPI",
+        "PPI",
+        "FOMC",
+        "NFP",
+        "other_macro"
+      ]
+    },
+    "Field": {
+      "description": "A sourced datum. status: ok = fresh & single-valued; stale = value present but older than freshness policy or from a prior session; missing = not obtained (value null); conflicting = sources disagree (value null, all candidates in conflicts[] side by side, >=2). Consumers (risk rules) treat missing and conflicting as UNKNOWN input.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "source_id",
+        "as_of",
+        "status"
+      ],
+      "properties": {
+        "value": {},
+        "source_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/SourceId"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "as_of": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "instant the value refers to (quote time), not fetch time"
+        },
+        "status": {
+          "$ref": "#/$defs/Status"
+        },
+        "conflicts": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "value",
+              "source_id",
+              "as_of"
+            ],
+            "properties": {
+              "value": {},
+              "source_id": {
+                "$ref": "#/$defs/SourceId"
+              },
+              "as_of": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/Timestamp"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "note": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "method": {
+          "enum": [
+            "reported",
+            "derived"
+          ],
+          "default": "reported"
+        },
+        "formula": {
+          "type": "string",
+          "description": "required when method=derived, e.g. (bid+ask)/2"
+        },
+        "unit": {
+          "type": "string"
+        },
+        "note": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "ok",
+                  "stale"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "not": {
+                  "type": "null"
+                }
+              },
+              "source_id": {
+                "type": "string"
+              },
+              "as_of": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "missing"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "value": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "const": "conflicting"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "conflicts"
+            ],
+            "properties": {
+              "value": {
+                "type": "null"
+              },
+              "conflicts": {
+                "minItems": 2
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "status": {
+                "enum": [
+                  "ok",
+                  "stale",
+                  "missing"
+                ]
+              }
+            }
+          },
+          "then": {
+            "not": {
+              "required": [
+                "conflicts"
+              ]
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "method": {
+                "const": "derived"
+              }
+            },
+            "required": [
+              "method"
+            ]
+          },
+          "then": {
+            "required": [
+              "formula"
+            ]
+          }
+        }
+      ]
+    },
+    "NumberField": {
+      "$ref": "#/$defs/Field",
+      "properties": {
+        "value": {
+          "type": [
+            "number",
+            "null"
+          ]
+        },
+        "conflicts": {
+          "items": {
+            "properties": {
+              "value": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    "StringField": {
+      "$ref": "#/$defs/Field",
+      "properties": {
+        "value": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "conflicts": {
+          "items": {
+            "properties": {
+              "value": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "BoolField": {
+      "$ref": "#/$defs/Field",
+      "properties": {
+        "value": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        }
+      }
+    },
+    "DateField": {
+      "$ref": "#/$defs/Field",
+      "properties": {
+        "value": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Date"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "TimestampField": {
+      "$ref": "#/$defs/Field",
+      "properties": {
+        "value": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Timestamp"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "NumberArrayField": {
+      "$ref": "#/$defs/Field",
+      "properties": {
+        "value": {
+          "oneOf": [
+            {
+              "type": "array",
+              "items": {
+                "type": "number"
+              }
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "OptionContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_id",
+        "type",
+        "strike",
+        "expiry",
+        "bid",
+        "ask",
+        "mid",
+        "iv",
+        "open_interest",
+        "volume",
+        "greeks"
+      ],
+      "properties": {
+        "contract_id": {
+          "$ref": "#/$defs/OccSymbol"
+        },
+        "type": {
+          "enum": [
+            "call",
+            "put"
+          ]
+        },
+        "strike": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "expiry": {
+          "$ref": "#/$defs/Date"
+        },
+        "style": {
+          "enum": [
+            "american",
+            "european"
+          ],
+          "default": "american"
+        },
+        "multiplier": {
+          "type": "integer",
+          "default": 100
+        },
+        "bid": {
+          "$ref": "#/$defs/NumberField"
+        },
+        "ask": {
+          "$ref": "#/$defs/NumberField"
+        },
+        "mid": {
+          "$ref": "#/$defs/NumberField",
+          "description": "derived (bid+ask)/2; status = worst of bid/ask"
+        },
+        "last": {
+          "$ref": "#/$defs/NumberField"
+        },
+        "iv": {
+          "$ref": "#/$defs/NumberField",
+          "description": "decimal"
+        },
+        "open_interest": {
+          "$ref": "#/$defs/IntegerField",
+          "description": "OCC open interest (contracts, integer)"
+        },
+        "volume": {
+          "$ref": "#/$defs/NumberField"
+        },
+        "greeks": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "delta",
+            "gamma",
+            "theta",
+            "vega"
+          ],
+          "properties": {
+            "delta": {
+              "$ref": "#/$defs/NumberField"
+            },
+            "gamma": {
+              "$ref": "#/$defs/NumberField"
+            },
+            "theta": {
+              "$ref": "#/$defs/NumberField"
+            },
+            "vega": {
+              "$ref": "#/$defs/NumberField"
+            },
+            "rho": {
+              "$ref": "#/$defs/NumberField"
+            }
+          }
+        }
+      }
+    },
+    "Leg": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "leg_id",
+        "contract_id",
+        "type",
+        "side",
+        "strike",
+        "expiry",
+        "ratio"
+      ],
+      "properties": {
+        "leg_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "contract_id": {
+          "$ref": "#/$defs/OccSymbol"
+        },
+        "type": {
+          "enum": [
+            "call",
+            "put"
+          ]
+        },
+        "side": {
+          "enum": [
+            "buy",
+            "sell"
+          ]
+        },
+        "strike": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "expiry": {
+          "$ref": "#/$defs/Date"
+        },
+        "ratio": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "contracts per spread unit; total = ticket.quantity * ratio"
+        },
+        "multiplier": {
+          "type": "integer",
+          "default": 100
+        }
+      }
+    },
+    "LimitPrice": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "amount",
+        "price_type"
+      ],
+      "properties": {
+        "amount": {
+          "type": "number",
+          "minimum": 0,
+          "description": "net per-share price of one spread unit"
+        },
+        "price_type": {
+          "enum": [
+            "debit",
+            "credit"
+          ]
+        },
+        "valid_only_if": {
+          "type": "string",
+          "description": "human-readable precondition, e.g. re-quoted live after 09:30 ET"
+        },
+        "raw_amount": {
+          "type": "number",
+          "minimum": 0,
+          "description": "(v1.1) unrounded price before tick rounding; amount = round(raw_amount, tick_size, rounding)"
+        },
+        "tick_size": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "tick grid used (INV-13: penny-pilot names 0.01 below $3.00 / 0.05 at or above; others 0.05 / 0.10; tier by the raw price)"
+        },
+        "rounding": {
+          "enum": [
+            "down",
+            "up",
+            "nearest",
+            "none"
+          ],
+          "description": "direction applied to the raw value: down = floor, up = ceiling, nearest = half-up, none = no rounding (rounded must equal raw). Required directions (INV-13): debit limit down, stop up, target down."
+        }
+      },
+      "dependentRequired": {
+        "raw_amount": [
+          "tick_size",
+          "rounding"
+        ],
+        "tick_size": [
+          "raw_amount",
+          "rounding"
+        ],
+        "rounding": [
+          "raw_amount",
+          "tick_size"
+        ]
+      }
+    },
+    "PayoffAmount": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "amount_usd",
+        "unlimited",
+        "at_price",
+        "basis"
+      ],
+      "properties": {
+        "amount_usd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0,
+          "description": "for whole ticket (quantity included); null only if unlimited"
+        },
+        "unlimited": {
+          "type": "boolean"
+        },
+        "at_price": {
+          "type": "number",
+          "description": "net per-share price the amount assumes (normally limit_price.amount)"
+        },
+        "basis": {
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "unlimited": {
+                "const": false
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "amount_usd": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "Condition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "metric",
+        "op",
+        "value"
+      ],
+      "properties": {
+        "metric": {
+          "enum": [
+            "underlying_last",
+            "underlying_close",
+            "position_value",
+            "net_debit_mid",
+            "net_credit_mid",
+            "leg_spread_pct_of_mid",
+            "time_ny",
+            "date_ny",
+            "dte",
+            "iv_change_pct",
+            "short_leg_itm",
+            "ex_dividend_in_window"
+          ]
+        },
+        "op": {
+          "enum": [
+            "lt",
+            "lte",
+            "gt",
+            "gte",
+            "eq",
+            "cross_above",
+            "cross_below"
+          ]
+        },
+        "value": {
+          "type": [
+            "number",
+            "string",
+            "boolean"
+          ]
+        },
+        "unit": {
+          "type": "string"
+        },
+        "raw_value": {
+          "type": "number",
+          "description": "(v1.1) unrounded threshold before tick rounding; value = round(raw_value, tick_size, rounding)"
+        },
+        "tick_size": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "tick grid used (INV-13: penny-pilot names 0.01 below $3.00 / 0.05 at or above; others 0.05 / 0.10; tier by the raw price)"
+        },
+        "rounding": {
+          "enum": [
+            "down",
+            "up",
+            "nearest",
+            "none"
+          ],
+          "description": "direction applied to the raw value: down = floor, up = ceiling, nearest = half-up, none = no rounding (rounded must equal raw). Required directions (INV-13): debit limit down, stop up, target down."
+        }
+      },
+      "dependentRequired": {
+        "raw_value": [
+          "tick_size",
+          "rounding"
+        ],
+        "tick_size": [
+          "raw_value",
+          "rounding"
+        ],
+        "rounding": [
+          "raw_value",
+          "tick_size"
+        ]
+      }
+    },
+    "TradeRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule_id",
+        "text",
+        "conditions"
+      ],
+      "properties": {
+        "rule_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "text": {
+          "type": "string"
+        },
+        "combine": {
+          "enum": [
+            "all",
+            "any"
+          ],
+          "default": "all"
+        },
+        "conditions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/Condition"
+          }
+        }
+      }
+    },
+    "IntegerField": {
+      "$ref": "#/$defs/Field",
+      "properties": {
+        "value": {
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "conflicts": {
+          "items": {
+            "properties": {
+              "value": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "x-tick-rules": {
+    "source": "risk_rules.yaml config.tick_rules",
+    "penny_pilot_ticks": {
+      "below_3": 0.01,
+      "at_or_above_3": 0.05
+    },
+    "standard_ticks": {
+      "below_3": 0.05,
+      "at_or_above_3": 0.1
+    },
+    "threshold": 3.0,
+    "tier_by": "raw price",
+    "directions": {
+      "debit limit_price": "down",
+      "debit stop_rules conditions": "up",
+      "debit target_rules conditions": "down",
+      "credit limit_price (1.1.1, 1.1.2)": "up",
+      "credit stop_rules conditions (1.1.1, 1.1.2)": "down",
+      "credit target_rules conditions (1.1.1, 1.1.2)": "up",
+      "other / watcher conditions": "any (consistency only); credit in 1.1.0 records: any"
+    }
+  },
+  "x-validator-contract": "validate_session.py CLI: exit 0 only when every given file was read, parsed as a JSON object and validated with no errors; exit 1 when any record has schema/invariant errors (an unknown schema_version is a schema error); exit 2 when any file cannot be read or parsed, is not a JSON object, or the validator raises. Consumers must treat any non-zero exit, and a missing or unimportable validate_session.py, as FAIL (fail closed)."
+}

@@ -2,6 +2,8 @@
 the output matches spec/watcher_reference.py exactly (parity), including state and next-poll interval."""
 import copy
 import json
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -10,6 +12,7 @@ from optpipe.risk.engine import Calendar
 from optpipe.risk.ruleset import MarketHours
 from optpipe.spec import discover
 from optpipe.watcher.engine import QUOTE_RULES, SPECIAL_RULES, check_rules, poll
+from optpipe.watcher.runtime import targets_from_session
 
 _SPEC = discover(load_settings().spec_path)
 _WR = _SPEC.watcher_rules()
@@ -36,11 +39,43 @@ def test_rules_loaded_in_place_and_all_implemented(spec):
     check_rules(_WR)
     assert {r["id"] for r in _WR["rules"]} == set(QUOTE_RULES) | SPECIAL_RULES
     assert _WR["config"]["alert_text"] == "alert only, no order"
-    assert len(CASES) >= 45
+    assert len(CASES) >= 48 and {"SCOPE-e", "SCOPE-f", "SCOPE-g"} <= {c["id"] for c in CASES}
+
+
+@pytest.fixture(scope="module")
+def session_fx(spec):
+    """Doodle's spec/session_fixtures.py (imports risk_reference by name, so spec/ goes on sys.path while loading)."""
+    import sys
+    sys.path.insert(0, str(spec.root))
+    try:
+        import session_fixtures
+        yield session_fixtures
+    finally:
+        sys.path.remove(str(spec.root))
+
+
+SESSION_NOW = datetime(2026, 10, 13, 13, 0, tzinfo=ZoneInfo("America/New_York"))   # inside ap-1's window (YAML)
+
+
+def _our_session_target(fx, approval_status: str) -> str:
+    """spec 1.1.4 YAML `approval_status`: session_fixtures.approved_record without a position, approval ap-1 set to that
+    status (status_changed_at 12:40; `none` removes it), resolved by OPTPIPE's runtime (not the reference)."""
+    s = fx.approved_record(with_position=False)
+    a = next(x for x in s["approvals"] if x["approval_id"] == "ap-1")
+    if approval_status == "none":
+        s["approvals"].remove(a)
+    elif approval_status != "active":
+        a["status"], a["status_changed_at"] = approval_status, fx.at("12:40")
+    return next(t for t in targets_from_session(s, SESSION_NOW) if t.kind == "ticket" and t.ticket_id == fx.TK).status
 
 
 @pytest.mark.parametrize("case", CASES, ids=[c["id"] for c in CASES])
-def test_yaml_case(case, ref, cal):
+def test_yaml_case(case, ref, cal, session_fx):
+    if "approval_status" in case:                       # SCOPE-e..g: the target comes from a session record
+        status = _our_session_target(session_fx, case["approval_status"])
+        assert status == case["expect"].get("target_status", status)
+        case = {**case, "set": {**case.get("set", {}),
+                                "target": {"kind": "ticket", "id": "tk-1", "ticket_id": "tk-1", "status": status}}}
     inp = ref.apply_case(_WR["fixture"], case)
     alerts, state, nxt = poll(inp, case.get("state"), _WR, cal)
     assert [[a["rule_id"], a["level"]] for a in alerts] == case["expect"]["alerts"], [a["message"] for a in alerts]
