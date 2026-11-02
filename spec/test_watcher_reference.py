@@ -13,23 +13,36 @@ RULE_IDS = [r["id"] for r in WR["rules"]]
 SESSION_NOW = "2026-10-13T13:00:00-04:00"   # inside session_fixtures approval ap-1's window (12:25-16:00 NY)
 
 
-def _session_target(approval_status):
+def _session_target(approval_status, review_tamper=None, idea_status=None):
     """spec 1.1.4: build the ticket target from a session record whose approval ap-1 has `approval_status`
-    ('none' = no approval) via target_from_session, the way a watcher resolves it."""
+    ('none' = no approval) via target_from_session, the way a watcher resolves it.
+    spec 1.1.5: `review_tamper` (session_fixtures.TAMPER_KINDS) makes ap-1's review rv-flag fail INV-16;
+    `idea_status` sets the ticket's idea current_status (default: the fixture's 'approved')."""
     s = fx.approved_record(with_position=False)
     a = next(x for x in s["approvals"] if x["approval_id"] == "ap-1")
     if approval_status == "none":
         s["approvals"].remove(a)
     elif approval_status != "active":
         a["status"], a["status_changed_at"] = approval_status, fx.at("12:40")
+    if review_tamper:
+        fx.tamper_review(next(r for r in s["risk_reviews"] if r["review_id"] == "rv-flag"), review_tamper)
+    if idea_status:
+        idea = next(i for i in s["idea_log"] if i["ticket_id"] == fx.TK)
+        idea["history"].append({"status": idea_status, "at": fx.at("12:45"), "actor": "user", "reason": "test fixture"})
+        idea["current_status"] = idea_status
     return wr.target_from_session(s, fx.TK, now=SESSION_NOW)
 
 
+SESSION_KEYS = ("approval_status", "review_tamper", "idea_status")
+
+
 def _run(case):
-    if "approval_status" in case:
-        t = _session_target(case["approval_status"])
+    if any(k in case for k in SESSION_KEYS):
+        t = _session_target(case.get("approval_status", "active"), case.get("review_tamper"), case.get("idea_status"))
         if "target_status" in case["expect"]:
             assert t["status"] == case["expect"]["target_status"], t
+        if "target_approved" in case["expect"]:
+            assert t["approved"] is case["expect"]["target_approved"], t
         tgt = {"kind": "ticket", "id": "tk-1", "ticket_id": "tk-1", "status": t["status"]}
         case = {**case, "set": {**case.get("set", {}), "target": tgt}}
     inp = rr.apply_case(WR["fixture"], case)
@@ -107,3 +120,150 @@ def test_approval_status_cases_cover_revoked():
     ids = {c["id"]: c for c in CASES if "approval_status" in c}
     assert {"SCOPE-e", "SCOPE-f", "SCOPE-g"} <= set(ids)
     assert ids["SCOPE-e"]["approval_status"] == "revoked" and ids["SCOPE-e"]["expect"]["target_status"] == "rejected"
+
+
+# ------------------------------------------------------------------ spec 1.1.5 rulings
+def test_target_precedence_matches_reference():
+    assert tuple(WR["scope"]["target_precedence"]) == wr.TARGET_PRECEDENCE
+    assert wr.TARGET_PRECEDENCE == ("vetoed", "terminal", "rejected", "approved_pending", "idea_status")
+    assert wr.TERMINAL_IDEA_STATUSES == ("executed", "closed")
+    assert wr.APPROVED_IDEA_STATUSES == ("approved_pending", "approved")
+
+
+@pytest.mark.parametrize("kind", fx.TAMPER_KINDS)
+@pytest.mark.parametrize("status", ["active", "revoked", "expired", "consumed"])
+def test_inv16_inconsistent_review_is_veto_for_the_watcher(kind, status):
+    """ruling 1: an approval whose review fails INV-16 never counts as really approved: the ticket is vetoed (VETO
+    first, before a revoked approval or anything else), whatever the approval status."""
+    t = _session_target(status, review_tamper=kind)
+    assert (t["status"], t["approved"], t["hypothetical"], t["approval_id"]) == ("vetoed", False, True, None), t
+
+
+@pytest.mark.parametrize("kind", fx.TAMPER_KINDS)
+def test_real_approval_rejects_inv16_inconsistent_review(kind):
+    s = fx.approved_record(with_position=False)
+    assert wr.real_approval(s, fx.TK, SESSION_NOW)["approval_id"] == "ap-1"
+    fx.tamper_review(next(r for r in s["risk_reviews"] if r["review_id"] == "rv-flag"), kind)
+    assert wr.real_approval(s, fx.TK, SESSION_NOW) is None
+
+
+def test_review_blocked_reuses_validator_inv16():
+    import validate_session as vs
+    rv = fx.flag_review(fx.example())
+    assert not wr.review_blocked(rv) and not wr.review_blocked(None)
+    for kind in fx.TAMPER_KINDS:
+        bad = fx.tamper_review(fx.flag_review(fx.example()), kind)
+        assert vs.overall_errors(bad) and wr.review_blocked(bad), kind
+
+
+def test_inv16_veto_ignores_the_version_label():
+    """the watcher fails closed on a tampered record of ANY schema_version (INV-16 is a 1.1.3+ record error only)."""
+    for v in ("1.0.0", "1.1.0", "1.1.2", "1.1.3", "1.1.4", "1.1.5"):
+        s = fx.approved_record(with_position=False); s["schema_version"] = v
+        fx.tamper_review(next(r for r in s["risk_reviews"] if r["review_id"] == "rv-flag"), "pass_over_flag")
+        assert wr.target_from_session(s, fx.TK, now=SESSION_NOW)["status"] == "vetoed", v
+
+
+IDEA_STATUSES = ["proposed", "approved_pending", "approved", "simulated", "executed", "closed", None]
+
+
+def _with_idea(s, idea_status):
+    idea = next(i for i in s["idea_log"] if i["ticket_id"] == fx.TK)
+    if idea_status is None:
+        s["idea_log"].remove(idea)
+    else:
+        idea["current_status"] = idea_status
+    return s
+
+
+def _revoked(s):
+    a = next(x for x in s["approvals"] if x["approval_id"] == "ap-1")
+    a["status"], a["status_changed_at"] = "revoked", fx.at("12:40")
+    return s
+
+
+@pytest.mark.parametrize("idea_status", ["proposed", "approved_pending", "approved", "simulated", "rejected", None])
+def test_revoked_approval_rejects_every_pre_execution_idea(idea_status):
+    """precedence step 3: a revoked approval (and no real approval) maps a pre-execution ticket to rejected, so it
+    overrides step 4 for proposed and simulated ideas."""
+    s = _with_idea(_revoked(fx.approved_record(with_position=False)), idea_status)
+    t = wr.target_from_session(s, fx.TK, now=SESSION_NOW)
+    assert (t["status"], t["approved"], t["hypothetical"]) == ("rejected", False, True), t
+
+
+@pytest.mark.parametrize("idea_status", ["executed", "closed"])
+@pytest.mark.parametrize("approval_status", ["revoked", "active", "expired", "consumed"])
+def test_terminal_idea_keeps_its_status(idea_status, approval_status):
+    """precedence step 2: an executed / closed idea keeps its status; a revoked approval does not relabel it (the trade
+    is watched by the position rules), and no approval makes it a watched ticket."""
+    s = _with_idea(fx.approved_record(with_position=False), idea_status)
+    a = next(x for x in s["approvals"] if x["approval_id"] == "ap-1")
+    if approval_status != "active":
+        a["status"], a["status_changed_at"] = approval_status, fx.at("12:40")
+    t = wr.target_from_session(s, fx.TK, now=SESSION_NOW)
+    assert (t["status"], t["approved"], t["hypothetical"], t["approval_id"]) == (idea_status, False, True, None), t
+
+
+def test_terminal_idea_still_loses_to_veto():
+    s = _with_idea(_revoked(fx.approved_record(with_position=False)), "executed")
+    fx.tamper_review(next(r for r in s["risk_reviews"] if r["review_id"] == "rv-flag"), "pass_over_flag")
+    assert wr.target_from_session(s, fx.TK, now=SESSION_NOW)["status"] == "vetoed"
+
+
+@pytest.mark.parametrize("idea_status", ["proposed", "simulated", "executed", "closed", "rejected", "vetoed", None])
+def test_active_approval_on_a_non_approved_idea_is_never_real(idea_status):
+    """precedence step 5: an active, in-window, INV-05 / INV-16 clean approval is real ONLY when the idea is
+    approved_pending or approved."""
+    s = fx.approved_record(with_position=False)
+    assert wr.real_approval(s, fx.TK, SESSION_NOW)["approval_id"] == "ap-1"     # approved_pending idea: real
+    _with_idea(s, idea_status)
+    assert wr.real_approval(s, fx.TK, SESSION_NOW) is None
+    assert wr.target_from_session(s, fx.TK, now=SESSION_NOW)["approved"] is False
+
+
+@pytest.mark.parametrize("idea_status", ["approved_pending", "approved"])
+def test_active_approval_on_an_approved_idea_is_real(idea_status):
+    s = _with_idea(fx.approved_record(with_position=False), idea_status)
+    t = wr.target_from_session(s, fx.TK, now=SESSION_NOW)
+    assert (t["status"], t["approved"], t["approval_id"]) == ("approved_pending", True, "ap-1"), t
+
+
+def test_active_approval_with_no_idea_is_watched_but_hypothetical():
+    """interpretation of step 5: a ticket with no idea_log entry has no approved idea, so even an active approval is not
+    real; the ticket is still watched (step 4) as a hypothetical what-if."""
+    t = wr.target_from_session(_with_idea(fx.approved_record(with_position=False), None), fx.TK, now=SESSION_NOW)
+    assert (t["status"], t["approved"], t["hypothetical"]) == ("approved_pending", False, True), t
+
+
+def test_revoked_loses_to_veto_and_to_a_real_approval_on_an_approved_idea():
+    s = fx.approved_record(with_position=False)
+    s["approvals"].append(fx.approval(s, approval_id="ap-0", status="revoked", status_changed_at=fx.at("12:40")))
+    t = wr.target_from_session(s, fx.TK, now=SESSION_NOW)
+    assert (t["status"], t["approved"], t["approval_id"]) == ("approved_pending", True, "ap-1"), t   # real wins (1.1.4)
+    idea = next(i for i in s["idea_log"] if i["ticket_id"] == fx.TK); idea["current_status"] = "proposed"
+    t = wr.target_from_session(s, fx.TK, now=SESSION_NOW)
+    assert (t["status"], t["approved"]) == ("rejected", False), t   # ap-1 not real on a proposed idea -> revoked wins
+    idea["current_status"] = "executed"
+    assert wr.target_from_session(s, fx.TK, now=SESSION_NOW)["status"] == "executed"   # terminal keeps its status
+    idea["current_status"] = "vetoed"
+    assert wr.target_from_session(s, fx.TK, now=SESSION_NOW)["status"] == "vetoed"     # VETO first
+    idea["current_status"] = "rejected"
+    assert wr.target_from_session(s, fx.TK, now=SESSION_NOW)["status"] == "rejected"   # idea rejected always
+
+
+def test_1_1_5_cases_present():
+    ids = {c["id"]: c for c in CASES}
+    for cid, tamper, idea, status in (("SCOPE-h", "pass_over_veto", None, "vetoed"),
+                                      ("SCOPE-i", "pass_over_flag", None, "vetoed"),
+                                      ("SCOPE-j", "pass_over_flag", None, "vetoed"),
+                                      ("SCOPE-k", "flag_ids_mismatch", None, "vetoed"),
+                                      ("SCOPE-l", None, "proposed", "rejected"),
+                                      ("SCOPE-m", None, "proposed", "rejected"),
+                                      ("SCOPE-n", None, "proposed", "proposed"),
+                                      ("SCOPE-o", None, "executed", "executed"),
+                                      ("SCOPE-p", None, "executed", "executed"),
+                                      ("SCOPE-q", None, "simulated", "rejected"),
+                                      ("SCOPE-r", None, "approved", "approved_pending")):
+        c = ids[cid]
+        assert c.get("review_tamper") == tamper and c.get("idea_status") == idea, cid
+        assert c["expect"]["target_status"] == status, cid

@@ -203,7 +203,7 @@ def test_case_names_cover_every_case(example):
 
 @pytest.mark.parametrize("name", CASE_NAMES)
 def test_parity_per_record(example, ref, name):
-    """Exact parity, valid or invalid record (spec 1.1.4 removed the N4 / 'optpipe may be stricter' tolerances)."""
+    """Exact parity, valid or invalid record (spec 1.1.4 removed the N4 / "optpipe may be stricter" tolerances; 1.1.5 the tampered_pass exception)."""
     r = cases(example)[name]
     assert ours(r) == theirs(ref, r), (ours(r), theirs(ref, r))
 
@@ -342,3 +342,12 @@ def test_dashboard_latest_review_uses_the_watcher_rule(example, ref):
     runs = [{"run_id": x["run_id"]} for x in r.get("runs") or []] if isinstance(r.get("runs"), list) else []
     row = next(t for t in tickets_model(SimpleNamespace(record=r, runs=runs)) if t["t"]["ticket_id"] == TID)
     assert row["latest"]["review_id"] == "rv-premarket" and row["latest"]["overall"]["verdict"] == "VETO"
+
+
+def test_precedence_constants_are_the_reference(spec, ref):
+    """optpipe's step-2 / step-5 idea sets are the pinned reference's (spec 1.1.5 TARGET_PRECEDENCE)."""
+    import optpipe.watcher.runtime as rt
+    wr = ref[0]
+    assert wr.TARGET_PRECEDENCE == ("vetoed", "terminal", "rejected", "approved_pending", "idea_status")
+    assert rt.TERMINAL_IDEA_STATUSES == wr.TERMINAL_IDEA_STATUSES
+    assert rt.APPROVED_IDEA_STATUSES == wr.APPROVED_IDEA_STATUSES

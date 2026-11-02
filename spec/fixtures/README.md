@@ -1,8 +1,8 @@
-# fixtures/ (spec 1.1.4)
+# fixtures/ (spec 1.1.5)
 
 Small, vendored historical session records used by the back-compat tests (`test_invariants_v1_1_3.py`,
-`test_release_v1_1_4.py`). Tests resolve this directory relative to their own file (`SPEC / "fixtures"`), so the spec
-runs the same from any checkout name or location. A missing fixture makes the tests FAIL, never skip.
+`test_release_v1_1_4.py`, `test_release_v1_1_5.py`). Tests resolve this directory relative to their own file
+(`SPEC / "fixtures"`), so the spec runs the same from any checkout name or location. A missing fixture makes the tests FAIL, never skip.
 
 | file | schema_version | origin |
 |---|---|---|
@@ -15,5 +15,5 @@ Trimming (done once, outside the spec release): each option-chain slice keeps on
 else in the record points at (legs, fills, field paths), JSON pointers into removed contracts are renumbered,
 absolute box paths are cut to bare file names, files are written as compact JSON. No emails, no absolute paths.
 Every record validates (schema + invariants, `trace_ref` hash included) under the current validator and under every
-frozen validator in `_v1_1_2_backup/` and `_v1_1_3_backup/`. Never edit these by hand; never point a test at a
+frozen validator in `_v1_1_2_backup/`, `_v1_1_3_backup/` and `_v1_1_4_backup/`. Never edit these by hand; never point a test at a
 location outside this spec directory.

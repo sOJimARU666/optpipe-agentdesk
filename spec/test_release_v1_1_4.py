@@ -111,10 +111,11 @@ def _mutated(version):
     return out
 
 
-def test_schema_version_1_1_4_listed_and_example_is_1_1_4():
+def test_schema_version_1_1_4_listed_and_valid():
+    # spec 1.1.5: the example and VERSION moved on to 1.1.5 (test_release_v1_1_5.py); 1.1.4 stays listed and valid
     assert "1.1.4" in json.loads((SPEC / "session.schema.json").read_text())["properties"]["schema_version"]["enum"]
-    assert fx.example()["schema_version"] == "1.1.4" and vs.validate(fx.example()) == []
-    assert (SPEC / "VERSION").read_text().strip() == "1.1.4"
+    s = fx.example(); s["schema_version"] = "1.1.4"
+    assert vs.validate(s) == []
 
 
 def test_1_1_4_has_exactly_the_1_1_3_checks():
@@ -167,5 +168,5 @@ def test_backcompat_mutations_identical_to_frozen_1_1_3(version):
 
 def test_frozen_1_1_3_rejects_1_1_4_label():
     """1.1.4 is new: the frozen validator flags it as an unknown schema_version (consumers must upgrade together)"""
-    s = fx.example()
+    s = fx.example(); s["schema_version"] = "1.1.4"
     assert any(e.startswith("schema schema_version") for e in frozen_113([s])[0])

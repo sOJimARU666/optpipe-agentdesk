@@ -58,10 +58,10 @@ def tk(s):
 
 
 # ------------------------------------------------------------------ fixtures sanity
-def test_example_is_1_1_4_and_valid():
+def test_example_is_1_1_5_and_valid():
     s = fx.example()
-    assert s["schema_version"] == "1.1.4" and errs(s) == []
-    assert (SPEC / "VERSION").read_text().strip() == "1.1.4"
+    assert s["schema_version"] == "1.1.5" and errs(s) == []
+    assert (SPEC / "VERSION").read_text().strip() == "1.1.5"
 
 
 def test_approved_record_is_valid_positive_control():
@@ -635,7 +635,7 @@ def test_watcher_md_case_count_matches_yaml():          # row 16
     import re
     n = len(_yaml("watcher_rules.yaml")["tests"])
     m = re.search(r"(\d+) test cases", (HERE / "watcher_rules.md").read_text())
-    assert m and int(m.group(1)) == n == 48   # 1.1.4: + SCOPE-e/f/g (approval status -> target)
+    assert m and int(m.group(1)) == n == 59   # 1.1.4: + SCOPE-e/f/g (approval status -> target); 1.1.5: + SCOPE-h..r
 
 
 def test_message_format_placeholders_are_alert_fields():  # row 17
@@ -647,7 +647,7 @@ def test_message_format_placeholders_are_alert_fields():  # row 17
 
 def test_rule_file_labels_equal_version():                 # row 19
     v = (HERE / "VERSION").read_text().strip()
-    assert v == "1.1.4"
+    assert v == "1.1.5"
     assert _yaml("risk_rules.yaml")["ruleset_version"] == v
     assert _yaml("watcher_rules.yaml")["watcher_version"] == v
     assert (HERE / "risk_rules.md").read_text().splitlines()[0].startswith(f"# Risk rules v{v} ")

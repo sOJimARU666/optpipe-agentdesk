@@ -3,9 +3,9 @@
 PAPER ONLY. These checks never change a record; they only report errors. They are the spec 1.1.3 checks
 (spec/session.schema.json x-invariants INV-05 / INV-06 / INV-16, spec/validate_session.py approval_errors /
 position_errors / overall_errors) applied by optpipe to EVERY record it reads, whatever its schema_version:
-Doodle's validator gates them to 1.1.3/1.1.4 records (1.0.0-1.1.2 validate exactly as before), but optpipe's
+Doodle's validator gates them to 1.1.3/1.1.4/1.1.5 records (1.0.0-1.1.2 validate exactly as before), but optpipe's
 consumers (watch, dashboard, idea log, summaries) must never act on a tampered or unacknowledged older record.
-Error strings use the spec's ids and wording, so for a 1.1.3/1.1.4 record they equal the validator's (merge() dedupes).
+Error strings use the spec's ids and wording, so for a 1.1.3+ record they equal the validator's (merge() dedupes).
 
   INV-16-VERDICT / -BLOCKING / -FLAGS / -EMPTY   stored overall != risk_reference.overall(results) (ids as sets)
   INV-05-VETO / -FOREIGN / -ACK-MISSING / -ACK-EXTRA / -ACK-DUPLICATE / -TERMS / -EXPIRY
@@ -207,5 +207,5 @@ def check_record(rec: dict) -> list[str]:
 
 
 def merge(*lists: Iterable[str]) -> list[str]:
-    """Concatenate error lists, dropping exact duplicates (a 1.1.3/1.1.4 record gets the same strings from both)."""
+    """Concatenate error lists, dropping exact duplicates (a 1.1.3+ record gets the same strings from both)."""
     return list(dict.fromkeys(e for lst in lists for e in lst))

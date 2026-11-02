@@ -13,7 +13,7 @@ watcher_rules.yaml) and writes <session>.watch.json plus a .sha256 sidecar.
                   review's rule results do not veto (records/guards.py, FIX-SEC-001). Watched as approved_pending.
                   Any other approval (revoked / expired / consumed / out of window / unacknowledged flags) is
                   NOT honoured. Without a real approval, ANY `revoked` approval of the ticket makes it a
-                  rejected shadow (spec 1.1.4); otherwise the ticket stays HYPOTHETICAL.
+                  rejected shadow (spec 1.1.4/1.1.5); otherwise the ticket stays HYPOTHETICAL.
       - neither:  HYPOTHETICAL (no approval recorded). Watched as approved_pending and flagged
                   hypothetical=True, which is a paper what-if.
       - idea executed / closed: keeps that status and is NOT watched as a ticket (no quotes, no alerts, no shadow

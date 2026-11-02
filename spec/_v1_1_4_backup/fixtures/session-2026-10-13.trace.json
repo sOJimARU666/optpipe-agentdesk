@@ -1,0 +1,512 @@
+{
+  "session_id": "sess-2026-10-13",
+  "trace_version": "optpipe-trace/1.1",
+  "runs": [
+    {
+      "run_id": "run-premarket",
+      "as_of": "2026-10-13T07:52:00-04:00",
+      "data_mode": "fixtures",
+      "steps": [
+        {
+          "seq": 1,
+          "run_id": "run-premarket",
+          "stage": "discovery",
+          "agent": "DiscoveryAgent",
+          "owner": "Doodle (logic) / Poodle (code)",
+          "started_at": "2026-10-29T19:37:02.685222Z",
+          "duration_ms": 149.07,
+          "inputs_summary": {
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "screens": [
+              "ta_unusualvolume",
+              "ta_topgainers",
+              "ta_toplosers",
+              "ta_newhigh",
+              "ta_newlow"
+            ],
+            "watchlist": [
+              "JPM",
+              "WDC",
+              "AAPL",
+              "MSFT",
+              "NVDA",
+              "XOM"
+            ],
+            "manual": [
+              "JPM",
+              "WDC"
+            ],
+            "max_candidates": 4
+          },
+          "outputs_summary": {
+            "screens": {
+              "ta_unusualvolume": "missing:0",
+              "ta_topgainers": "missing:0",
+              "ta_toplosers": "stale:7",
+              "ta_newhigh": "stale:5",
+              "ta_newlow": "stale:10"
+            },
+            "global_instruments": 11,
+            "picks": [
+              "JPM(bullish)",
+              "WDC(bearish)",
+              "AAPL(neutral)",
+              "MSFT(neutral)"
+            ],
+            "notes": 2
+          },
+          "verdict": null,
+          "error": null
+        },
+        {
+          "seq": 2,
+          "run_id": "run-premarket",
+          "stage": "research",
+          "agent": "ResearchAgent",
+          "owner": "Doodle (logic) / Poodle (code)",
+          "started_at": "2026-10-29T19:37:02.834366Z",
+          "duration_ms": 57.08,
+          "inputs_summary": {
+            "picks": [
+              "JPM",
+              "WDC",
+              "AAPL",
+              "MSFT"
+            ],
+            "manual_events": 3,
+            "coverage_items": 4,
+            "macro_calendars": true,
+            "rates": true,
+            "iv_history": true
+          },
+          "outputs_summary": {
+            "candidates": [
+              "JPM",
+              "WDC",
+              "AAPL",
+              "MSFT"
+            ],
+            "contracts": 210,
+            "events": 18,
+            "notes": 8
+          },
+          "verdict": null,
+          "error": null
+        },
+        {
+          "seq": 3,
+          "run_id": "run-premarket",
+          "stage": "planner",
+          "agent": "PlannerAgent",
+          "owner": "Doodle (strategy) / Poodle (code)",
+          "started_at": "2026-10-29T19:37:02.891568Z",
+          "duration_ms": 6.68,
+          "inputs_summary": {
+            "candidates": [
+              "JPM",
+              "WDC",
+              "AAPL",
+              "MSFT"
+            ],
+            "max_risk_usd": 500.0
+          },
+          "outputs_summary": {
+            "tickets": [
+              "tkt-jpm-bcs-340-350",
+              "tkt-jpm-bps-335-325",
+              "tkt-wdc-bps-360-350",
+              "tkt-wdc-bcs-365-375"
+            ],
+            "rejected_ideas": [
+              "idea-aapl-bcs",
+              "idea-aapl-bps",
+              "idea-msft-bcs",
+              "idea-msft-bps"
+            ]
+          },
+          "verdict": null,
+          "error": null
+        },
+        {
+          "seq": 4,
+          "run_id": "run-premarket",
+          "stage": "risk_officer",
+          "agent": "RiskOfficerAgent",
+          "owner": "Doodle (rules) / Poodle (code)",
+          "started_at": "2026-10-29T19:37:02.914710Z",
+          "duration_ms": 47.78,
+          "inputs_summary": {
+            "tickets": [
+              "tkt-jpm-bcs-340-350",
+              "tkt-jpm-bps-335-325",
+              "tkt-wdc-bps-360-350",
+              "tkt-wdc-bcs-365-375"
+            ],
+            "run_id": "run-premarket",
+            "evaluated_at": "2026-10-13T07:52:00-04:00",
+            "ruleset_version": "1.1.0",
+            "ruleset_source": "risk_rules.yaml"
+          },
+          "outputs_summary": {
+            "tkt-jpm-bcs-340-350": {
+              "verdict": "VETO",
+              "blocking": [
+                "R01_QUOTE_FRESHNESS",
+                "R02_BID_ASK_WIDTH",
+                "R03_OPEN_INTEREST",
+                "R09_EARLY_ASSIGNMENT"
+              ],
+              "flags": [
+                "R08_MACRO_EVENTS",
+                "R10_IV_VS_HISTORY"
+              ]
+            },
+            "tkt-jpm-bps-335-325": {
+              "verdict": "VETO",
+              "blocking": [
+                "R01_QUOTE_FRESHNESS",
+                "R02_BID_ASK_WIDTH",
+                "R03_OPEN_INTEREST"
+              ],
+              "flags": [
+                "R08_MACRO_EVENTS",
+                "R10_IV_VS_HISTORY"
+              ]
+            },
+            "tkt-wdc-bps-360-350": {
+              "verdict": "VETO",
+              "blocking": [
+                "R01_QUOTE_FRESHNESS",
+                "R02_BID_ASK_WIDTH",
+                "R07_EARNINGS_IN_WINDOW"
+              ],
+              "flags": [
+                "R08_MACRO_EVENTS",
+                "R10_IV_VS_HISTORY"
+              ]
+            },
+            "tkt-wdc-bcs-365-375": {
+              "verdict": "VETO",
+              "blocking": [
+                "R01_QUOTE_FRESHNESS",
+                "R02_BID_ASK_WIDTH",
+                "R03_OPEN_INTEREST",
+                "R07_EARNINGS_IN_WINDOW",
+                "R09_EARLY_ASSIGNMENT"
+              ],
+              "flags": [
+                "R08_MACRO_EVENTS",
+                "R10_IV_VS_HISTORY"
+              ]
+            }
+          },
+          "verdict": "every ticket VETO -> NO TRADE",
+          "error": null
+        },
+        {
+          "seq": 5,
+          "run_id": "run-premarket",
+          "stage": "watcher",
+          "agent": "WatcherAgent",
+          "owner": "Doodle (rules) / Poodle (code)",
+          "started_at": "2026-10-29T19:37:02.970578Z",
+          "duration_ms": 0.27,
+          "inputs_summary": {
+            "tickets": [
+              "tkt-jpm-bcs-340-350",
+              "tkt-jpm-bps-335-325",
+              "tkt-wdc-bps-360-350",
+              "tkt-wdc-bcs-365-375"
+            ],
+            "reviews": 4
+          },
+          "outputs_summary": {
+            "rules": [],
+            "note": "Rules defined only, inactive until a user approval exists; no monitoring loop yet (stub)."
+          },
+          "verdict": null,
+          "error": null
+        }
+      ],
+      "recommendation": "NO TRADE - every ticket was vetoed by the Risk Officer (or none could be built)",
+      "notes": [
+        "finviz ta_unusualvolume: no result table in page (no rows matched or layout changed)",
+        "finviz ta_topgainers: no result table in page (no rows matched or layout changed)",
+        "risk-free rate for derived IV: r = ln(1 + y*91/365)/(91/365); y = 4.16% Treasury 13 weeks coupon equivalent on 2026-10-09 -> r = 0.041386 (src-treasury-bill-rates)",
+        "macro calendars: HAND-MADE replay snapshot (not an actual 2026-10-13 fetch; built from real 2026-10-29 captures)",
+        "JPM: IV30 0.2519 (2026-10-12) recorded to IV history",
+        "WDC: IV30 0.6239 (2026-10-12) recorded to IV history",
+        "AAPL: quote unavailable (fixture not found: info_AAPL.json)",
+        "AAPL: option chain unavailable (fixture not found: oc_AAPL.json)",
+        "MSFT: quote unavailable (fixture not found: info_MSFT.json)",
+        "MSFT: option chain unavailable (fixture not found: oc_MSFT.json)",
+        "planner DTE window clamped to 14-28 d by risk rules hold period (R13)",
+        "AAPL bull call debit spread: not built (no underlying price (missing))",
+        "AAPL bear put debit spread: not built (no underlying price (missing))",
+        "MSFT bull call debit spread: not built (no underlying price (missing))",
+        "MSFT bear put debit spread: not built (no underlying price (missing))"
+      ],
+      "validation": {
+        "validator": "validate_session.py",
+        "errors": [],
+        "v1_1_schema": "spec_patches/v1.1/session.schema.json",
+        "v1_1_errors": []
+      }
+    },
+    {
+      "run_id": "run-open-0940",
+      "as_of": "2026-10-13T09:40:00-04:00",
+      "data_mode": "fixtures",
+      "steps": [
+        {
+          "seq": 1,
+          "run_id": "run-open-0940",
+          "stage": "discovery",
+          "agent": "DiscoveryAgent",
+          "owner": "Doodle (logic) / Poodle (code)",
+          "started_at": "2026-10-29T19:37:04.555729Z",
+          "duration_ms": 145.85,
+          "inputs_summary": {
+            "as_of": "2026-10-13T09:40:00-04:00",
+            "screens": [
+              "ta_unusualvolume",
+              "ta_topgainers",
+              "ta_toplosers",
+              "ta_newhigh",
+              "ta_newlow"
+            ],
+            "watchlist": [
+              "JPM",
+              "WDC",
+              "AAPL",
+              "MSFT",
+              "NVDA",
+              "XOM"
+            ],
+            "manual": [
+              "JPM",
+              "WDC"
+            ],
+            "max_candidates": 4
+          },
+          "outputs_summary": {
+            "screens": {
+              "ta_unusualvolume": "missing:0",
+              "ta_topgainers": "missing:0",
+              "ta_toplosers": "stale:7",
+              "ta_newhigh": "stale:5",
+              "ta_newlow": "stale:10"
+            },
+            "global_instruments": 11,
+            "picks": [
+              "JPM(bullish)",
+              "WDC(bearish)",
+              "AAPL(neutral)",
+              "MSFT(neutral)"
+            ],
+            "notes": 2
+          },
+          "verdict": null,
+          "error": null
+        },
+        {
+          "seq": 2,
+          "run_id": "run-open-0940",
+          "stage": "research",
+          "agent": "ResearchAgent",
+          "owner": "Doodle (logic) / Poodle (code)",
+          "started_at": "2026-10-29T19:37:04.701644Z",
+          "duration_ms": 55.64,
+          "inputs_summary": {
+            "picks": [
+              "JPM",
+              "WDC",
+              "AAPL",
+              "MSFT"
+            ],
+            "manual_events": 3,
+            "coverage_items": 4,
+            "macro_calendars": true,
+            "rates": true,
+            "iv_history": true
+          },
+          "outputs_summary": {
+            "candidates": [
+              "JPM",
+              "WDC",
+              "AAPL",
+              "MSFT"
+            ],
+            "contracts": 210,
+            "events": 18,
+            "notes": 8
+          },
+          "verdict": null,
+          "error": null
+        },
+        {
+          "seq": 3,
+          "run_id": "run-open-0940",
+          "stage": "planner",
+          "agent": "PlannerAgent",
+          "owner": "Doodle (strategy) / Poodle (code)",
+          "started_at": "2026-10-29T19:37:04.757390Z",
+          "duration_ms": 6.83,
+          "inputs_summary": {
+            "candidates": [
+              "JPM",
+              "WDC",
+              "AAPL",
+              "MSFT"
+            ],
+            "max_risk_usd": 500.0
+          },
+          "outputs_summary": {
+            "tickets": [
+              "tkt-jpm-bcs-340-350",
+              "tkt-jpm-bps-335-325",
+              "tkt-wdc-bps-360-350",
+              "tkt-wdc-bcs-365-375"
+            ],
+            "rejected_ideas": [
+              "idea-aapl-bcs",
+              "idea-aapl-bps",
+              "idea-msft-bcs",
+              "idea-msft-bps"
+            ]
+          },
+          "verdict": null,
+          "error": null
+        },
+        {
+          "seq": 4,
+          "run_id": "run-open-0940",
+          "stage": "risk_officer",
+          "agent": "RiskOfficerAgent",
+          "owner": "Doodle (rules) / Poodle (code)",
+          "started_at": "2026-10-29T19:37:04.801790Z",
+          "duration_ms": 125.23,
+          "inputs_summary": {
+            "tickets": [
+              "tkt-jpm-bcs-340-350",
+              "tkt-jpm-bps-335-325",
+              "tkt-wdc-bps-360-350",
+              "tkt-wdc-bcs-365-375"
+            ],
+            "run_id": "run-open-0940",
+            "evaluated_at": "2026-10-13T09:40:00-04:00",
+            "ruleset_version": "1.1.0",
+            "ruleset_source": "risk_rules.yaml"
+          },
+          "outputs_summary": {
+            "tkt-jpm-bcs-340-350": {
+              "verdict": "VETO",
+              "blocking": [
+                "R01_QUOTE_FRESHNESS",
+                "R02_BID_ASK_WIDTH",
+                "R03_OPEN_INTEREST"
+              ],
+              "flags": [
+                "R08_MACRO_EVENTS",
+                "R10_IV_VS_HISTORY"
+              ]
+            },
+            "tkt-jpm-bps-335-325": {
+              "verdict": "VETO",
+              "blocking": [
+                "R01_QUOTE_FRESHNESS",
+                "R02_BID_ASK_WIDTH",
+                "R03_OPEN_INTEREST"
+              ],
+              "flags": [
+                "R08_MACRO_EVENTS",
+                "R10_IV_VS_HISTORY"
+              ]
+            },
+            "tkt-wdc-bps-360-350": {
+              "verdict": "VETO",
+              "blocking": [
+                "R01_QUOTE_FRESHNESS",
+                "R02_BID_ASK_WIDTH",
+                "R07_EARNINGS_IN_WINDOW"
+              ],
+              "flags": [
+                "R08_MACRO_EVENTS",
+                "R10_IV_VS_HISTORY"
+              ]
+            },
+            "tkt-wdc-bcs-365-375": {
+              "verdict": "VETO",
+              "blocking": [
+                "R01_QUOTE_FRESHNESS",
+                "R02_BID_ASK_WIDTH",
+                "R03_OPEN_INTEREST",
+                "R07_EARNINGS_IN_WINDOW",
+                "R09_EARLY_ASSIGNMENT"
+              ],
+              "flags": [
+                "R08_MACRO_EVENTS",
+                "R10_IV_VS_HISTORY"
+              ]
+            }
+          },
+          "verdict": "every ticket VETO -> NO TRADE",
+          "error": null
+        },
+        {
+          "seq": 5,
+          "run_id": "run-open-0940",
+          "stage": "watcher",
+          "agent": "WatcherAgent",
+          "owner": "Doodle (rules) / Poodle (code)",
+          "started_at": "2026-10-29T19:37:04.943456Z",
+          "duration_ms": 0.29,
+          "inputs_summary": {
+            "tickets": [
+              "tkt-jpm-bcs-340-350",
+              "tkt-jpm-bps-335-325",
+              "tkt-wdc-bps-360-350",
+              "tkt-wdc-bcs-365-375"
+            ],
+            "reviews": 4
+          },
+          "outputs_summary": {
+            "rules": [],
+            "note": "Rules defined only, inactive until a user approval exists; no monitoring loop yet (stub)."
+          },
+          "verdict": null,
+          "error": null
+        }
+      ],
+      "recommendation": "NO TRADE - every ticket was vetoed by the Risk Officer (or none could be built)",
+      "notes": [
+        "finviz ta_unusualvolume: no result table in page (no rows matched or layout changed)",
+        "finviz ta_topgainers: no result table in page (no rows matched or layout changed)",
+        "risk-free rate for derived IV: r = ln(1 + y*91/365)/(91/365); y = 4.16% Treasury 13 weeks coupon equivalent on 2026-10-09 -> r = 0.041386 (src-treasury-bill-rates)",
+        "macro calendars: HAND-MADE replay snapshot (not an actual 2026-10-13 fetch; built from real 2026-10-29 captures)",
+        "JPM: IV30 0.2519 (2026-10-12) recorded to IV history",
+        "WDC: IV30 0.6239 (2026-10-12) recorded to IV history",
+        "AAPL: quote unavailable (fixture not found: info_AAPL.json)",
+        "AAPL: option chain unavailable (fixture not found: oc_AAPL.json)",
+        "MSFT: quote unavailable (fixture not found: info_MSFT.json)",
+        "MSFT: option chain unavailable (fixture not found: oc_MSFT.json)",
+        "planner DTE window clamped to 14-28 d by risk rules hold period (R13)",
+        "AAPL bull call debit spread: not built (no underlying price (missing))",
+        "AAPL bear put debit spread: not built (no underlying price (missing))",
+        "MSFT bull call debit spread: not built (no underlying price (missing))",
+        "MSFT bear put debit spread: not built (no underlying price (missing))"
+      ],
+      "validation": {
+        "validator": "validate_session.py",
+        "errors": [],
+        "v1_1_schema": "spec_patches/v1.1/session.schema.json",
+        "v1_1_errors": []
+      }
+    }
+  ],
+  "session_ref": {
+    "path": "session-2026-10-13.json",
+    "sha256": "8efc47115dd307a3df14bdd15e459312a6310882511bc27bd5e4bde71ef38b1a",
+    "schema_version": "1.0.0"
+  }
+}

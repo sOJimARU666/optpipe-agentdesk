@@ -292,7 +292,7 @@ def test_inv15_parity_with_spec_direction_errors(validator, s, kind, op):
 
 def test_planner_records_are_1_1_3_and_pass_inv15(pipeline_output, validator):
     rec = pipeline_output["record"]
-    assert rec["schema_version"] == "1.1.4" and rec["tickets"] and record_errors(rec) == []
+    assert rec["schema_version"] == "1.1.5" and rec["tickets"] and record_errors(rec) == []
     assert [e for e in validator.validate(copy.deepcopy(rec)) if e.startswith(("INV-14", "INV-15"))] == []
     bad = copy.deepcopy(rec)
     tk = next(t for t in bad["tickets"] if t["strategy"] in GOOD)
@@ -416,4 +416,4 @@ def test_parity_with_spec_vertical_errors(validator, s, m):
 def test_one_record_version_everywhere():
     from optpipe import orchestrator
     from optpipe.records import compat
-    assert orchestrator.SCHEMA_VERSION == compat.V11 == "1.1.4" and {"1.1.2", "1.1.3", "1.1.4"} <= set(compat.V11_SHAPE)
+    assert orchestrator.SCHEMA_VERSION == compat.V11 == "1.1.5" and {"1.1.2", "1.1.3", "1.1.4", "1.1.5"} <= set(compat.V11_SHAPE)
