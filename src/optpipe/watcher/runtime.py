@@ -16,6 +16,10 @@ watcher_rules.yaml) and writes <session>.watch.json plus a .sha256 sidecar.
                   rejected shadow (spec 1.1.4); otherwise the ticket stays HYPOTHETICAL.
       - neither:  HYPOTHETICAL (no approval recorded). Watched as approved_pending and flagged
                   hypothetical=True, which is a paper what-if.
+      - idea status proposed / simulated / executed / closed (anything but approved_pending, approved, no idea,
+                  vetoed, rejected): the target keeps that status and is NOT watched at all (no quotes, no
+                  alerts, no shadow EOD), whatever its approvals say (spec watcher_reference step 4; an entered
+                  trade is watched as its paper position).
       - open paper_positions are watched as kind=position.
   * Gating: quotes are fetched only while Calendar.is_open(t). Premarket, after close, weekends, holidays
     and the time after an early close never reach the quote source. The shadow end-of-day mark is sampled
@@ -41,6 +45,13 @@ from ..records.guards import effective_verdict, latest_review, review_errors
 from ..risk.engine import Calendar
 from . import engine as spec_engine
 from .engine import BERLIN, NY, SHADOW, mark_of
+
+# Engine statuses that are watched intraday (watcher_rules.yaml scope: tickets with idea status approved_pending,
+# plus open paper positions). SHADOW targets get one EOD summary; any other status (a ticket whose idea is
+# proposed / simulated / executed / closed, spec watcher_reference step 4) is not watched at all.
+WATCHED = {"approved_pending", "open"}
+# Idea statuses for which the approval-status mapping applies (spec watcher_reference step 3; None = no idea).
+APPROVAL_SCOPE = (None, "approved_pending", "approved")
 
 WATCH_VERSION = "watch-1.0"
 LABEL = "PAPER ONLY - alert only, no order. Nothing here places, changes or cancels an order or notifies anyone."
@@ -213,7 +224,7 @@ class Target:
     target_id: str
     kind: str                 # ticket | position
     ticket_id: str
-    status: str               # engine status: approved_pending | open | vetoed | rejected
+    status: str               # engine status: approved_pending | open | vetoed | rejected, or an unwatched idea status
     record_status: str        # what the record says (idea_log / review / approval)
     vetoed: bool
     hypothetical: bool
@@ -227,11 +238,15 @@ class Target:
     def shadow(self) -> bool:
         return self.status in SHADOW
 
+    @property
+    def watched(self) -> bool:
+        return self.status in WATCHED
+
     def header(self) -> dict:
         t = self.ticket
         return {"target_id": self.target_id, "kind": self.kind, "ticket_id": self.ticket_id, "status": self.status,
                 "record_status": self.record_status, "vetoed": self.vetoed, "hypothetical": self.hypothetical,
-                "watched_intraday": not self.shadow, "underlying": t["underlying"], "strategy": t.get("strategy"),
+                "watched_intraday": self.watched, "underlying": t["underlying"], "strategy": t.get("strategy"),
                 "note": self.note}
 
 
@@ -241,7 +256,7 @@ def _latest_review(rec: dict, tid: str) -> Optional[dict]:
     return latest_review(r for r in rec.get("risk_reviews") or [] if r.get("ticket_id") == tid)
 
 
-def _veto_reasons(rec: dict, tid: str, rv: Optional[dict], istat: str) -> list[str]:
+def _veto_reasons(rec: dict, tid: str, rv: Optional[dict], istat: Optional[str]) -> list[str]:
     """Why the ticket is vetoed ([] when it is not), VETO first so an approval can never un-veto a ticket
     (spec/watcher_reference.py:336-362, watcher_rules.md:15):
       - its latest review (by evaluated_at) is VETO: recorded, derived from its rule results, empty, or tampered;
@@ -312,13 +327,16 @@ def targets_from_session(rec: dict, now: datetime) -> list[Target]:
     honour an approval against the wrong time (FIX-SEC-001 N7).
 
     Approval status -> target (spec 1.1.4 ruling, watcher_rules.yaml scope.approval_status, same as
-    spec/watcher_reference.target_from_session), applied after VETO-first and idea `rejected`:
+    spec/watcher_reference.target_from_session), applied after VETO-first and idea `rejected`, and only when the
+    idea status is approved_pending, approved or there is no idea (reference step 3):
       - a REAL approval of the ticket wins: status `active`, approved_at <= now < expires_at, INV-05/INV-16 clean
         -> `approved_pending`, really approved;
       - otherwise ANY `revoked` approval of the ticket -> `rejected` (shadow only, fail closed), whatever the
         other approvals say (an expired / consumed / blocked active one does not soften it);
       - otherwise (expired, consumed, active but out of window or failing INV-05, or no approval)
-        -> `approved_pending` HYPOTHETICAL (a watched paper what-if)."""
+        -> `approved_pending` HYPOTHETICAL (a watched paper what-if).
+    Any other idea status (proposed, simulated, executed, closed) keeps that status and is not watched, whatever the
+    approvals say (reference step 4: an approval is never honoured for an idea that is not approved_pending/approved)."""
     if not isinstance(now, datetime):
         raise TypeError("targets_from_session: `now` must be a datetime (the watch start)")
     ideas = {i.get("ticket_id"): i for i in rec.get("idea_log") or []}
@@ -328,7 +346,7 @@ def targets_from_session(rec: dict, now: datetime) -> list[Target]:
         idea = ideas.get(tid) or {}
         rv = _latest_review(rec, tid)
         verdict = effective_verdict(rv) if rv else None      # a tampered/empty review is VETO (INV-16, FIX-SEC-001)
-        istat = idea.get("current_status", "proposed")
+        istat = idea.get("current_status")                   # None = no idea (reference: istatus None)
         appr, blockers = _pick_approval(rec, tid, now)
         real = appr is not None and not blockers
         revoked = [a.get("approval_id") for a in rec.get("approvals") or []
@@ -340,6 +358,10 @@ def targets_from_session(rec: dict, now: datetime) -> list[Target]:
                               f"VETOED ({why}): shadow only, end-of-day summary, no intraday alerts"))
         elif istat == "rejected":
             out.append(Target(tid, "ticket", tid, "rejected", istat, False, False, tk, "rejected: shadow only"))
+        elif istat not in APPROVAL_SCOPE:
+            out.append(Target(tid, "ticket", tid, str(istat), istat, False, False, tk,
+                              f"idea status {istat!r}: not watched as a ticket (only approved_pending/approved ideas "
+                              "are; approvals are not honoured here)"))
         elif not real and revoked:
             out.append(Target(tid, "ticket", tid, "rejected", istat, False, False, tk,
                               f"rejected: approval {', '.join(map(str, revoked))} revoked and no approval stands at the "
@@ -480,9 +502,10 @@ class Watcher:
         self.wakes: list[dict] = []
         self.notes: list[str] = []
         self._sampled: set[str] = set()
-        if not any(not t.shadow for t in self.targets):
-            self.notes.append("no watched targets: every ticket is vetoed/rejected (shadow only); quotes are fetched "
-                              "once per session day for the shadow end-of-day mark")
+        if not any(t.watched for t in self.targets):
+            self.notes.append("no watched targets: every ticket is vetoed/rejected (shadow only) or its idea is not "
+                              "approved_pending/approved (not watched); quotes are fetched at most once per session day "
+                              "for the shadow end-of-day mark")
         if any(t.hypothetical for t in self.targets):
             self.notes.append("HYPOTHETICAL targets have no approval that stands (active, in its window, flags acknowledged); "
                               "their alerts are paper what-ifs")
@@ -511,7 +534,7 @@ class Watcher:
         is_open, why = market_state(now, self.cal)
         d = now.astimezone(NY).date()
         wake = {"at": pair(now), "market": why, "quote_calls": 0, "polled": [], "alerts": 0}
-        watched = [t for t in self.targets if not t.shadow]
+        watched = [t for t in self.targets if t.watched]
         shadows = [t for t in self.targets if t.shadow]
         nxt: Optional[datetime]
         if is_open:
@@ -623,7 +646,7 @@ class Watcher:
             "window": {"start": pair(start), "until": pair(until)},
             "market_days": self._market_days(),
             "targets": [t.header() for t in self.targets],
-            "summary": {"targets": len(self.targets), "watched": sum(not t.shadow for t in self.targets),
+            "summary": {"targets": len(self.targets), "watched": sum(t.watched for t in self.targets),
                         "shadow": sum(t.shadow for t in self.targets), "vetoed": sum(t.vetoed for t in self.targets),
                         "hypothetical": sum(t.hypothetical for t in self.targets), "wakes": len(self.wakes),
                         "quote_calls": len(self.source.calls), "alerts": len(self.alerts),

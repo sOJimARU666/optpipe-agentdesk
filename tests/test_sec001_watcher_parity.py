@@ -13,6 +13,8 @@ only), so the reference watches it as really approved. optpipe keeps FIX-SEC-001
 that single exception is pinned below (must stay INV-16-invalid, optpipe must stay the stricter side). Mapping: a real
 approval (active, in window, INV-05 clean) wins; otherwise ANY revoked approval of the ticket -> rejected (shadow);
 otherwise (expired / consumed / active but out of window or failing INV-05 / none) -> approved_pending hypothetical.
+All of that only for an idea that is approved_pending / approved / missing (reference step 3); any other idea status
+(proposed, simulated, executed, closed) keeps that status and is not watched, whatever the approvals (step 4, C1).
 Negative tests fail on 1d077a74 (R1) or 450c4c2 (PR #6). PAPER ONLY, synthetic records, no network."""
 from __future__ import annotations
 
@@ -92,7 +94,23 @@ def cases(ex: dict) -> dict[str, dict]:
     a2.update(approval_id="apr-2", status="active", approved_at=at("12:22"))
     r["approvals"].append(a2)
     c["revoked_then_real_approval"] = r                                    # a real approval wins
+    # PR #6 C1 (Moodle): reference step 4, idea status outside (approved_pending, approved, no idea). The idea status
+    # is set together with a matching history entry (INV-07), so all 20 records are valid (Moodle's istat_probe.py).
+    for ist in NON_APPROVAL_IDEA_STATUSES:
+        for base in ISTAT_BASES:
+            r = copy.deepcopy(c[base])
+            for i in r["idea_log"]:
+                if i.get("ticket_id") == TID:
+                    i["current_status"] = ist
+                    h = copy.deepcopy(i["history"][-1]); h["status"] = ist; h["at"] = at("12:29"); h.pop("ref_ids", None)
+                    i["history"].append(h)
+            c[f"idea_{ist}_{base}"] = r
     return c
+
+
+NON_APPROVAL_IDEA_STATUSES = ("proposed", "simulated", "executed", "closed")
+ISTAT_BASES = ("active_ok", "revoked", "expired", "no_approval", "revoked_then_expired")
+ISTAT_CASES = [f"idea_{i}_{b}" for i in NON_APPROVAL_IDEA_STATUSES for b in ISTAT_BASES]
 
 
 @pytest.fixture(scope="module")
@@ -177,7 +195,8 @@ CASE_NAMES = [
     "extra_approval_of_veto_review", "reviews_out_of_order", "veto_latest_by_time_but_first_in_array",
     "later_veto_rereview_listed_first", "tie_flag_listed_last", "tie_veto_listed_last",
     "no_approval", "active_out_of_window", "revoked_then_real_approval",
-    *[f"revoked_{o}_{x}" for x in ("expired", "consumed", "active_out_of_window", "active_no_ack") for o in ("then", "after")]]
+    *[f"revoked_{o}_{x}" for x in ("expired", "consumed", "active_out_of_window", "active_no_ack") for o in ("then", "after")],
+    *ISTAT_CASES]
 
 
 def test_case_names_cover_every_case(example):
@@ -225,6 +244,52 @@ def test_any_revoked_approval_rejects_unless_really_approved(example, ref, name)
     assert theirs(ref, r) == REJECTED
     t = next(t for t in targets_from_session(r, NOW) if t.kind == "ticket" and t.ticket_id == TID)
     assert (t.status, t.vetoed, t.hypothetical) == ("rejected", False, False), t.note
+
+
+@pytest.mark.parametrize("name", ISTAT_CASES)
+def test_idea_not_approved_is_not_watched_whatever_the_approval(example, ref, name):
+    """NEGATIVE (fails on 49debf0 / 450c4c2, PR #6 C1): reference step 4. A ticket whose idea is proposed / simulated /
+    executed / closed keeps that status and is not watched, whatever its approvals say. optpipe used to honour an
+    active in-window approval of a `proposed` (or already executed/closed) idea as REAL and watch it intraday, watch
+    an expired/no approval as a hypothetical, and turn a revoked one into a rejected shadow. Valid records only."""
+    r = cases(example)[name]
+    ist = name.split("_")[1]
+    assert errors(ref, r) == []
+    from optpipe.records.guards import check_record
+    assert check_record(r) == []
+    assert theirs(ref, r) == (ist, False, False)
+    t = next(t for t in targets_from_session(r, NOW) if t.kind == "ticket" and t.ticket_id == TID)
+    assert (t.status, t.record_status, t.vetoed) == (ist, ist, False), t.note
+    assert not t.watched and not t.shadow and t.header()["watched_intraday"] is False
+
+
+def test_unwatched_idea_gets_no_quotes_and_no_alerts(example, spec, raw_rules):
+    """C1 end to end: the watcher fetches nothing and alerts nothing for a `proposed` idea with a real-looking
+    approval (it would have been polled intraday as really approved before)."""
+    from optpipe.risk.engine import Calendar
+    from optpipe.risk.ruleset import MarketHours
+    from optpipe.watcher.runtime import Watcher
+    r = cases(example)["idea_proposed_active_ok"]
+    r["paper_positions"] = []
+    class NoQuotes:
+        name, method, calls = "none", "GET", []
+        def snapshot(self, *a, **k):
+            raise AssertionError("no quote may be fetched for an unwatched ticket")
+    cal = Calendar(MarketHours.model_validate(raw_rules["config"]["market_hours"]))
+    w = Watcher(r, spec.watcher_rules(), cal, NoQuotes(), now=NOW)
+    t = next(t for t in w.targets if t.ticket_id == TID and t.kind == "ticket")
+    assert t.status == "proposed" and not t.watched
+    for k in range(3):
+        w.step(NOW.replace(minute=30 + k))
+    assert w.alerts == [] and all(x["quote_calls"] == 0 for x in w.wakes)
+
+
+def test_missing_idea_defaults_to_no_status(example, ref):
+    """C1 (2): no idea_log entry is idea status None (reference), so the approval mapping applies, not 'proposed'."""
+    r = cases(example)["active_ok"]
+    r["idea_log"] = [i for i in r["idea_log"] if i.get("ticket_id") != TID]
+    t = next(t for t in targets_from_session(r, NOW) if t.kind == "ticket" and t.ticket_id == TID)
+    assert t.record_status is None and ours(r) == theirs(ref, r) == REAL
 
 
 def test_reference_mapping_is_the_yaml_table(spec, ref):

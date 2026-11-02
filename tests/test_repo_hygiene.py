@@ -58,9 +58,24 @@ def _frozen_release_copy(n):
     if len(parts) != 3 or parts[0] != "spec" or parts[1] not in sync_spec.FROZEN_RELEASES:
         return False
     sub = ROOT / "spec" / parts[1]
-    want = sync_spec.parse_manifest((sub / "MANIFEST.sha256").read_text()).get(parts[2])
-    ignored = parts[1] in (ROOT / "spec" / "conftest.py").read_text()
-    return ignored and want == hashlib.sha256((ROOT / n).read_bytes()).hexdigest()
+    manifest = (sub / "MANIFEST.sha256").read_bytes()
+    if hashlib.sha256(manifest).hexdigest() != sync_spec.FROZEN_RELEASES[parts[1]][1]:
+        return False                                  # the backup's own manifest must be the pinned one (PR #6 nit)
+    want = sync_spec.parse_manifest(manifest.decode()).get(parts[2])
+    return _collect_ignored(parts[1]) and want == hashlib.sha256((ROOT / n).read_bytes()).hexdigest()
+
+
+def _collect_ignored(sub: str) -> bool:
+    """`sub` is an entry of spec/conftest.py's collect_ignore list (parsed, not a substring match)."""
+    import ast
+    for node in ast.walk(ast.parse((ROOT / "spec" / "conftest.py").read_text())):
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "collect_ignore" for t in node.targets):
+            try:
+                vals = ast.literal_eval(node.value)
+            except ValueError:
+                return False
+            return sub in {str(v).rstrip("/") for v in vals}
+    return False
 
 
 def test_no_absolute_box_paths():
@@ -89,6 +104,30 @@ def test_bls_contact_email_ships_empty(monkeypatch):
     assert yaml.safe_load((ROOT / "config" / "settings.yaml").read_text())["sources"]["bls_contact_email"] == ""
     monkeypatch.delenv("OPTPIPE_BLS_CONTACT_EMAIL", raising=False)
     assert load_settings().sources.bls_contact_email == ""
+
+
+def test_frozen_copy_exemption_needs_the_pinned_manifest(tmp_path, monkeypatch):
+    """NEGATIVE (PR #6 nit, passed on 49debf0): a frozen backup whose files AND MANIFEST.sha256 are edited together
+    (manifest re-hashed) is no longer exempt from the scan, without relying on sync_spec --check."""
+    import shutil
+    import sys
+    fake = tmp_path / "repo"
+    (fake / "spec").mkdir(parents=True)
+    (fake / "scripts").mkdir()
+    shutil.copy(ROOT / "scripts" / "sync_spec.py", fake / "scripts")
+    shutil.copy(ROOT / "spec" / "conftest.py", fake / "spec")
+    shutil.copytree(ROOT / "spec" / "_v1_1_3_backup", fake / "spec" / "_v1_1_3_backup")
+    n = "spec/_v1_1_3_backup/test_invariants_v1_1_3.py"
+    monkeypatch.setattr(sys.modules[__name__], "ROOT", fake)
+    assert _frozen_release_copy(n)                                       # untouched copy: exempt
+    import hashlib
+    p = fake / n
+    p.write_text(p.read_text() + "\n# " + "/" + "tmp/evil\n")
+    m = fake / "spec" / "_v1_1_3_backup" / "MANIFEST.sha256"
+    old = hashlib.sha256((ROOT / n).read_bytes()).hexdigest()
+    m.write_text(m.read_text().replace(old, hashlib.sha256(p.read_bytes()).hexdigest()))
+    assert not _frozen_release_copy(n)                                   # re-hashed manifest != pin: not exempt
+    assert not _collect_ignored("_v1_1_9_backup") and _collect_ignored("_v1_1_3_backup")
 
 
 def test_scanners_catch_what_they_should():

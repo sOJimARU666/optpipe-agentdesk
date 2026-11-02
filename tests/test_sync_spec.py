@@ -66,7 +66,8 @@ def test_sync_writes_manifest_files_and_pin_record(pinned, source):
 
 
 @pytest.mark.parametrize("tamper", ["edit_file", "edit_manifest", "extra_file", "missing_file", "edit_v1", "edit_pin",
-                                    "edit_frozen", "extra_in_frozen", "missing_frozen", "edit_pin_frozen"])
+                                    "edit_frozen", "extra_in_frozen", "missing_frozen", "edit_pin_frozen",
+                                    "unknown_backup_dir", "unknown_backup_dir_empty", "nested_backup_dir"])
 def test_check_fails_on_any_edit(pinned, tamper):
     if tamper == "edit_file":
         p = pinned / "risk_rules.yaml"
@@ -92,6 +93,13 @@ def test_check_fails_on_any_edit(pinned, tamper):
         (pinned / "_v1_1_2_backup" / "local_notes.md").write_text("mine")
     elif tamper == "missing_frozen":
         shutil.rmtree(pinned / "_v1_1_1_backup")
+    elif tamper == "unknown_backup_dir":                 # NEGATIVE (PR #6 nit): passed --check on 49debf0
+        shutil.copytree(pinned / "_v1_1_3_backup", pinned / "_v1_1_9_backup")
+    elif tamper == "unknown_backup_dir_empty":
+        (pinned / "_v1_0_9_backup").mkdir()
+    elif tamper == "nested_backup_dir":
+        (pinned / "fixtures" / "old_backup").mkdir(parents=True)
+        (pinned / "fixtures" / "old_backup" / "x.json").write_text("{}")
     elif tamper == "edit_pin_frozen":
         pin = json.loads((pinned / "PIN.json").read_text())
         del pin["frozen_releases"]["_v1_1_0_backup"]
@@ -161,11 +169,14 @@ def test_clutter_and_backups_are_never_copied_or_counted(source, tmp_path):
     frozen = [f"{sub}/{n}" for sub in sync_spec.FROZEN_RELEASES
               for n in [*sync_spec.parse_manifest((src / sub / "MANIFEST.sha256").read_text()), "MANIFEST.sha256"]]
     assert copied == sorted([*pin["files"], "MANIFEST.sha256", "PIN.json", *sync_spec.V1_FILES, *frozen])
-    for junk in ("__pycache__/a.pyc", "b.pyc", "_v1_1_1_backup/__pycache__/x.pyc", "_v1_0_9_backup/x.py",
-                 "_v1_backup/extra.json"):
+    for junk in ("__pycache__/a.pyc", "b.pyc", "_v1_1_1_backup/__pycache__/x.pyc", "_v1_backup/extra.json"):
         (dest / junk).parent.mkdir(parents=True, exist_ok=True)
         (dest / junk).write_text("junk")
     sync_spec.verify_pinned(dest)                                    # clutter is not "extra"
+    (dest / "_v1_0_9_backup").mkdir()                                # but an unpinned backup folder is (PR #6 nit)
+    with pytest.raises(sync_spec.SpecMismatch, match="_v1_0_9_backup"):
+        sync_spec.verify_pinned(dest)
+    (dest / "_v1_0_9_backup").rmdir()
     (dest / "notes.md").write_text("mine")
     with pytest.raises(sync_spec.SpecMismatch, match="notes.md"):    # but a real extra file still fails
         sync_spec.verify_pinned(dest)

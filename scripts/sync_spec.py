@@ -12,11 +12,12 @@ truth; local/default runs keep reading ../trading/spec directly, CI sets OPTIONS
 
 Copied: the files listed in MANIFEST.sha256, the manifest itself, the two frozen v1.0.0 files from
 _v1_backup/ that gen_models.py / make_spec_patch.py need (not covered by the manifest, so pinned by their
-own sha256 in spec/PIN.json), and the frozen 1.1.0 / 1.1.1 / 1.1.2 releases (_v1_1_*_backup/, which Doodle's
-1.1.3 back-compat tests read), each by its own MANIFEST.sha256 and pinned by FROZEN_RELEASES below. Nothing is globbed from the source: the copy and the release check follow
+own sha256 in spec/PIN.json), and the frozen 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 releases (_v1_1_*_backup/, which
+Doodle's back-compat tests read), each by its own MANIFEST.sha256 and pinned by FROZEN_RELEASES below. Nothing is globbed from the source: the copy and the release check follow
 Doodle's MANIFEST.sha256 list exactly. Never copied or required: .venv/, __pycache__/, *.pyc, .pytest_cache/,
 backup folders (*_backup/, e.g. _v1_1_0_backup/) other than the two pinned _v1_backup files.
-The --check "nothing extra" scan of spec/ ignores the same build/backup clutter (Moodle, M4 review).
+The --check "nothing extra" scan of spec/ ignores the same build clutter (Moodle, M4 review), but a *_backup/
+folder in spec/ other than _v1_backup/ and the FROZEN_RELEASES is an error (Moodle, PR #6 review nit).
 Local only: no network, no git operations.
 """
 from __future__ import annotations
@@ -185,6 +186,11 @@ def verify_pinned(d: Path, version: str = EXPECTED_VERSION, manifest_sha: str = 
         except SpecMismatch as e:
             raise SpecMismatch(f"frozen release {sub}: {e}") from None
         allowed |= {f"{sub}/{n}" for n in [*flist, MANIFEST]}
+    unknown = sorted(rel for p in d.rglob("*_backup") if p.is_dir()
+                     and not IGNORED_DIRS.intersection((rel := p.relative_to(d).as_posix()).split("/"))
+                     and rel not in FROZEN_RELEASES and rel != "_v1_backup")
+    if unknown:
+        raise SpecMismatch(f"unpinned backup folders in the pinned spec: {unknown} (not in FROZEN_RELEASES)")
     extra = sorted(rel for p in d.rglob("*") if p.is_file()
                    and (rel := p.relative_to(d).as_posix()) not in allowed and not is_frozen_clutter(rel))
     if extra:

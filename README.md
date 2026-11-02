@@ -139,9 +139,11 @@ or webhooks). It also never modifies the session record; `watch.json` references
   * Approved tickets and open paper positions are watched.
   * HYPOTHETICAL tickets that are not vetoed are watched as `approved_pending` and flagged `HYPOTHETICAL`.
   * Approval status mapping (spec 1.1.4, `watcher_rules.yaml` `scope.approval_status`; after VETO-first and idea
-    `rejected`): an `active` approval inside its window with clean INV-05 is a real approval and wins. Otherwise
+    `rejected`, and only for an idea that is `approved_pending`, `approved` or missing): an `active` approval inside its window with clean INV-05 is a real approval and wins. Otherwise
     **any** `revoked` approval of the ticket makes it `rejected` (shadow only). `expired`, `consumed`, an active
     approval out of window or failing INV-05, or no approval leave it `approved_pending` HYPOTHETICAL.
+  * A ticket whose idea is `proposed`, `simulated`, `executed` or `closed` keeps that status and is not watched at
+    all, whatever its approvals say (spec `watcher_reference` step 4; an entered trade is watched as its paper position).
   * **Vetoed** (and rejected) tickets are flagged `VETOED` and are shadow-only. They are never polled intraday.
     One quote snapshot at close − 5 min feeds a single `SHADOW_EOD` info alert at the close (would-be mark,
     hypothetical USD P&L, and where it sits relative to the would-be stop and target).
