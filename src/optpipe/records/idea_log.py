@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any
 
 from ..records.fields import tspair
+from .guards import effective_verdict, review_errors
 
 
 def apply_reviews(idea_log: list[dict], reviews: list[dict], at: datetime) -> tuple[list[dict], str]:
@@ -22,8 +23,9 @@ def apply_reviews(idea_log: list[dict], reviews: list[dict], at: datetime) -> tu
         tid = idea.get("ticket_id")
         for r in by_ticket.get(tid or "", []):
             o = r["overall"]
-            if o["verdict"] == "VETO":
-                st, why = "vetoed", o.get("summary") or ", ".join(o["blocking_rule_ids"])
+            if effective_verdict(r) == "VETO":       # stored overall must equal its rule results (FIX-SEC-001, INV-16)
+                bad = review_errors(r)
+                st, why = "vetoed", ("; ".join(bad) if bad else (o.get("summary") or ", ".join(o["blocking_rule_ids"])))
             else:
                 st = "approved_pending"
                 why = f"{o['verdict']}: not vetoed; needs Eugene's contract-level approval" + (

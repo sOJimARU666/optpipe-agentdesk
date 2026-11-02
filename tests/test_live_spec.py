@@ -54,4 +54,4 @@ def test_fixture_run_validates_against_the_live_spec(tmp_path):
     env = {**os.environ, "OPTIONS_SPEC_DIR": str(LIVE_SPEC), "PYTHONDONTWRITEBYTECODE": "1"}
     r = subprocess.run([str(Path(sys.executable).parent / "optpipe"), "run", "--out", str(tmp_path)], env=env,
                        capture_output=True, text=True, cwd=ROOT)
-    assert r.returncode == 0 and "OK as 1.1.2" in r.stdout, r.stdout[-2000:] + r.stderr[-2000:]
+    assert r.returncode == 0 and "OK as 1.1.3" in r.stdout, r.stdout[-2000:] + r.stderr[-2000:]

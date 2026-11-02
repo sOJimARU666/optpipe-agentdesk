@@ -71,15 +71,15 @@ def test_watcher_expired_approval_not_approved(example, status, now):
 @pytest.mark.parametrize("acks", [[], FLAGS[:1], None])
 def test_watcher_unacknowledged_flags_not_approved(example, acks):
     t = target(approved(example, acknowledged=acks))
-    assert t.hypothetical and "OPT-ACK" in t.note, t.note
+    assert t.hypothetical and "INV-05-ACK-MISSING" in t.note, t.note
 
 
 def test_watcher_review_whose_results_veto_not_approved(example):
     r = approved(example)
     rv = next(x for x in r["risk_reviews"] if x["review_id"] == r["approvals"][0]["review_id"])
     next(x for x in rv["results"] if x["severity"] == "hard")["result"] = "VETO"   # overall still says FLAG
-    t = target(r)
-    assert t.hypothetical and "OPT-VERDICT" in t.note, t.note
+    t = target(r)                                           # the effective verdict is VETO: shadow only, never approved
+    assert t.vetoed and t.status == "vetoed" and "INV-16-VERDICT" in t.note, t.note
 
 
 def test_watcher_picks_the_approval_that_stands(example):

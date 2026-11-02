@@ -104,8 +104,24 @@ def _mutations():
         s["session"]["mode"] = "live"
     return [berlin_wrong_offset, unknown_source, conflicting_with_value, approval_on_veto, missing_no_trade, idea_status_mismatch, leg_not_in_chain, live_mode]
 
+# audit AUDIT-001B: each break must be caught by its own check, not by a side effect (error id prefix)
+EXPECTED_PREFIX = {
+    "berlin_wrong_offset": "INV-02 ",
+    "unknown_source": "INV-01 ",
+    "conflicting_with_value": "schema global_snapshot/instruments/2/level",
+    "approval_on_veto": "INV-05-VETO ",          # 1.1.3 specific id (1.1.x: 'INV-05 ap-1 approves a VETO/foreign review')
+    "missing_no_trade": "schema tickets/0/dm_alternatives",
+    "idea_status_mismatch": "INV-07 ",
+    "leg_not_in_chain": "INV-08 ",
+    "live_mode": "schema session/mode",
+}
+
+
 @pytest.mark.parametrize("mut", _mutations(), ids=lambda f: f.__name__)
 def test_validator_rejects(mut):
     import validate_session
     s = _copy.deepcopy(_example()); mut(s)
-    assert validate_session.validate(s), f"{mut.__name__} was not caught"
+    errs = validate_session.validate(s)
+    assert errs, f"{mut.__name__} was not caught"
+    want = EXPECTED_PREFIX[mut.__name__]
+    assert any(e.startswith(want) for e in errs), (want, errs)

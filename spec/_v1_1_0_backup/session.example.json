@@ -1,0 +1,4972 @@
+{
+  "schema_version": "1.1.0",
+  "session": {
+    "id": "sess-2026-10-13",
+    "date": "2026-10-13",
+    "mode": "paper",
+    "created": {
+      "ny": "2026-10-13T07:52:00-04:00",
+      "berlin": "2026-10-13T13:52:00+02:00"
+    },
+    "updated": {
+      "ny": "2026-10-13T12:16:00-04:00",
+      "berlin": "2026-10-13T18:16:00+02:00"
+    },
+    "risk_ruleset_version": "1.1.0",
+    "market_calendar": {
+      "timezone": "America/New_York",
+      "is_trading_day": true,
+      "early_close": false,
+      "regular_open": {
+        "ny": "2026-10-13T09:30:00-04:00",
+        "berlin": "2026-10-13T15:30:00+02:00"
+      },
+      "regular_close": {
+        "ny": "2026-10-13T16:00:00-04:00",
+        "berlin": "2026-10-13T22:00:00+02:00"
+      },
+      "ny_berlin_offset_hours": 6
+    },
+    "notes": [
+      "Converted from session-2026-10-13.json/.md (sample).",
+      "Paper only: no broker, no live orders."
+    ]
+  },
+  "sources": [
+    {
+      "id": "src-finviz-unusualvolume",
+      "url": "https://finviz.com/screener?v=111&f=sh_avgvol_o1000,sh_opt_option,sh_price_o10&s=ta_unusualvolume",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "screener",
+      "publisher": "Finviz"
+    },
+    {
+      "id": "src-finviz-topgainers",
+      "url": "https://finviz.com/screener?v=111&f=sh_avgvol_o1000,sh_opt_option,sh_price_o10&s=ta_topgainers",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "screener",
+      "publisher": "Finviz"
+    },
+    {
+      "id": "src-finviz-toplosers",
+      "url": "https://finviz.com/screener?v=111&f=sh_avgvol_o1000,sh_opt_option,sh_price_o10&s=ta_toplosers",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "screener",
+      "publisher": "Finviz"
+    },
+    {
+      "id": "src-finviz-newhigh",
+      "url": "https://finviz.com/screener?v=111&f=sh_avgvol_o1000,sh_opt_option,sh_price_o10&s=ta_newhigh",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "screener",
+      "publisher": "Finviz"
+    },
+    {
+      "id": "src-finviz-newlow",
+      "url": "https://finviz.com/screener?v=111&f=sh_avgvol_o1000,sh_opt_option,sh_price_o10&s=ta_newlow",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "screener",
+      "publisher": "Finviz"
+    },
+    {
+      "id": "src-sec-jpm-q3",
+      "url": "https://www.sec.gov/Archives/edgar/data/19617/000162828026065582/jpm-20261013.htm",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "filing",
+      "publisher": "SEC EDGAR"
+    },
+    {
+      "id": "src-newsquawk-jpm",
+      "url": "https://www.newsquawk.com/headlines/jpmorgan-chase--co-jpm-q3-2026-usd-eps-557-exp-593-revenue-502bln-exp-5123bln",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "news",
+      "publisher": "Newsquawk",
+      "notes": "fetched_at approximated by the run time (sample did not log per-URL fetch times)"
+    },
+    {
+      "id": "src-wsj-jpm",
+      "url": "https://www.wsj.com/livecoverage/stock-market-today-bank-earnings-10-13-2026/card/jpm-shares-slump-pre-market-after-client-activity-moderates-AnWEiArdNSXmN1zrm7MH",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "news",
+      "publisher": "WSJ",
+      "notes": "fetched_at approximated by the run time (sample did not log per-URL fetch times)"
+    },
+    {
+      "id": "src-tipranks-jpm",
+      "url": "https://www.tipranks.com/news/jpmorgan-stock-gains-as-higher-profits-offset-q3-earnings-miss",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "news",
+      "publisher": "TipRanks",
+      "notes": "fetched_at approximated by the run time (sample did not log per-URL fetch times)"
+    },
+    {
+      "id": "src-morningstar-estimates",
+      "url": "https://www.morningstar.com/news/dow-jones/202610132115/north-american-morning-briefing-stock-futures-mixed-as-bank-earnings-kick-off-earnings-season",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "news",
+      "publisher": "Morningstar/Dow Jones",
+      "notes": "fetched_at approximated by the run time (sample did not log per-URL fetch times)"
+    },
+    {
+      "id": "src-mainichi",
+      "url": "https://mainichi.jp/english/articles/20261013/p2g/00m/0bu/047000c",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "news",
+      "publisher": "Mainichi",
+      "notes": "fetched_at approximated by the run time (sample did not log per-URL fetch times)"
+    },
+    {
+      "id": "src-ilsole",
+      "url": "https://en.ilsole24ore.com/art/kospi-plunges-74-per-cent-amid-pressure-from-china-chips-and-oil-prices-falling-AJIAnGiB",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "news",
+      "publisher": "Il Sole 24 Ore",
+      "notes": "fetched_at approximated by the run time (sample did not log per-URL fetch times)"
+    },
+    {
+      "id": "src-alliance",
+      "url": "https://www.morningstar.com/news/alliance-news/1791878248964683800/london-market-open-europe-shakes-off-tech-decline-before-us-banks",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "news",
+      "publisher": "Alliance News",
+      "notes": "fetched_at approximated by the run time (sample did not log per-URL fetch times)"
+    },
+    {
+      "id": "src-eme",
+      "url": "https://economymiddleeast.com/news/stock-market-today-nasdaq-falls-0-44-percent-kospi-sinks-5-5-percent-as-stoxx-600-gains-0-44-percent-on-ai-chip-selloff/",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "news",
+      "publisher": "Economy Middle East",
+      "notes": "fetched_at approximated by the run time (sample did not log per-URL fetch times)"
+    },
+    {
+      "id": "src-nasdaq-jpm-info-0752",
+      "url": "https://api.nasdaq.com/api/quote/JPM/info?assetclass=stocks",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "quote_api",
+      "publisher": "Nasdaq",
+      "realtime": true
+    },
+    {
+      "id": "src-nasdaq-wdc-info-0752",
+      "url": "https://api.nasdaq.com/api/quote/WDC/info?assetclass=stocks",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "quote_api",
+      "publisher": "Nasdaq",
+      "realtime": true
+    },
+    {
+      "id": "src-nasdaq-jpm-chain-0752",
+      "url": "https://api.nasdaq.com/api/quote/JPM/option-chain?assetclass=stocks",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "option_chain_api",
+      "publisher": "Nasdaq",
+      "realtime": false
+    },
+    {
+      "id": "src-nasdaq-wdc-chain-0752",
+      "url": "https://api.nasdaq.com/api/quote/WDC/option-chain?assetclass=stocks",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "option_chain_api",
+      "publisher": "Nasdaq",
+      "realtime": false
+    },
+    {
+      "id": "src-wd-ir",
+      "url": "https://www.westerndigital.com/company/newsroom/press-releases/2026/2026-10-08-wd-to-announce-first-quarter-fiscal-year-2027-financial-results",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "company_ir",
+      "publisher": "Western Digital"
+    },
+    {
+      "id": "src-finviz-wdc-news",
+      "url": "https://finviz.com/news/401543/western-digital-shares-fall-36-as-ubs-cuts-price-target-amid-hdd-supply-concerns",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "news",
+      "publisher": "Finviz"
+    },
+    {
+      "id": "src-investing-wdc",
+      "url": "https://www.investing.com/news/stock-market-news/why-is-western-digital-stock-falling-today-93CH-4945879",
+      "fetched_at": "2026-10-13T07:52:00-04:00",
+      "kind": "news",
+      "publisher": "Investing.com",
+      "notes": "fetched_at approximated by the run time (sample did not log per-URL fetch times)"
+    },
+    {
+      "id": "src-nasdaq-premarket-0909",
+      "url": "https://api.nasdaq.com/api/quote/JPM/info?assetclass=stocks",
+      "fetched_at": "2026-10-13T09:09:00-04:00",
+      "kind": "quote_api",
+      "publisher": "Nasdaq (JPM, WDC, GS, C, WFC info calls)",
+      "realtime": true
+    },
+    {
+      "id": "src-stocktitan-gs",
+      "url": "https://www.stocktitan.net/sec-filings/GS/8-k-goldman-sachs-group-inc-reports-material-event-8b312bd35ddb.html",
+      "fetched_at": "2026-10-13T09:09:00-04:00",
+      "kind": "filing",
+      "publisher": "StockTitan (GS 8-K)"
+    },
+    {
+      "id": "src-citi-q3",
+      "url": "https://www.citigroup.com/rcs/citigpa/storage/public/Earnings/Q32026/2026prqtr3rslt.pdf",
+      "fetched_at": "2026-10-13T09:09:00-04:00",
+      "kind": "company_ir",
+      "publisher": "Citigroup"
+    },
+    {
+      "id": "src-wfc-q3",
+      "url": "https://www.wellsfargo.com/assets/pdf/about/investor-relations/earnings/third-quarter-2026-earnings.pdf",
+      "fetched_at": "2026-10-13T09:09:00-04:00",
+      "kind": "company_ir",
+      "publisher": "Wells Fargo"
+    },
+    {
+      "id": "src-bls-cpi",
+      "url": "https://www.bls.gov/schedule/news_release/cpi.htm",
+      "fetched_at": "2026-10-13T09:09:00-04:00",
+      "kind": "economic_calendar",
+      "publisher": "BLS"
+    },
+    {
+      "id": "src-jpm-ir-dividend",
+      "url": "https://www.jpmorganchase.com/ir/news/2026/jpmc-declares-increased-common-stock-dividend-9-15",
+      "fetched_at": "2026-10-13T09:09:00-04:00",
+      "kind": "company_ir",
+      "publisher": "JPMorganChase IR"
+    },
+    {
+      "id": "src-nasdaq-jpm-info-1216",
+      "url": "https://api.nasdaq.com/api/quote/JPM/info?assetclass=stocks",
+      "fetched_at": "2026-10-13T12:16:00-04:00",
+      "kind": "quote_api",
+      "publisher": "Nasdaq",
+      "realtime": true
+    },
+    {
+      "id": "src-nasdaq-jpm-chain-1216",
+      "url": "https://api.nasdaq.com/api/quote/JPM/option-chain?assetclass=stocks",
+      "fetched_at": "2026-10-13T12:16:00-04:00",
+      "kind": "option_chain_api",
+      "publisher": "Nasdaq",
+      "realtime": false
+    },
+    {
+      "id": "src-nasdaq-wdc-info-1216",
+      "url": "https://api.nasdaq.com/api/quote/WDC/info?assetclass=stocks",
+      "fetched_at": "2026-10-13T12:16:00-04:00",
+      "kind": "quote_api",
+      "publisher": "Nasdaq",
+      "realtime": true
+    }
+  ],
+  "runs": [
+    {
+      "run_id": "run-premarket",
+      "phase": "premarket",
+      "started": {
+        "ny": "2026-10-13T07:52:00-04:00",
+        "berlin": "2026-10-13T13:52:00+02:00"
+      },
+      "market_status": {
+        "value": "Pre-Market",
+        "source_id": "src-nasdaq-jpm-info-0752",
+        "as_of": "2026-10-13T07:52:00-04:00",
+        "status": "ok"
+      },
+      "summary": "Scan, candidates, ticket, review -> VETO"
+    },
+    {
+      "run_id": "run-preopen",
+      "phase": "preopen",
+      "started": {
+        "ny": "2026-10-13T09:09:00-04:00",
+        "berlin": "2026-10-13T15:09:00+02:00"
+      },
+      "market_status": {
+        "value": "Pre-Market",
+        "source_id": "src-nasdaq-premarket-0909",
+        "as_of": "2026-10-13T09:08:00-04:00",
+        "status": "ok"
+      },
+      "summary": "Bank actuals, CPI/ex-div found; still NO TRADE"
+    },
+    {
+      "run_id": "run-postopen",
+      "phase": "postopen",
+      "started": {
+        "ny": "2026-10-13T12:16:00-04:00",
+        "berlin": "2026-10-13T18:16:00+02:00"
+      },
+      "market_status": {
+        "value": "Open",
+        "source_id": "src-nasdaq-jpm-info-1216",
+        "as_of": "2026-10-13T12:16:00-04:00",
+        "status": "ok"
+      },
+      "summary": "Live requote; review -> VETO; NO TRADE"
+    }
+  ],
+  "premarket_scan": {
+    "run_id": "run-premarket",
+    "screens": [
+      {
+        "screen_id": "scr-unusualvolume",
+        "name": "ta_unusualvolume",
+        "source_id": "src-finviz-unusualvolume",
+        "filters": "sh_avgvol_o1000,sh_opt_option,sh_price_o10",
+        "fetched_at": "2026-10-13T07:52:00-04:00",
+        "status": "missing",
+        "rows": [],
+        "parse_notes": "Ticker first letter was doubled in raw parse (e.g. WWDC=WDC); corrected. Page not timestamped; values look prior-session/premarket -> rows marked stale with as_of = fetch time.",
+        "status_reason": "page returned no result rows"
+      },
+      {
+        "screen_id": "scr-topgainers",
+        "name": "ta_topgainers",
+        "source_id": "src-finviz-topgainers",
+        "filters": "sh_avgvol_o1000,sh_opt_option,sh_price_o10",
+        "fetched_at": "2026-10-13T07:52:00-04:00",
+        "status": "missing",
+        "rows": [],
+        "parse_notes": "Ticker first letter was doubled in raw parse (e.g. WWDC=WDC); corrected. Page not timestamped; values look prior-session/premarket -> rows marked stale with as_of = fetch time.",
+        "status_reason": "page returned no result rows"
+      },
+      {
+        "screen_id": "scr-toplosers",
+        "name": "ta_toplosers",
+        "source_id": "src-finviz-toplosers",
+        "filters": "sh_avgvol_o1000,sh_opt_option,sh_price_o10",
+        "fetched_at": "2026-10-13T07:52:00-04:00",
+        "status": "stale",
+        "rows": [
+          {
+            "rank": 1,
+            "ticker": "SNDX",
+            "last": {
+              "value": 14.81,
+              "source_id": "src-finviz-toplosers",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            },
+            "change_pct": {
+              "value": -10.51,
+              "source_id": "src-finviz-toplosers",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            }
+          },
+          {
+            "rank": 2,
+            "ticker": "S",
+            "last": {
+              "value": 23.56,
+              "source_id": "src-finviz-toplosers",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            },
+            "change_pct": {
+              "value": -8.18,
+              "source_id": "src-finviz-toplosers",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            }
+          },
+          {
+            "rank": 3,
+            "ticker": "FUN",
+            "last": {
+              "value": 11.0,
+              "source_id": "src-finviz-toplosers",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            },
+            "change_pct": {
+              "value": -7.72,
+              "source_id": "src-finviz-toplosers",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            }
+          },
+          {
+            "rank": 4,
+            "ticker": "WDC",
+            "last": {
+              "value": 363.52,
+              "source_id": "src-finviz-toplosers",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            },
+            "change_pct": {
+              "value": -6.05,
+              "source_id": "src-finviz-toplosers",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            }
+          },
+          {
+            "rank": 5,
+            "ticker": "BNTX",
+            "last": {
+              "value": 90.15,
+              "source_id": "src-finviz-toplosers",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            },
+            "change_pct": {
+              "value": -5.94,
+              "source_id": "src-finviz-toplosers",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            }
+          },
+          {
+            "rank": 6,
+            "ticker": "SKHY",
+            "last": {
+              "value": 153.26,
+              "source_id": "src-finviz-toplosers",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            },
+            "change_pct": {
+              "value": -5.53,
+              "source_id": "src-finviz-toplosers",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            }
+          },
+          {
+            "rank": 7,
+            "ticker": "STX",
+            "last": {
+              "value": 711.05,
+              "source_id": "src-finviz-toplosers",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            },
+            "change_pct": {
+              "value": -5.6,
+              "source_id": "src-finviz-toplosers",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            }
+          }
+        ],
+        "parse_notes": "Ticker first letter was doubled in raw parse (e.g. WWDC=WDC); corrected. Page not timestamped; values look prior-session/premarket -> rows marked stale with as_of = fetch time."
+      },
+      {
+        "screen_id": "scr-newhigh",
+        "name": "ta_newhigh",
+        "source_id": "src-finviz-newhigh",
+        "filters": "sh_avgvol_o1000,sh_opt_option,sh_price_o10",
+        "fetched_at": "2026-10-13T07:52:00-04:00",
+        "status": "stale",
+        "rows": [
+          {
+            "rank": 1,
+            "ticker": "ZIM",
+            "last": {
+              "value": 31.03,
+              "source_id": "src-finviz-newhigh",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            }
+          },
+          {
+            "rank": 2,
+            "ticker": "V",
+            "last": {
+              "value": 396.09,
+              "source_id": "src-finviz-newhigh",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            }
+          },
+          {
+            "rank": 3,
+            "ticker": "FRO",
+            "last": {
+              "value": 58.93,
+              "source_id": "src-finviz-newhigh",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            }
+          },
+          {
+            "rank": 4,
+            "ticker": "DHT",
+            "last": {
+              "value": 25.95,
+              "source_id": "src-finviz-newhigh",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            }
+          },
+          {
+            "rank": 5,
+            "ticker": "OSCR",
+            "last": {
+              "value": 34.46,
+              "source_id": "src-finviz-newhigh",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "stale"
+            }
+          }
+        ],
+        "parse_notes": "Ticker first letter was doubled in raw parse (e.g. WWDC=WDC); corrected. Page not timestamped; values look prior-session/premarket -> rows marked stale with as_of = fetch time."
+      },
+      {
+        "screen_id": "scr-newlow",
+        "name": "ta_newlow",
+        "source_id": "src-finviz-newlow",
+        "filters": "sh_avgvol_o1000,sh_opt_option,sh_price_o10",
+        "fetched_at": "2026-10-13T07:52:00-04:00",
+        "status": "stale",
+        "rows": [
+          {
+            "rank": 1,
+            "ticker": "NAMS"
+          },
+          {
+            "rank": 2,
+            "ticker": "FUN"
+          },
+          {
+            "rank": 3,
+            "ticker": "OKLO"
+          },
+          {
+            "rank": 4,
+            "ticker": "QNT"
+          },
+          {
+            "rank": 5,
+            "ticker": "ACAD"
+          },
+          {
+            "rank": 6,
+            "ticker": "CBRS"
+          },
+          {
+            "rank": 7,
+            "ticker": "XE"
+          },
+          {
+            "rank": 8,
+            "ticker": "BIDU"
+          },
+          {
+            "rank": 9,
+            "ticker": "NNE"
+          },
+          {
+            "rank": 10,
+            "ticker": "FRVO"
+          }
+        ],
+        "parse_notes": "Ticker first letter was doubled in raw parse (e.g. WWDC=WDC); corrected. Page not timestamped; values look prior-session/premarket -> rows marked stale with as_of = fetch time."
+      }
+    ],
+    "earnings_reports": [
+      {
+        "run_id": "run-premarket",
+        "ticker": "JPM",
+        "fiscal_period": "Q3 2026",
+        "reported": {
+          "value": true,
+          "source_id": "src-sec-jpm-q3",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "eps_actual": {
+          "value": 5.57,
+          "source_id": "src-sec-jpm-q3",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok",
+          "note": "diluted"
+        },
+        "eps_estimate": {
+          "value": 5.93,
+          "source_id": "src-newsquawk-jpm",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "revenue_actual_usd_bn": {
+          "value": 50.172,
+          "source_id": "src-sec-jpm-q3",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "revenue_estimate_usd_bn": {
+          "value": 51.23,
+          "source_id": "src-newsquawk-jpm",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "premarket_change_pct": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "conflicting",
+          "conflicts": [
+            {
+              "value": -3.7,
+              "source_id": "src-wsj-jpm",
+              "as_of": "2026-10-13T07:03:00-04:00",
+              "note": "~$322"
+            },
+            {
+              "value": 0.78,
+              "source_id": "src-nasdaq-jpm-info-0752",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "note": "$336.91 realtime"
+            },
+            {
+              "value": 2.0,
+              "source_id": "src-tipranks-jpm",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "note": "~+2%, time not stated"
+            }
+          ]
+        },
+        "extra_metrics": {
+          "nii_usd_bn": {
+            "value": 27.036,
+            "source_id": "src-sec-jpm-q3",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          }
+        }
+      },
+      {
+        "run_id": "run-premarket",
+        "ticker": "GS",
+        "fiscal_period": "Q3 2026",
+        "reported": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing",
+          "note": "not found in searches"
+        },
+        "eps_actual": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "eps_estimate": {
+          "value": 12.86,
+          "source_id": "src-morningstar-estimates",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "revenue_actual_usd_bn": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "revenue_estimate_usd_bn": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "premarket_change_pct": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        }
+      },
+      {
+        "run_id": "run-premarket",
+        "ticker": "C",
+        "fiscal_period": "Q3 2026",
+        "reported": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing",
+          "note": "not found in searches"
+        },
+        "eps_actual": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "eps_estimate": {
+          "value": 2.65,
+          "source_id": "src-morningstar-estimates",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "revenue_actual_usd_bn": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "revenue_estimate_usd_bn": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "premarket_change_pct": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        }
+      },
+      {
+        "run_id": "run-premarket",
+        "ticker": "WFC",
+        "fiscal_period": "Q3 2026",
+        "reported": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing",
+          "note": "not found in searches"
+        },
+        "eps_actual": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "eps_estimate": {
+          "value": 1.85,
+          "source_id": "src-morningstar-estimates",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "revenue_actual_usd_bn": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "revenue_estimate_usd_bn": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "premarket_change_pct": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        }
+      },
+      {
+        "run_id": "run-preopen",
+        "ticker": "GS",
+        "fiscal_period": "Q3 2026",
+        "reported": {
+          "value": true,
+          "source_id": "src-stocktitan-gs",
+          "as_of": "2026-10-13T09:09:00-04:00",
+          "status": "ok"
+        },
+        "eps_actual": {
+          "value": 17.01,
+          "source_id": "src-stocktitan-gs",
+          "as_of": "2026-10-13T09:09:00-04:00",
+          "status": "ok"
+        },
+        "eps_estimate": {
+          "value": 12.86,
+          "source_id": "src-morningstar-estimates",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "revenue_actual_usd_bn": {
+          "value": 18.68,
+          "source_id": "src-stocktitan-gs",
+          "as_of": "2026-10-13T09:09:00-04:00",
+          "status": "ok"
+        },
+        "revenue_estimate_usd_bn": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "premarket_change_pct": {
+          "value": 4.26,
+          "source_id": "src-nasdaq-premarket-0909",
+          "as_of": "2026-10-13T09:08:00-04:00",
+          "status": "ok"
+        }
+      },
+      {
+        "run_id": "run-preopen",
+        "ticker": "C",
+        "fiscal_period": "Q3 2026",
+        "reported": {
+          "value": true,
+          "source_id": "src-citi-q3",
+          "as_of": "2026-10-13T09:09:00-04:00",
+          "status": "ok"
+        },
+        "eps_actual": {
+          "value": 2.85,
+          "source_id": "src-citi-q3",
+          "as_of": "2026-10-13T09:09:00-04:00",
+          "status": "ok"
+        },
+        "eps_estimate": {
+          "value": 2.65,
+          "source_id": "src-morningstar-estimates",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "revenue_actual_usd_bn": {
+          "value": 23.8,
+          "source_id": "src-citi-q3",
+          "as_of": "2026-10-13T09:09:00-04:00",
+          "status": "ok"
+        },
+        "revenue_estimate_usd_bn": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "premarket_change_pct": {
+          "value": 0.45,
+          "source_id": "src-nasdaq-premarket-0909",
+          "as_of": "2026-10-13T09:08:00-04:00",
+          "status": "ok"
+        }
+      },
+      {
+        "run_id": "run-preopen",
+        "ticker": "WFC",
+        "fiscal_period": "Q3 2026",
+        "reported": {
+          "value": true,
+          "source_id": "src-wfc-q3",
+          "as_of": "2026-10-13T09:09:00-04:00",
+          "status": "ok"
+        },
+        "eps_actual": {
+          "value": 1.87,
+          "source_id": "src-wfc-q3",
+          "as_of": "2026-10-13T09:09:00-04:00",
+          "status": "ok"
+        },
+        "eps_estimate": {
+          "value": 1.85,
+          "source_id": "src-morningstar-estimates",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "revenue_actual_usd_bn": {
+          "value": 21.87,
+          "source_id": "src-wfc-q3",
+          "as_of": "2026-10-13T09:09:00-04:00",
+          "status": "ok"
+        },
+        "revenue_estimate_usd_bn": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "premarket_change_pct": {
+          "value": -2.81,
+          "source_id": "src-nasdaq-premarket-0909",
+          "as_of": "2026-10-13T09:08:00-04:00",
+          "status": "ok"
+        }
+      },
+      {
+        "run_id": "run-preopen",
+        "ticker": "JPM",
+        "fiscal_period": "Q3 2026",
+        "reported": {
+          "value": true,
+          "source_id": "src-sec-jpm-q3",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "eps_actual": {
+          "value": 5.57,
+          "source_id": "src-sec-jpm-q3",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "eps_estimate": {
+          "value": 5.93,
+          "source_id": "src-newsquawk-jpm",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "revenue_actual_usd_bn": {
+          "value": 50.172,
+          "source_id": "src-sec-jpm-q3",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "revenue_estimate_usd_bn": {
+          "value": 51.23,
+          "source_id": "src-newsquawk-jpm",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "premarket_change_pct": {
+          "value": 1.17,
+          "source_id": "src-nasdaq-premarket-0909",
+          "as_of": "2026-10-13T09:08:00-04:00",
+          "status": "ok",
+          "note": "premarket conflict resolved toward positive"
+        }
+      }
+    ]
+  },
+  "global_snapshot": {
+    "run_id": "run-premarket",
+    "instruments": [
+      {
+        "symbol": "N225",
+        "name": "Nikkei 225",
+        "region": "asia_pacific",
+        "level": {
+          "value": 67777.52,
+          "source_id": "src-mainichi",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "change_pct": {
+          "value": -1.82,
+          "source_id": "src-mainichi",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "session_state": "close"
+      },
+      {
+        "symbol": "TOPIX",
+        "name": "TOPIX",
+        "region": "asia_pacific",
+        "level": {
+          "value": 4110.67,
+          "source_id": "src-mainichi",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok",
+          "note": "source attribution inferred from the sample's block-level source list"
+        },
+        "change_pct": {
+          "value": 0.14,
+          "source_id": "src-mainichi",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok",
+          "note": "source attribution inferred from the sample's block-level source list"
+        },
+        "session_state": "close"
+      },
+      {
+        "symbol": "KOSPI",
+        "name": "KOSPI",
+        "region": "asia_pacific",
+        "level": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "conflicting",
+          "conflicts": [
+            {
+              "value": 5914.35,
+              "source_id": "src-ilsole",
+              "as_of": null,
+              "note": "close"
+            },
+            {
+              "value": 6035.35,
+              "source_id": "src-eme",
+              "as_of": null
+            }
+          ]
+        },
+        "change_pct": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "conflicting",
+          "conflicts": [
+            {
+              "value": -7.4,
+              "source_id": "src-ilsole",
+              "as_of": null,
+              "note": "headline 7.4%; sample noted ~-7%"
+            },
+            {
+              "value": -5.5,
+              "source_id": "src-eme",
+              "as_of": null
+            }
+          ]
+        },
+        "session_state": "close"
+      },
+      {
+        "symbol": "HSI",
+        "name": "Hang Seng",
+        "region": "asia_pacific",
+        "level": {
+          "value": 24033.51,
+          "source_id": "src-ilsole",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "change_pct": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "conflicting",
+          "conflicts": [
+            {
+              "value": -1.0,
+              "source_id": "src-ilsole",
+              "as_of": null
+            },
+            {
+              "value": 0.2,
+              "source_id": "src-alliance",
+              "as_of": null
+            }
+          ]
+        },
+        "session_state": "close"
+      },
+      {
+        "symbol": "SHCOMP",
+        "name": "Shanghai Composite",
+        "region": "asia_pacific",
+        "level": {
+          "value": 3754.82,
+          "source_id": "src-ilsole",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "change_pct": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "conflicting",
+          "conflicts": [
+            {
+              "value": -1.1,
+              "source_id": "src-ilsole",
+              "as_of": null
+            },
+            {
+              "value": 0.1,
+              "source_id": "src-alliance",
+              "as_of": null
+            }
+          ]
+        },
+        "session_state": "close"
+      },
+      {
+        "symbol": "TAIEX",
+        "name": "Taiex",
+        "region": "asia_pacific",
+        "level": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "change_pct": {
+          "value": -1.9,
+          "source_id": "src-ilsole",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok",
+          "note": "source attribution inferred from the sample's block-level source list"
+        },
+        "session_state": "close"
+      },
+      {
+        "symbol": "AS51",
+        "name": "ASX 200",
+        "region": "asia_pacific",
+        "level": {
+          "value": 8767.4,
+          "source_id": "src-ilsole",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok",
+          "note": "source attribution inferred from the sample's block-level source list"
+        },
+        "change_pct": {
+          "value": -0.2,
+          "source_id": "src-ilsole",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok",
+          "note": "source attribution inferred from the sample's block-level source list"
+        },
+        "session_state": "close"
+      },
+      {
+        "symbol": "SXXP",
+        "name": "STOXX 600",
+        "region": "europe",
+        "level": {
+          "value": 638.44,
+          "source_id": "src-eme",
+          "as_of": "2026-10-13T07:14:00+00:00",
+          "status": "ok"
+        },
+        "change_pct": {
+          "value": 0.44,
+          "source_id": "src-eme",
+          "as_of": "2026-10-13T07:14:00+00:00",
+          "status": "ok"
+        },
+        "session_state": "early"
+      },
+      {
+        "symbol": "DAX",
+        "name": "DAX",
+        "region": "europe",
+        "level": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "change_pct": {
+          "value": 0.2,
+          "source_id": "src-alliance",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok",
+          "note": "source attribution inferred from the sample's block-level source list"
+        },
+        "session_state": "early"
+      },
+      {
+        "symbol": "CAC",
+        "name": "CAC 40",
+        "region": "europe",
+        "level": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "change_pct": {
+          "value": 0.3,
+          "source_id": "src-alliance",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok",
+          "note": "source attribution inferred from the sample's block-level source list"
+        },
+        "session_state": "early"
+      },
+      {
+        "symbol": "UKX",
+        "name": "FTSE 100",
+        "region": "europe",
+        "level": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing"
+        },
+        "change_pct": {
+          "value": 1.0,
+          "source_id": "src-alliance",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok",
+          "note": "approximate (~+1%); source attribution inferred from the sample's block-level source list"
+        },
+        "session_state": "early"
+      }
+    ],
+    "themes": [
+      {
+        "value": "AI/memory-chip selloff (CXMT news), lower oil, bank earnings",
+        "source_id": "src-eme",
+        "as_of": "2026-10-13T07:52:00-04:00",
+        "status": "ok"
+      }
+    ]
+  },
+  "event_calendar": {
+    "events": [
+      {
+        "event_id": "ev-jpm-earn-q3",
+        "kind": "earnings",
+        "underlying": "JPM",
+        "timing": "bmo",
+        "scheduled_at": {
+          "value": "2026-10-13T00:00:00-04:00",
+          "source_id": "src-sec-jpm-q3",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "description": "JPM Q3 2026 results (already reported before the open)"
+      },
+      {
+        "event_id": "ev-wdc-earn-q1fy27",
+        "kind": "earnings",
+        "underlying": "WDC",
+        "timing": "amc",
+        "scheduled_at": {
+          "value": "2026-10-22T00:00:00-04:00",
+          "source_id": "src-wd-ir",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        "description": "WDC fiscal Q1 2027 results after close"
+      },
+      {
+        "event_id": "ev-cpi-2026-10-14",
+        "kind": "CPI",
+        "underlying": null,
+        "timing": "at_time",
+        "scheduled_at": {
+          "value": "2026-10-14T08:30:00-04:00",
+          "source_id": "src-bls-cpi",
+          "as_of": "2026-10-13T09:09:00-04:00",
+          "status": "ok"
+        },
+        "description": "CPI (September data)"
+      },
+      {
+        "event_id": "ev-ppi-2026-10-15",
+        "kind": "PPI",
+        "underlying": null,
+        "timing": "at_time",
+        "scheduled_at": {
+          "value": "2026-10-15T08:30:00-04:00",
+          "source_id": "src-bls-cpi",
+          "as_of": "2026-10-13T09:09:00-04:00",
+          "status": "ok",
+          "note": "sample recorded the PPI date next to CPI without a separate citation; verify at bls.gov/schedule/news_release/ppi.htm"
+        },
+        "description": "PPI"
+      },
+      {
+        "event_id": "ev-jpm-exdiv-2026-10-06",
+        "kind": "ex_dividend",
+        "underlying": "JPM",
+        "timing": "unknown",
+        "scheduled_at": {
+          "value": "2026-10-06T00:00:00-04:00",
+          "source_id": "src-jpm-ir-dividend",
+          "as_of": "2026-10-13T09:09:00-04:00",
+          "status": "ok",
+          "note": "sample said '10-05/06'; with T+1 settlement ex-date = record date (10-06); verify"
+        },
+        "dividend_amount": {
+          "value": 1.65,
+          "source_id": "src-jpm-ir-dividend",
+          "as_of": "2026-10-13T09:09:00-04:00",
+          "status": "ok"
+        },
+        "description": "$1.65 payable 2026-10-31"
+      }
+    ],
+    "coverage": [
+      {
+        "kind": "earnings",
+        "underlying": "JPM",
+        "checked_through": {
+          "value": "2026-12-31",
+          "source_id": "src-sec-jpm-q3",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok",
+          "method": "derived",
+          "formula": "Q3 reported 2026-10-13; quarterly cadence -> next report not before January 2027"
+        }
+      },
+      {
+        "kind": "earnings",
+        "underlying": "WDC",
+        "checked_through": {
+          "value": "2026-12-31",
+          "source_id": "src-wd-ir",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok",
+          "method": "derived",
+          "formula": "next report announced for 2026-10-22; following one ~3 months later"
+        }
+      },
+      {
+        "kind": "ex_dividend",
+        "underlying": "JPM",
+        "checked_through": {
+          "value": "2026-12-31",
+          "source_id": "src-jpm-ir-dividend",
+          "as_of": "2026-10-13T09:09:00-04:00",
+          "status": "ok",
+          "method": "derived",
+          "formula": "Q4 dividend ex-date 2026-10-06 passed; next quarterly ex-date expected January 2027"
+        }
+      },
+      {
+        "kind": "ex_dividend",
+        "underlying": "WDC",
+        "checked_through": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing",
+          "note": "not checked"
+        }
+      },
+      {
+        "kind": "CPI",
+        "underlying": null,
+        "checked_through": {
+          "value": "2026-12-31",
+          "source_id": "src-bls-cpi",
+          "as_of": "2026-10-13T09:09:00-04:00",
+          "status": "ok",
+          "note": "BLS annual release schedule"
+        }
+      },
+      {
+        "kind": "PPI",
+        "underlying": null,
+        "checked_through": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing",
+          "note": "PPI schedule page not opened; only one date noted"
+        }
+      },
+      {
+        "kind": "FOMC",
+        "underlying": null,
+        "checked_through": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing",
+          "note": "not checked in sample"
+        }
+      },
+      {
+        "kind": "NFP",
+        "underlying": null,
+        "checked_through": {
+          "value": null,
+          "source_id": null,
+          "as_of": null,
+          "status": "missing",
+          "note": "not checked in sample"
+        }
+      }
+    ]
+  },
+  "candidates": [
+    {
+      "candidate_id": "cand-jpm",
+      "underlying": "JPM",
+      "company_name": "JPMorgan Chase & Co.",
+      "exchange": "NYSE",
+      "catalysts": [
+        {
+          "value": "Q3 EPS 5.57 vs 5.93 est and revenue 50.2bn vs 51.23bn (miss); NII 27.0bn beat",
+          "source_id": "src-newsquawk-jpm",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        {
+          "value": "Premarket reversal from about -3.7% to positive",
+          "source_id": "src-nasdaq-jpm-info-0752",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        }
+      ],
+      "related_event_ids": [
+        "ev-jpm-earn-q3",
+        "ev-jpm-exdiv-2026-10-06"
+      ],
+      "snapshots": [
+        {
+          "run_id": "run-premarket",
+          "quote": {
+            "last": {
+              "value": 336.91,
+              "source_id": "src-nasdaq-jpm-info-0752",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "ok"
+            },
+            "bid": {
+              "value": 336.68,
+              "source_id": "src-nasdaq-jpm-info-0752",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "ok"
+            },
+            "ask": {
+              "value": 337.5,
+              "source_id": "src-nasdaq-jpm-info-0752",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "ok"
+            },
+            "prev_close": {
+              "value": 334.3,
+              "source_id": "src-nasdaq-jpm-info-0752",
+              "as_of": "2026-10-12T16:00:00-04:00",
+              "status": "ok"
+            },
+            "change_pct": {
+              "value": 0.78,
+              "source_id": "src-nasdaq-jpm-info-0752",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "ok"
+            },
+            "week52_low": {
+              "value": 279.1,
+              "source_id": "src-nasdaq-jpm-info-0752",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "ok"
+            },
+            "week52_high": {
+              "value": 366.5,
+              "source_id": "src-nasdaq-jpm-info-0752",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "ok"
+            }
+          },
+          "volume": {
+            "volume": {
+              "value": 651371,
+              "source_id": "src-nasdaq-jpm-info-0752",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "ok",
+              "note": "premarket volume"
+            },
+            "avg_volume": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "not obtained"
+            },
+            "volume_vs_avg": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "needs avg_volume"
+            }
+          },
+          "iv": {
+            "iv30_current": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "IV not in Nasdaq chain"
+            },
+            "iv30_history": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "no IV history source"
+            }
+          },
+          "option_chain_slices": [
+            {
+              "expiry": "2026-10-30",
+              "source_id": "src-nasdaq-jpm-chain-0752",
+              "slice_note": "chain lastTrade 337.05 inconsistent with realtime 336.91; quotes are prior-session",
+              "contracts": [
+                {
+                  "contract_id": "JPM261030C00340000",
+                  "type": "call",
+                  "strike": 340.0,
+                  "expiry": "2026-10-30",
+                  "style": "american",
+                  "multiplier": 100,
+                  "bid": {
+                    "value": 5.2,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "ask": {
+                    "value": 5.65,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "mid": {
+                    "value": 5.425,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "method": "derived",
+                    "formula": "(bid+ask)/2"
+                  },
+                  "last": {
+                    "value": 5.35,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "iv": {
+                    "value": null,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": null,
+                    "status": "missing",
+                    "note": "not provided by Nasdaq chain"
+                  },
+                  "open_interest": {
+                    "value": 472,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "ok",
+                    "note": "OCC open interest as of prior close"
+                  },
+                  "volume": {
+                    "value": 37.0,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "greeks": {
+                    "delta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "gamma": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "theta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "vega": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    }
+                  }
+                },
+                {
+                  "contract_id": "JPM261030C00345000",
+                  "type": "call",
+                  "strike": 345.0,
+                  "expiry": "2026-10-30",
+                  "style": "american",
+                  "multiplier": 100,
+                  "bid": {
+                    "value": 3.3,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "ask": {
+                    "value": 3.9,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "mid": {
+                    "value": 3.6,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "method": "derived",
+                    "formula": "(bid+ask)/2"
+                  },
+                  "last": {
+                    "value": 3.46,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "iv": {
+                    "value": null,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": null,
+                    "status": "missing",
+                    "note": "not provided by Nasdaq chain"
+                  },
+                  "open_interest": {
+                    "value": 773,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "ok",
+                    "note": "OCC open interest as of prior close"
+                  },
+                  "volume": {
+                    "value": 439.0,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "greeks": {
+                    "delta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "gamma": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "theta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "vega": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    }
+                  }
+                },
+                {
+                  "contract_id": "JPM261030C00350000",
+                  "type": "call",
+                  "strike": 350.0,
+                  "expiry": "2026-10-30",
+                  "style": "american",
+                  "multiplier": 100,
+                  "bid": {
+                    "value": 2.15,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "ask": {
+                    "value": 2.65,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "mid": {
+                    "value": 2.4,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "method": "derived",
+                    "formula": "(bid+ask)/2"
+                  },
+                  "last": {
+                    "value": 2.35,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "iv": {
+                    "value": null,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": null,
+                    "status": "missing",
+                    "note": "not provided by Nasdaq chain"
+                  },
+                  "open_interest": {
+                    "value": 747,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "ok",
+                    "note": "OCC open interest as of prior close"
+                  },
+                  "volume": {
+                    "value": 60.0,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "greeks": {
+                    "delta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "gamma": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "theta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "vega": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    }
+                  }
+                },
+                {
+                  "contract_id": "JPM261030C00355000",
+                  "type": "call",
+                  "strike": 355.0,
+                  "expiry": "2026-10-30",
+                  "style": "american",
+                  "multiplier": 100,
+                  "bid": {
+                    "value": 1.2,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "ask": {
+                    "value": 1.67,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "mid": {
+                    "value": 1.435,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "method": "derived",
+                    "formula": "(bid+ask)/2"
+                  },
+                  "last": {
+                    "value": 1.38,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "iv": {
+                    "value": null,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": null,
+                    "status": "missing",
+                    "note": "not provided by Nasdaq chain"
+                  },
+                  "open_interest": {
+                    "value": 324,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "ok",
+                    "note": "OCC open interest as of prior close"
+                  },
+                  "volume": {
+                    "value": 216.0,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "greeks": {
+                    "delta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "gamma": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "theta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "vega": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    }
+                  }
+                },
+                {
+                  "contract_id": "JPM261030P00330000",
+                  "type": "put",
+                  "strike": 330.0,
+                  "expiry": "2026-10-30",
+                  "style": "american",
+                  "multiplier": 100,
+                  "bid": {
+                    "value": 4.8,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "ask": {
+                    "value": 5.45,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "mid": {
+                    "value": 5.125,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "method": "derived",
+                    "formula": "(bid+ask)/2"
+                  },
+                  "last": {
+                    "value": 5.35,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "iv": {
+                    "value": null,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": null,
+                    "status": "missing",
+                    "note": "not provided by Nasdaq chain"
+                  },
+                  "open_interest": {
+                    "value": 428,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "ok",
+                    "note": "OCC open interest as of prior close"
+                  },
+                  "volume": {
+                    "value": 45.0,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "greeks": {
+                    "delta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "gamma": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "theta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "vega": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    }
+                  }
+                },
+                {
+                  "contract_id": "JPM261030P00325000",
+                  "type": "put",
+                  "strike": 325.0,
+                  "expiry": "2026-10-30",
+                  "style": "american",
+                  "multiplier": 100,
+                  "bid": {
+                    "value": 3.2,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "ask": {
+                    "value": 3.85,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "mid": {
+                    "value": 3.525,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "method": "derived",
+                    "formula": "(bid+ask)/2"
+                  },
+                  "last": {
+                    "value": 3.65,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "iv": {
+                    "value": null,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": null,
+                    "status": "missing",
+                    "note": "not provided by Nasdaq chain"
+                  },
+                  "open_interest": {
+                    "value": 321,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "ok",
+                    "note": "OCC open interest as of prior close"
+                  },
+                  "volume": {
+                    "value": 107.0,
+                    "source_id": "src-nasdaq-jpm-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "greeks": {
+                    "delta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "gamma": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "theta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "vega": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "run_id": "run-preopen",
+          "quote": {
+            "last": {
+              "value": 338.22,
+              "source_id": "src-nasdaq-premarket-0909",
+              "as_of": "2026-10-13T09:08:00-04:00",
+              "status": "ok"
+            },
+            "bid": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing"
+            },
+            "ask": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing"
+            },
+            "prev_close": {
+              "value": 334.3,
+              "source_id": "src-nasdaq-jpm-info-0752",
+              "as_of": "2026-10-12T16:00:00-04:00",
+              "status": "ok"
+            },
+            "change_pct": {
+              "value": 1.17,
+              "source_id": "src-nasdaq-premarket-0909",
+              "as_of": "2026-10-13T09:08:00-04:00",
+              "status": "ok"
+            }
+          },
+          "volume": {
+            "volume": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing"
+            },
+            "avg_volume": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "not obtained"
+            },
+            "volume_vs_avg": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "needs avg_volume"
+            }
+          },
+          "iv": {
+            "iv30_current": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "IV not in Nasdaq chain"
+            },
+            "iv30_history": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "no IV history source"
+            }
+          },
+          "option_chain_slices": []
+        },
+        {
+          "run_id": "run-postopen",
+          "quote": {
+            "last": {
+              "value": 335.56,
+              "source_id": "src-nasdaq-jpm-info-1216",
+              "as_of": "2026-10-13T12:16:00-04:00",
+              "status": "ok"
+            },
+            "bid": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing"
+            },
+            "ask": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing"
+            },
+            "prev_close": {
+              "value": 334.3,
+              "source_id": "src-nasdaq-jpm-info-0752",
+              "as_of": "2026-10-12T16:00:00-04:00",
+              "status": "ok"
+            },
+            "change_pct": {
+              "value": 0.38,
+              "source_id": "src-nasdaq-jpm-info-1216",
+              "as_of": "2026-10-13T12:16:00-04:00",
+              "status": "ok"
+            },
+            "day_low": {
+              "value": 331.19,
+              "source_id": "src-nasdaq-jpm-info-1216",
+              "as_of": "2026-10-13T12:16:00-04:00",
+              "status": "ok"
+            },
+            "day_high": {
+              "value": 344.35,
+              "source_id": "src-nasdaq-jpm-info-1216",
+              "as_of": "2026-10-13T12:16:00-04:00",
+              "status": "ok"
+            }
+          },
+          "volume": {
+            "volume": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing"
+            },
+            "avg_volume": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "not obtained"
+            },
+            "volume_vs_avg": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "needs avg_volume"
+            }
+          },
+          "iv": {
+            "iv30_current": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "IV not in Nasdaq chain"
+            },
+            "iv30_history": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "no IV history source"
+            }
+          },
+          "option_chain_slices": [
+            {
+              "expiry": "2026-10-30",
+              "source_id": "src-nasdaq-jpm-chain-1216",
+              "contracts": [
+                {
+                  "contract_id": "JPM261030C00340000",
+                  "type": "call",
+                  "strike": 340.0,
+                  "expiry": "2026-10-30",
+                  "style": "american",
+                  "multiplier": 100,
+                  "bid": {
+                    "value": 4.8,
+                    "source_id": "src-nasdaq-jpm-chain-1216",
+                    "as_of": "2026-10-13T12:16:00-04:00",
+                    "status": "ok"
+                  },
+                  "ask": {
+                    "value": 5.55,
+                    "source_id": "src-nasdaq-jpm-chain-1216",
+                    "as_of": "2026-10-13T12:16:00-04:00",
+                    "status": "ok"
+                  },
+                  "mid": {
+                    "value": 5.175,
+                    "source_id": "src-nasdaq-jpm-chain-1216",
+                    "as_of": "2026-10-13T12:16:00-04:00",
+                    "status": "ok",
+                    "method": "derived",
+                    "formula": "(bid+ask)/2"
+                  },
+                  "last": {
+                    "value": null,
+                    "source_id": "src-nasdaq-jpm-chain-1216",
+                    "as_of": null,
+                    "status": "missing"
+                  },
+                  "iv": {
+                    "value": null,
+                    "source_id": "src-nasdaq-jpm-chain-1216",
+                    "as_of": null,
+                    "status": "missing",
+                    "note": "not provided by Nasdaq chain"
+                  },
+                  "open_interest": {
+                    "value": 472,
+                    "source_id": "src-nasdaq-jpm-chain-1216",
+                    "as_of": "2026-10-13T12:16:00-04:00",
+                    "status": "ok",
+                    "note": "OCC open interest as of prior close"
+                  },
+                  "volume": {
+                    "value": 330,
+                    "source_id": "src-nasdaq-jpm-chain-1216",
+                    "as_of": "2026-10-13T12:16:00-04:00",
+                    "status": "ok"
+                  },
+                  "greeks": {
+                    "delta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-1216",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "gamma": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-1216",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "theta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-1216",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "vega": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-1216",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    }
+                  }
+                },
+                {
+                  "contract_id": "JPM261030C00350000",
+                  "type": "call",
+                  "strike": 350.0,
+                  "expiry": "2026-10-30",
+                  "style": "american",
+                  "multiplier": 100,
+                  "bid": {
+                    "value": 1.81,
+                    "source_id": "src-nasdaq-jpm-chain-1216",
+                    "as_of": "2026-10-13T12:16:00-04:00",
+                    "status": "ok"
+                  },
+                  "ask": {
+                    "value": 2.32,
+                    "source_id": "src-nasdaq-jpm-chain-1216",
+                    "as_of": "2026-10-13T12:16:00-04:00",
+                    "status": "ok"
+                  },
+                  "mid": {
+                    "value": 2.065,
+                    "source_id": "src-nasdaq-jpm-chain-1216",
+                    "as_of": "2026-10-13T12:16:00-04:00",
+                    "status": "ok",
+                    "method": "derived",
+                    "formula": "(bid+ask)/2"
+                  },
+                  "last": {
+                    "value": null,
+                    "source_id": "src-nasdaq-jpm-chain-1216",
+                    "as_of": null,
+                    "status": "missing"
+                  },
+                  "iv": {
+                    "value": null,
+                    "source_id": "src-nasdaq-jpm-chain-1216",
+                    "as_of": null,
+                    "status": "missing",
+                    "note": "not provided by Nasdaq chain"
+                  },
+                  "open_interest": {
+                    "value": 747,
+                    "source_id": "src-nasdaq-jpm-chain-1216",
+                    "as_of": "2026-10-13T12:16:00-04:00",
+                    "status": "ok",
+                    "note": "OCC open interest as of prior close"
+                  },
+                  "volume": {
+                    "value": 141,
+                    "source_id": "src-nasdaq-jpm-chain-1216",
+                    "as_of": "2026-10-13T12:16:00-04:00",
+                    "status": "ok"
+                  },
+                  "greeks": {
+                    "delta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-1216",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "gamma": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-1216",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "theta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-1216",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "vega": {
+                      "value": null,
+                      "source_id": "src-nasdaq-jpm-chain-1216",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "candidate_id": "cand-wdc",
+      "underlying": "WDC",
+      "company_name": "Western Digital Corporation",
+      "exchange": "NASDAQ-GS",
+      "catalysts": [
+        {
+          "value": "Memory/storage selloff after Chinese CXMT chip news",
+          "source_id": "src-investing-wdc",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        {
+          "value": "UBS price-target cut on HDD supply",
+          "source_id": "src-finviz-wdc-news",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        },
+        {
+          "value": "Finviz top loser",
+          "source_id": "src-finviz-toplosers",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "stale"
+        }
+      ],
+      "related_event_ids": [
+        "ev-wdc-earn-q1fy27"
+      ],
+      "snapshots": [
+        {
+          "run_id": "run-premarket",
+          "quote": {
+            "last": {
+              "value": 363.4,
+              "source_id": "src-nasdaq-wdc-info-0752",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "ok"
+            },
+            "bid": {
+              "value": 363.2,
+              "source_id": "src-nasdaq-wdc-info-0752",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "ok"
+            },
+            "ask": {
+              "value": 363.5,
+              "source_id": "src-nasdaq-wdc-info-0752",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "ok"
+            },
+            "prev_close": {
+              "value": 386.94,
+              "source_id": "src-nasdaq-wdc-info-0752",
+              "as_of": "2026-10-12T16:00:00-04:00",
+              "status": "ok"
+            },
+            "change_pct": {
+              "value": -6.08,
+              "source_id": "src-nasdaq-wdc-info-0752",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "ok"
+            },
+            "week52_low": {
+              "value": 112.52,
+              "source_id": "src-nasdaq-wdc-info-0752",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "ok"
+            },
+            "week52_high": {
+              "value": 799.87,
+              "source_id": "src-nasdaq-wdc-info-0752",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "ok"
+            }
+          },
+          "volume": {
+            "volume": {
+              "value": 243277,
+              "source_id": "src-nasdaq-wdc-info-0752",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "ok",
+              "note": "premarket volume"
+            },
+            "avg_volume": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "not obtained"
+            },
+            "volume_vs_avg": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "needs avg_volume"
+            }
+          },
+          "iv": {
+            "iv30_current": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "IV not in Nasdaq chain"
+            },
+            "iv30_history": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "no IV history source"
+            }
+          },
+          "option_chain_slices": [
+            {
+              "expiry": "2026-10-30",
+              "source_id": "src-nasdaq-wdc-chain-0752",
+              "slice_note": "priced off prior close 386.94, not 363.40",
+              "contracts": [
+                {
+                  "contract_id": "WDC261030P00360000",
+                  "type": "put",
+                  "strike": 360.0,
+                  "expiry": "2026-10-30",
+                  "style": "american",
+                  "multiplier": 100,
+                  "bid": {
+                    "value": 9.45,
+                    "source_id": "src-nasdaq-wdc-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "ask": {
+                    "value": 10.45,
+                    "source_id": "src-nasdaq-wdc-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "mid": {
+                    "value": 9.95,
+                    "source_id": "src-nasdaq-wdc-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "method": "derived",
+                    "formula": "(bid+ask)/2"
+                  },
+                  "last": {
+                    "value": 9.9,
+                    "source_id": "src-nasdaq-wdc-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "iv": {
+                    "value": null,
+                    "source_id": "src-nasdaq-wdc-chain-0752",
+                    "as_of": null,
+                    "status": "missing",
+                    "note": "not provided by Nasdaq chain"
+                  },
+                  "open_interest": {
+                    "value": 531,
+                    "source_id": "src-nasdaq-wdc-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "ok",
+                    "note": "OCC open interest as of prior close"
+                  },
+                  "volume": {
+                    "value": 54.0,
+                    "source_id": "src-nasdaq-wdc-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "greeks": {
+                    "delta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-wdc-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "gamma": {
+                      "value": null,
+                      "source_id": "src-nasdaq-wdc-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "theta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-wdc-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "vega": {
+                      "value": null,
+                      "source_id": "src-nasdaq-wdc-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    }
+                  }
+                },
+                {
+                  "contract_id": "WDC261030P00350000",
+                  "type": "put",
+                  "strike": 350.0,
+                  "expiry": "2026-10-30",
+                  "style": "american",
+                  "multiplier": 100,
+                  "bid": {
+                    "value": 6.65,
+                    "source_id": "src-nasdaq-wdc-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "ask": {
+                    "value": 7.5,
+                    "source_id": "src-nasdaq-wdc-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "mid": {
+                    "value": 7.075,
+                    "source_id": "src-nasdaq-wdc-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "method": "derived",
+                    "formula": "(bid+ask)/2"
+                  },
+                  "last": {
+                    "value": 6.95,
+                    "source_id": "src-nasdaq-wdc-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "iv": {
+                    "value": null,
+                    "source_id": "src-nasdaq-wdc-chain-0752",
+                    "as_of": null,
+                    "status": "missing",
+                    "note": "not provided by Nasdaq chain"
+                  },
+                  "open_interest": {
+                    "value": 620,
+                    "source_id": "src-nasdaq-wdc-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "ok",
+                    "note": "OCC open interest as of prior close"
+                  },
+                  "volume": {
+                    "value": 28.0,
+                    "source_id": "src-nasdaq-wdc-chain-0752",
+                    "as_of": "2026-10-12T16:00:00-04:00",
+                    "status": "stale",
+                    "note": "prior-session close quote; options do not trade premarket"
+                  },
+                  "greeks": {
+                    "delta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-wdc-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "gamma": {
+                      "value": null,
+                      "source_id": "src-nasdaq-wdc-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "theta": {
+                      "value": null,
+                      "source_id": "src-nasdaq-wdc-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    },
+                    "vega": {
+                      "value": null,
+                      "source_id": "src-nasdaq-wdc-chain-0752",
+                      "as_of": null,
+                      "status": "missing",
+                      "note": "not provided by Nasdaq chain"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "run_id": "run-preopen",
+          "quote": {
+            "last": {
+              "value": 357.84,
+              "source_id": "src-nasdaq-premarket-0909",
+              "as_of": "2026-10-13T09:08:00-04:00",
+              "status": "ok"
+            },
+            "bid": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing"
+            },
+            "ask": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing"
+            },
+            "prev_close": {
+              "value": 386.94,
+              "source_id": "src-nasdaq-wdc-info-0752",
+              "as_of": "2026-10-12T16:00:00-04:00",
+              "status": "ok"
+            },
+            "change_pct": {
+              "value": -7.52,
+              "source_id": "src-nasdaq-premarket-0909",
+              "as_of": "2026-10-13T09:08:00-04:00",
+              "status": "ok"
+            }
+          },
+          "volume": {
+            "volume": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing"
+            },
+            "avg_volume": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "not obtained"
+            },
+            "volume_vs_avg": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "needs avg_volume"
+            }
+          },
+          "iv": {
+            "iv30_current": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "IV not in Nasdaq chain"
+            },
+            "iv30_history": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "no IV history source"
+            }
+          },
+          "option_chain_slices": []
+        },
+        {
+          "run_id": "run-postopen",
+          "quote": {
+            "last": {
+              "value": 377.95,
+              "source_id": "src-nasdaq-wdc-info-1216",
+              "as_of": "2026-10-13T12:16:00-04:00",
+              "status": "ok"
+            },
+            "bid": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing"
+            },
+            "ask": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing"
+            },
+            "prev_close": {
+              "value": 386.94,
+              "source_id": "src-nasdaq-wdc-info-0752",
+              "as_of": "2026-10-12T16:00:00-04:00",
+              "status": "ok"
+            },
+            "change_pct": {
+              "value": -2.32,
+              "source_id": "src-nasdaq-wdc-info-1216",
+              "as_of": "2026-10-13T12:16:00-04:00",
+              "status": "ok"
+            }
+          },
+          "volume": {
+            "volume": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing"
+            },
+            "avg_volume": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "not obtained"
+            },
+            "volume_vs_avg": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "needs avg_volume"
+            }
+          },
+          "iv": {
+            "iv30_current": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "IV not in Nasdaq chain"
+            },
+            "iv30_history": {
+              "value": null,
+              "source_id": null,
+              "as_of": null,
+              "status": "missing",
+              "note": "no IV history source"
+            }
+          },
+          "option_chain_slices": []
+        }
+      ]
+    }
+  ],
+  "tickets": [
+    {
+      "ticket_id": "tkt-jpm-bcs-340-350",
+      "candidate_id": "cand-jpm",
+      "label": "HYPOTHETICAL - paper only, not an order",
+      "created": {
+        "ny": "2026-10-13T07:52:00-04:00",
+        "berlin": "2026-10-13T13:52:00+02:00"
+      },
+      "underlying": "JPM",
+      "strategy": "bull_call_debit_spread",
+      "direction": "bullish",
+      "thesis": "Premarket reversal after Q3 miss/NII beat; defined-risk upside to 350.",
+      "legs": [
+        {
+          "leg_id": "leg-1",
+          "contract_id": "JPM261030C00340000",
+          "type": "call",
+          "side": "buy",
+          "strike": 340.0,
+          "expiry": "2026-10-30",
+          "ratio": 1,
+          "multiplier": 100
+        },
+        {
+          "leg_id": "leg-2",
+          "contract_id": "JPM261030C00350000",
+          "type": "call",
+          "side": "sell",
+          "strike": 350.0,
+          "expiry": "2026-10-30",
+          "ratio": 1,
+          "multiplier": 100
+        }
+      ],
+      "quantity": 1,
+      "limit_price": {
+        "amount": 3.1,
+        "price_type": "debit",
+        "valid_only_if": "re-quoted live after 09:45 ET with each leg spread <= 10% of mid; sample's reference limit was 3.03 (mid), cap 3.10",
+        "raw_amount": 3.100625,
+        "tick_size": 0.05,
+        "rounding": "down"
+      },
+      "pricing": {
+        "run_id": "run-premarket",
+        "reference_mid": 3.025,
+        "natural": 3.5,
+        "status": "stale",
+        "note": "UNPRICEABLE premarket: prior-session option quotes; tick rounding (penny-pilot JPM): limit 3.100625 -> 3.10 (down, 0.05), stop 1.5125 -> 1.52 (up, 0.01), target 6.05 -> 6.05 (down, 0.05)"
+      },
+      "risk_basis": "Per-trade max loss $500 is a PLACEHOLDER pending Eugene",
+      "hold_window": {
+        "start": {
+          "ny": "2026-10-13T09:45:00-04:00",
+          "berlin": "2026-10-13T15:45:00+02:00"
+        },
+        "end": {
+          "ny": "2026-10-27T16:00:00-04:00",
+          "berlin": "2026-10-27T21:00:00+01:00"
+        }
+      },
+      "entry_rules": [
+        {
+          "rule_id": "entry-1",
+          "text": "After 09:45 ET (15:45 CEST), only if JPM > 334.30 (prev close), live net mid debit <= 3.10 and each leg spread <= 10% of mid",
+          "combine": "all",
+          "conditions": [
+            {
+              "metric": "time_ny",
+              "op": "gte",
+              "value": "09:45"
+            },
+            {
+              "metric": "underlying_last",
+              "op": "gt",
+              "value": 334.3
+            },
+            {
+              "metric": "net_debit_mid",
+              "op": "lte",
+              "value": 3.1,
+              "raw_value": 3.100625,
+              "tick_size": 0.05,
+              "rounding": "down"
+            },
+            {
+              "metric": "leg_spread_pct_of_mid",
+              "op": "lte",
+              "value": 10,
+              "unit": "pct"
+            }
+          ]
+        }
+      ],
+      "exit_rules": [
+        {
+          "rule_id": "exit-time",
+          "text": "Time stop: close by 2026-10-27",
+          "conditions": [
+            {
+              "metric": "date_ny",
+              "op": "gte",
+              "value": "2026-10-27"
+            }
+          ]
+        }
+      ],
+      "stop_rules": [
+        {
+          "rule_id": "stop-1",
+          "text": "Exit if JPM closes below 330 or spread value <= 1.52 (~50% of ref mid, rounded up)",
+          "combine": "any",
+          "conditions": [
+            {
+              "metric": "underlying_close",
+              "op": "lt",
+              "value": 330
+            },
+            {
+              "metric": "position_value",
+              "op": "lte",
+              "value": 1.52,
+              "raw_value": 1.5125,
+              "tick_size": 0.01,
+              "rounding": "up"
+            }
+          ]
+        }
+      ],
+      "target_rules": [
+        {
+          "rule_id": "target-1",
+          "text": "Close at spread value 6.05 (2x ref mid, rounded down) or JPM >= 350",
+          "combine": "any",
+          "conditions": [
+            {
+              "metric": "position_value",
+              "op": "gte",
+              "value": 6.05,
+              "raw_value": 6.05,
+              "tick_size": 0.05,
+              "rounding": "down"
+            },
+            {
+              "metric": "underlying_last",
+              "op": "gte",
+              "value": 350
+            }
+          ]
+        }
+      ],
+      "max_loss": {
+        "amount_usd": 310.0,
+        "unlimited": false,
+        "at_price": 3.1,
+        "basis": "1 x 3.10 x 100 at limit; sample quoted $302.50 at ref mid 3.025 and $350 at natural 3.50"
+      },
+      "max_profit": {
+        "amount_usd": 690.0,
+        "unlimited": false,
+        "at_price": 3.1,
+        "basis": "(10 width - 3.10) x 100; $697.50 at ref mid"
+      },
+      "breakevens": [
+        {
+          "underlying_price": 343.1,
+          "at_price": 3.1
+        },
+        {
+          "underlying_price": 343.025,
+          "at_price": 3.025
+        }
+      ],
+      "intended_event_ids": [],
+      "dm_alternatives": [
+        {
+          "alt_id": "alt-jpm-bcs",
+          "kind": "trade",
+          "description": "JPM Oct30 340/350 bull call debit spread (this ticket)",
+          "ticket_id": "tkt-jpm-bcs-340-350",
+          "decision": "selected",
+          "reason": "Best candidate, but only if live quotes pass risk"
+        },
+        {
+          "alt_id": "alt-wdc-bps",
+          "kind": "trade",
+          "description": "WDC Oct30 360/350 bear put spread (ref mid 2.875)",
+          "ticket_id": null,
+          "decision": "rejected",
+          "reason": "Earnings 2026-10-22 inside hold window; chain priced off stale 386.94; 350P spread ~12%"
+        },
+        {
+          "alt_id": "alt-jpm-bps",
+          "kind": "trade",
+          "description": "JPM Oct30 330/325 bear put spread (fade the miss)",
+          "ticket_id": null,
+          "decision": "rejected",
+          "reason": "325P OI 321 < 500; directional conflict with premarket reversal"
+        },
+        {
+          "alt_id": "alt-no-trade",
+          "kind": "no_trade",
+          "description": "NO TRADE",
+          "ticket_id": null,
+          "decision": "preferred",
+          "reason": "Stale option data and conflicting JPM premarket prints"
+        }
+      ]
+    }
+  ],
+  "risk_reviews": [
+    {
+      "review_id": "rv-premarket",
+      "ticket_id": "tkt-jpm-bcs-340-350",
+      "run_id": "run-premarket",
+      "evaluated_at": {
+        "ny": "2026-10-13T07:52:00-04:00",
+        "berlin": "2026-10-13T13:52:00+02:00"
+      },
+      "ruleset_version": "1.1.0",
+      "market_open_at_evaluation": false,
+      "results": [
+        {
+          "rule_id": "R01_QUOTE_FRESHNESS",
+          "severity": "hard",
+          "result": "VETO",
+          "measured": {
+            "market_open": false,
+            "evaluated_at_ny": "2026-10-13T07:52:00-04:00"
+          },
+          "threshold": {
+            "quote_max_age_seconds": 900
+          },
+          "reason": "US regular session closed at evaluated_at (America/New_York); quotes cannot be live"
+        },
+        {
+          "rule_id": "R02_BID_ASK_WIDTH",
+          "severity": "hard",
+          "result": "VETO",
+          "measured": {
+            "leg-1": 0.0829,
+            "leg-2": 0.2083
+          },
+          "threshold": {
+            "max_spread_pct_of_mid": 0.1
+          },
+          "reason": "leg-1 0.0829 PASS, leg-2 0.2083 VETO",
+          "per_leg": [
+            {
+              "leg_id": "leg-1",
+              "result": "PASS",
+              "measured": 0.0829
+            },
+            {
+              "leg_id": "leg-2",
+              "result": "VETO",
+              "measured": 0.2083
+            }
+          ]
+        },
+        {
+          "rule_id": "R03_OPEN_INTEREST",
+          "severity": "hard",
+          "result": "VETO",
+          "measured": {
+            "leg-1": 472,
+            "leg-2": 747
+          },
+          "threshold": {
+            "min_open_interest": 500
+          },
+          "reason": "leg-1 OI 472 VETO, leg-2 OI 747 PASS",
+          "per_leg": [
+            {
+              "leg_id": "leg-1",
+              "result": "VETO",
+              "measured": 472
+            },
+            {
+              "leg_id": "leg-2",
+              "result": "PASS",
+              "measured": 747
+            }
+          ]
+        },
+        {
+          "rule_id": "R04_MAX_LOSS",
+          "severity": "hard",
+          "result": "PASS",
+          "measured": {
+            "unlimited": false,
+            "max_loss_usd": 310.0
+          },
+          "threshold": {
+            "per_trade_max_loss_usd": 500
+          },
+          "reason": "max loss $310.00 at limit vs $500 (placeholder pending Eugene)",
+          "placeholder": true
+        },
+        {
+          "rule_id": "R05_NET_PRICE_VS_LIMIT",
+          "severity": "hard",
+          "result": "PASS",
+          "measured": {
+            "net": 3.025
+          },
+          "threshold": {
+            "limit": 3.1,
+            "price_type": "debit",
+            "basis": "mid"
+          },
+          "reason": "net debit 3.025 vs limit 3.1"
+        },
+        {
+          "rule_id": "R06_MIN_DTE",
+          "severity": "hard",
+          "result": "PASS",
+          "measured": {
+            "dte": 17
+          },
+          "threshold": {
+            "min_dte": 7
+          },
+          "reason": "17 DTE (NY date 2026-10-13)"
+        },
+        {
+          "rule_id": "R07_EARNINGS_IN_WINDOW",
+          "severity": "hard",
+          "result": "PASS",
+          "measured": {
+            "events_in_window": [],
+            "window": [
+              "2026-10-13T09:45:00-04:00",
+              "2026-10-27T16:00:00-04:00"
+            ]
+          },
+          "threshold": {
+            "intended_event_ids": []
+          },
+          "reason": "no earnings in hold window"
+        },
+        {
+          "rule_id": "R08_MACRO_EVENTS",
+          "severity": "soft",
+          "result": "UNKNOWN",
+          "measured": {
+            "events_in_window": []
+          },
+          "threshold": {
+            "macro_event_kinds": [
+              "CPI",
+              "PPI",
+              "FOMC",
+              "NFP"
+            ]
+          },
+          "reason": "CPI coverage missing; PPI coverage missing; FOMC coverage missing; NFP coverage missing; ev-cpi-2026-10-14 date unusable; ev-ppi-2026-10-15 date unusable"
+        },
+        {
+          "rule_id": "R09_EARLY_ASSIGNMENT",
+          "severity": "hard",
+          "result": "UNKNOWN",
+          "measured": {
+            "leg-2": {
+              "exdiv_in_window": []
+            }
+          },
+          "threshold": {
+            "min_put_extrinsic": 0.05
+          },
+          "reason": "leg-2 UNKNOWN (ex_dividend coverage missing; ev-jpm-exdiv-2026-10-06 date/dividend unusable)",
+          "per_leg": [
+            {
+              "leg_id": "leg-2",
+              "result": "UNKNOWN",
+              "measured": {
+                "exdiv_in_window": []
+              },
+              "reason": "ex_dividend coverage missing; ev-jpm-exdiv-2026-10-06 date/dividend unusable"
+            }
+          ]
+        },
+        {
+          "rule_id": "R10_IV_VS_HISTORY",
+          "severity": "soft",
+          "result": "UNKNOWN",
+          "measured": null,
+          "threshold": {
+            "iv_rank_high": 0.8,
+            "iv_rank_low": 0.2,
+            "min_obs": 20
+          },
+          "reason": "IV30 current or history unavailable"
+        },
+        {
+          "rule_id": "R11_CONCENTRATION",
+          "severity": "soft",
+          "result": "PASS",
+          "measured": {
+            "same_underlying_usd": 310.0,
+            "total_usd": 310.0,
+            "count": 1
+          },
+          "threshold": {
+            "max_underlying_risk_usd": 1000,
+            "max_sector_risk_usd": null,
+            "max_total_open_risk_usd": 2000,
+            "max_open_positions": 5
+          },
+          "reason": "same-underlying $310.0, total $310.0, positions 1 (placeholder limits pending Eugene)",
+          "placeholder": true
+        },
+        {
+          "rule_id": "R12_DEFINED_RISK_STRUCTURE",
+          "severity": "hard",
+          "result": "PASS",
+          "measured": {
+            "strategy": "bull_call_debit_spread",
+            "naked_short": [],
+            "defined_risk": true
+          },
+          "threshold": {
+            "allowed_structures": [
+              "long_call",
+              "long_put",
+              "bull_call_debit_spread",
+              "bear_put_debit_spread",
+              "bull_put_credit_spread",
+              "bear_call_credit_spread",
+              "iron_condor"
+            ]
+          },
+          "reason": "bull_call_debit_spread: defined-risk, legs match"
+        },
+        {
+          "rule_id": "R13_HOLD_PERIOD",
+          "severity": "hard",
+          "result": "PASS",
+          "measured": {
+            "hold_days": 14,
+            "dte": 17
+          },
+          "threshold": {
+            "hold_min_days": 7,
+            "hold_max_days": null
+          },
+          "reason": "time stop in 14 d, DTE 17 (NY date 2026-10-13)"
+        }
+      ],
+      "overall": {
+        "verdict": "VETO",
+        "blocking_rule_ids": [
+          "R01_QUOTE_FRESHNESS",
+          "R02_BID_ASK_WIDTH",
+          "R03_OPEN_INTEREST",
+          "R09_EARLY_ASSIGNMENT"
+        ],
+        "flag_rule_ids": [
+          "R08_MACRO_EVENTS",
+          "R10_IV_VS_HISTORY"
+        ],
+        "approval_required": true,
+        "summary": "VETO: blocking R01_QUOTE_FRESHNESS, R02_BID_ASK_WIDTH, R03_OPEN_INTEREST, R09_EARLY_ASSIGNMENT; flags R08_MACRO_EVENTS, R10_IV_VS_HISTORY. Approval required regardless."
+      }
+    },
+    {
+      "review_id": "rv-postopen",
+      "ticket_id": "tkt-jpm-bcs-340-350",
+      "run_id": "run-postopen",
+      "evaluated_at": {
+        "ny": "2026-10-13T12:16:00-04:00",
+        "berlin": "2026-10-13T18:16:00+02:00"
+      },
+      "ruleset_version": "1.1.0",
+      "market_open_at_evaluation": true,
+      "results": [
+        {
+          "rule_id": "R01_QUOTE_FRESHNESS",
+          "severity": "hard",
+          "result": "PASS",
+          "measured": {
+            "market_open": true,
+            "max_age_min": 0.0
+          },
+          "threshold": {
+            "quote_max_age_seconds": 900
+          },
+          "reason": "all quotes <= 15 min old, market open"
+        },
+        {
+          "rule_id": "R02_BID_ASK_WIDTH",
+          "severity": "hard",
+          "result": "VETO",
+          "measured": {
+            "leg-1": 0.1449,
+            "leg-2": 0.247
+          },
+          "threshold": {
+            "max_spread_pct_of_mid": 0.1
+          },
+          "reason": "leg-1 0.1449 VETO, leg-2 0.247 VETO",
+          "per_leg": [
+            {
+              "leg_id": "leg-1",
+              "result": "VETO",
+              "measured": 0.1449
+            },
+            {
+              "leg_id": "leg-2",
+              "result": "VETO",
+              "measured": 0.247
+            }
+          ]
+        },
+        {
+          "rule_id": "R03_OPEN_INTEREST",
+          "severity": "hard",
+          "result": "VETO",
+          "measured": {
+            "leg-1": 472,
+            "leg-2": 747
+          },
+          "threshold": {
+            "min_open_interest": 500
+          },
+          "reason": "leg-1 OI 472 VETO, leg-2 OI 747 PASS",
+          "per_leg": [
+            {
+              "leg_id": "leg-1",
+              "result": "VETO",
+              "measured": 472
+            },
+            {
+              "leg_id": "leg-2",
+              "result": "PASS",
+              "measured": 747
+            }
+          ]
+        },
+        {
+          "rule_id": "R04_MAX_LOSS",
+          "severity": "hard",
+          "result": "PASS",
+          "measured": {
+            "unlimited": false,
+            "max_loss_usd": 310.0
+          },
+          "threshold": {
+            "per_trade_max_loss_usd": 500
+          },
+          "reason": "max loss $310.00 at limit vs $500 (placeholder pending Eugene)",
+          "placeholder": true
+        },
+        {
+          "rule_id": "R05_NET_PRICE_VS_LIMIT",
+          "severity": "hard",
+          "result": "VETO",
+          "measured": {
+            "net": 3.11
+          },
+          "threshold": {
+            "limit": 3.1,
+            "price_type": "debit",
+            "basis": "mid"
+          },
+          "reason": "net debit 3.110 vs limit 3.1"
+        },
+        {
+          "rule_id": "R06_MIN_DTE",
+          "severity": "hard",
+          "result": "PASS",
+          "measured": {
+            "dte": 17
+          },
+          "threshold": {
+            "min_dte": 7
+          },
+          "reason": "17 DTE (NY date 2026-10-13)"
+        },
+        {
+          "rule_id": "R07_EARNINGS_IN_WINDOW",
+          "severity": "hard",
+          "result": "PASS",
+          "measured": {
+            "events_in_window": [],
+            "window": [
+              "2026-10-13T12:16:00-04:00",
+              "2026-10-27T16:00:00-04:00"
+            ]
+          },
+          "threshold": {
+            "intended_event_ids": []
+          },
+          "reason": "no earnings in hold window"
+        },
+        {
+          "rule_id": "R08_MACRO_EVENTS",
+          "severity": "soft",
+          "result": "UNKNOWN",
+          "measured": {
+            "events_in_window": [
+              "ev-cpi-2026-10-14",
+              "ev-ppi-2026-10-15"
+            ]
+          },
+          "threshold": {
+            "macro_event_kinds": [
+              "CPI",
+              "PPI",
+              "FOMC",
+              "NFP"
+            ]
+          },
+          "reason": "PPI coverage missing; FOMC coverage missing; NFP coverage missing; CPI ev-cpi-2026-10-14 in window; PPI ev-ppi-2026-10-15 in window"
+        },
+        {
+          "rule_id": "R09_EARLY_ASSIGNMENT",
+          "severity": "hard",
+          "result": "PASS",
+          "measured": {
+            "leg-2": {
+              "exdiv_in_window": []
+            }
+          },
+          "threshold": {
+            "min_put_extrinsic": 0.05
+          },
+          "reason": "leg-2 PASS (no ex-div in window)",
+          "per_leg": [
+            {
+              "leg_id": "leg-2",
+              "result": "PASS",
+              "measured": {
+                "exdiv_in_window": []
+              },
+              "reason": "no ex-div in window"
+            }
+          ]
+        },
+        {
+          "rule_id": "R10_IV_VS_HISTORY",
+          "severity": "soft",
+          "result": "UNKNOWN",
+          "measured": null,
+          "threshold": {
+            "iv_rank_high": 0.8,
+            "iv_rank_low": 0.2,
+            "min_obs": 20
+          },
+          "reason": "IV30 current or history unavailable"
+        },
+        {
+          "rule_id": "R11_CONCENTRATION",
+          "severity": "soft",
+          "result": "PASS",
+          "measured": {
+            "same_underlying_usd": 310.0,
+            "total_usd": 310.0,
+            "count": 1
+          },
+          "threshold": {
+            "max_underlying_risk_usd": 1000,
+            "max_sector_risk_usd": null,
+            "max_total_open_risk_usd": 2000,
+            "max_open_positions": 5
+          },
+          "reason": "same-underlying $310.0, total $310.0, positions 1 (placeholder limits pending Eugene)",
+          "placeholder": true
+        },
+        {
+          "rule_id": "R12_DEFINED_RISK_STRUCTURE",
+          "severity": "hard",
+          "result": "PASS",
+          "measured": {
+            "strategy": "bull_call_debit_spread",
+            "naked_short": [],
+            "defined_risk": true
+          },
+          "threshold": {
+            "allowed_structures": [
+              "long_call",
+              "long_put",
+              "bull_call_debit_spread",
+              "bear_put_debit_spread",
+              "bull_put_credit_spread",
+              "bear_call_credit_spread",
+              "iron_condor"
+            ]
+          },
+          "reason": "bull_call_debit_spread: defined-risk, legs match"
+        },
+        {
+          "rule_id": "R13_HOLD_PERIOD",
+          "severity": "hard",
+          "result": "PASS",
+          "measured": {
+            "hold_days": 14,
+            "dte": 17
+          },
+          "threshold": {
+            "hold_min_days": 7,
+            "hold_max_days": null
+          },
+          "reason": "time stop in 14 d, DTE 17 (NY date 2026-10-13)"
+        }
+      ],
+      "overall": {
+        "verdict": "VETO",
+        "blocking_rule_ids": [
+          "R02_BID_ASK_WIDTH",
+          "R03_OPEN_INTEREST",
+          "R05_NET_PRICE_VS_LIMIT"
+        ],
+        "flag_rule_ids": [
+          "R08_MACRO_EVENTS",
+          "R10_IV_VS_HISTORY"
+        ],
+        "approval_required": true,
+        "summary": "VETO: blocking R02_BID_ASK_WIDTH, R03_OPEN_INTEREST, R05_NET_PRICE_VS_LIMIT; flags R08_MACRO_EVENTS, R10_IV_VS_HISTORY. Approval required regardless."
+      }
+    }
+  ],
+  "approvals": [],
+  "paper_positions": [],
+  "watcher_rules": [
+    {
+      "watch_id": "w-value",
+      "target": {
+        "ticket_id": "tkt-jpm-bcs-340-350",
+        "position_id": null
+      },
+      "kind": "option_value",
+      "conditions": [
+        {
+          "metric": "position_value",
+          "op": "lte",
+          "value": 1.52,
+          "raw_value": 1.5125,
+          "tick_size": 0.01,
+          "rounding": "up"
+        },
+        {
+          "metric": "position_value",
+          "op": "gte",
+          "value": 6.05,
+          "raw_value": 6.05,
+          "tick_size": 0.05,
+          "rounding": "down"
+        }
+      ],
+      "severity": "action",
+      "action": "suggest_close",
+      "active": false,
+      "schedule": null,
+      "note": "stop 1.52 / target 6.05"
+    },
+    {
+      "watch_id": "w-under",
+      "target": {
+        "ticket_id": "tkt-jpm-bcs-340-350",
+        "position_id": null
+      },
+      "kind": "underlying_price",
+      "conditions": [
+        {
+          "metric": "underlying_last",
+          "op": "lt",
+          "value": 330
+        },
+        {
+          "metric": "underlying_last",
+          "op": "gt",
+          "value": 350
+        }
+      ],
+      "severity": "warn",
+      "action": "alert",
+      "active": false,
+      "schedule": null,
+      "note": "JPM <330 or >350"
+    },
+    {
+      "watch_id": "w-be",
+      "target": {
+        "ticket_id": "tkt-jpm-bcs-340-350",
+        "position_id": null
+      },
+      "kind": "underlying_price",
+      "conditions": [
+        {
+          "metric": "underlying_last",
+          "op": "cross_above",
+          "value": 343.1
+        }
+      ],
+      "severity": "info",
+      "action": "alert",
+      "active": false,
+      "schedule": null,
+      "note": "breakeven at limit"
+    },
+    {
+      "watch_id": "w-iv",
+      "target": {
+        "ticket_id": "tkt-jpm-bcs-340-350",
+        "position_id": null
+      },
+      "kind": "iv_change",
+      "conditions": [
+        {
+          "metric": "iv_change_pct",
+          "op": "gte",
+          "value": 20,
+          "unit": "pct"
+        },
+        {
+          "metric": "iv_change_pct",
+          "op": "lte",
+          "value": -20,
+          "unit": "pct"
+        }
+      ],
+      "severity": "warn",
+      "action": "alert",
+      "active": false,
+      "schedule": null,
+      "note": "relative to entry IV (entry IV MISSING)"
+    },
+    {
+      "watch_id": "w-dte",
+      "target": {
+        "ticket_id": "tkt-jpm-bcs-340-350",
+        "position_id": null
+      },
+      "kind": "dte",
+      "conditions": [
+        {
+          "metric": "dte",
+          "op": "lte",
+          "value": 5
+        }
+      ],
+      "severity": "warn",
+      "action": "alert",
+      "active": false,
+      "schedule": null,
+      "note": "5 DTE = 2026-10-25"
+    },
+    {
+      "watch_id": "w-time",
+      "target": {
+        "ticket_id": "tkt-jpm-bcs-340-350",
+        "position_id": null
+      },
+      "kind": "time",
+      "conditions": [
+        {
+          "metric": "date_ny",
+          "op": "gte",
+          "value": "2026-10-27"
+        }
+      ],
+      "severity": "action",
+      "action": "force_close_paper",
+      "active": false,
+      "schedule": null,
+      "note": "time stop"
+    },
+    {
+      "watch_id": "w-assign",
+      "target": {
+        "ticket_id": "tkt-jpm-bcs-340-350",
+        "position_id": null
+      },
+      "kind": "assignment",
+      "conditions": [
+        {
+          "metric": "short_leg_itm",
+          "op": "eq",
+          "value": true
+        },
+        {
+          "metric": "ex_dividend_in_window",
+          "op": "eq",
+          "value": true
+        }
+      ],
+      "severity": "action",
+      "action": "alert",
+      "active": false,
+      "schedule": null,
+      "note": "short 350C ITM with <5 DTE or ex-div in window"
+    }
+  ],
+  "alerts": [],
+  "idea_log": [
+    {
+      "idea_id": "idea-jpm-bcs",
+      "description": "JPM Oct30 340/350 call spread",
+      "ticket_id": "tkt-jpm-bcs-340-350",
+      "current_status": "vetoed",
+      "history": [
+        {
+          "status": "proposed",
+          "at": {
+            "ny": "2026-10-13T07:52:00-04:00",
+            "berlin": "2026-10-13T13:52:00+02:00"
+          },
+          "actor": "decision_maker",
+          "reason": "Premarket reversal after earnings"
+        },
+        {
+          "status": "vetoed",
+          "at": {
+            "ny": "2026-10-13T07:52:00-04:00",
+            "berlin": "2026-10-13T13:52:00+02:00"
+          },
+          "actor": "risk_officer",
+          "reason": "Market closed / stale quotes, 350C spread 20.8%, 340C OI 472, ex-div unknown",
+          "ref_ids": [
+            "rv-premarket"
+          ]
+        },
+        {
+          "status": "vetoed",
+          "at": {
+            "ny": "2026-10-13T12:16:00-04:00",
+            "berlin": "2026-10-13T18:16:00+02:00"
+          },
+          "actor": "risk_officer",
+          "reason": "340C OI 472; both legs > 10% spread; mid 3.11 > 3.10",
+          "ref_ids": [
+            "rv-postopen"
+          ]
+        }
+      ]
+    },
+    {
+      "idea_id": "idea-wdc-bps",
+      "description": "WDC Oct30 360/350 put spread",
+      "ticket_id": null,
+      "current_status": "rejected",
+      "history": [
+        {
+          "status": "proposed",
+          "at": {
+            "ny": "2026-10-13T07:52:00-04:00",
+            "berlin": "2026-10-13T13:52:00+02:00"
+          },
+          "actor": "decision_maker",
+          "reason": "Top loser on memory selloff"
+        },
+        {
+          "status": "rejected",
+          "at": {
+            "ny": "2026-10-13T07:52:00-04:00",
+            "berlin": "2026-10-13T13:52:00+02:00"
+          },
+          "actor": "decision_maker",
+          "reason": "Earnings Oct 22 inside hold; stale chain vs -6% gap; 350P spread 12%"
+        }
+      ]
+    },
+    {
+      "idea_id": "idea-jpm-bps",
+      "description": "JPM Oct30 330/325 put spread",
+      "ticket_id": null,
+      "current_status": "rejected",
+      "history": [
+        {
+          "status": "proposed",
+          "at": {
+            "ny": "2026-10-13T07:52:00-04:00",
+            "berlin": "2026-10-13T13:52:00+02:00"
+          },
+          "actor": "decision_maker",
+          "reason": "Bearish fade of the miss"
+        },
+        {
+          "status": "rejected",
+          "at": {
+            "ny": "2026-10-13T07:52:00-04:00",
+            "berlin": "2026-10-13T13:52:00+02:00"
+          },
+          "actor": "decision_maker",
+          "reason": "325P OI 321; directional conflict"
+        }
+      ]
+    },
+    {
+      "idea_id": "idea-no-trade",
+      "description": "No trade",
+      "ticket_id": null,
+      "current_status": "approved_pending",
+      "history": [
+        {
+          "status": "proposed",
+          "at": {
+            "ny": "2026-10-13T07:52:00-04:00",
+            "berlin": "2026-10-13T13:52:00+02:00"
+          },
+          "actor": "decision_maker",
+          "reason": "Stale data, conflicting prints"
+        },
+        {
+          "status": "approved_pending",
+          "at": {
+            "ny": "2026-10-13T07:52:00-04:00",
+            "berlin": "2026-10-13T13:52:00+02:00"
+          },
+          "actor": "decision_maker",
+          "reason": "Current recommendation; awaiting Eugene"
+        },
+        {
+          "status": "approved_pending",
+          "at": {
+            "ny": "2026-10-13T12:16:00-04:00",
+            "berlin": "2026-10-13T18:16:00+02:00"
+          },
+          "actor": "decision_maker",
+          "reason": "Re-confirmed after post-open requote: stand down"
+        }
+      ]
+    }
+  ],
+  "data_quality": {
+    "missing": [
+      "/premarket_scan/earnings_reports/1/reported",
+      "/premarket_scan/earnings_reports/1/eps_actual",
+      "/premarket_scan/earnings_reports/1/revenue_actual_usd_bn",
+      "/premarket_scan/earnings_reports/1/revenue_estimate_usd_bn",
+      "/premarket_scan/earnings_reports/1/premarket_change_pct",
+      "/premarket_scan/earnings_reports/2/reported",
+      "/premarket_scan/earnings_reports/2/eps_actual",
+      "/premarket_scan/earnings_reports/2/revenue_actual_usd_bn",
+      "/premarket_scan/earnings_reports/2/revenue_estimate_usd_bn",
+      "/premarket_scan/earnings_reports/2/premarket_change_pct",
+      "/premarket_scan/earnings_reports/3/reported",
+      "/premarket_scan/earnings_reports/3/eps_actual",
+      "/premarket_scan/earnings_reports/3/revenue_actual_usd_bn",
+      "/premarket_scan/earnings_reports/3/revenue_estimate_usd_bn",
+      "/premarket_scan/earnings_reports/3/premarket_change_pct",
+      "/premarket_scan/earnings_reports/4/revenue_estimate_usd_bn",
+      "/premarket_scan/earnings_reports/5/revenue_estimate_usd_bn",
+      "/premarket_scan/earnings_reports/6/revenue_estimate_usd_bn",
+      "/global_snapshot/instruments/5/level",
+      "/global_snapshot/instruments/8/level",
+      "/global_snapshot/instruments/9/level",
+      "/global_snapshot/instruments/10/level",
+      "/event_calendar/coverage/3/checked_through",
+      "/event_calendar/coverage/5/checked_through",
+      "/event_calendar/coverage/6/checked_through",
+      "/event_calendar/coverage/7/checked_through",
+      "/candidates/0/snapshots/0/volume/avg_volume",
+      "/candidates/0/snapshots/0/volume/volume_vs_avg",
+      "/candidates/0/snapshots/0/iv/iv30_current",
+      "/candidates/0/snapshots/0/iv/iv30_history",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/0/iv",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/0/greeks/delta",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/0/greeks/gamma",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/0/greeks/theta",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/0/greeks/vega",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/1/iv",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/1/greeks/delta",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/1/greeks/gamma",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/1/greeks/theta",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/1/greeks/vega",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/2/iv",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/2/greeks/delta",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/2/greeks/gamma",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/2/greeks/theta",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/2/greeks/vega",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/3/iv",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/3/greeks/delta",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/3/greeks/gamma",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/3/greeks/theta",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/3/greeks/vega",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/4/iv",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/4/greeks/delta",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/4/greeks/gamma",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/4/greeks/theta",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/4/greeks/vega",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/5/iv",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/5/greeks/delta",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/5/greeks/gamma",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/5/greeks/theta",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/5/greeks/vega",
+      "/candidates/0/snapshots/1/quote/bid",
+      "/candidates/0/snapshots/1/quote/ask",
+      "/candidates/0/snapshots/1/volume/volume",
+      "/candidates/0/snapshots/1/volume/avg_volume",
+      "/candidates/0/snapshots/1/volume/volume_vs_avg",
+      "/candidates/0/snapshots/1/iv/iv30_current",
+      "/candidates/0/snapshots/1/iv/iv30_history",
+      "/candidates/0/snapshots/2/quote/bid",
+      "/candidates/0/snapshots/2/quote/ask",
+      "/candidates/0/snapshots/2/volume/volume",
+      "/candidates/0/snapshots/2/volume/avg_volume",
+      "/candidates/0/snapshots/2/volume/volume_vs_avg",
+      "/candidates/0/snapshots/2/iv/iv30_current",
+      "/candidates/0/snapshots/2/iv/iv30_history",
+      "/candidates/0/snapshots/2/option_chain_slices/0/contracts/0/last",
+      "/candidates/0/snapshots/2/option_chain_slices/0/contracts/0/iv",
+      "/candidates/0/snapshots/2/option_chain_slices/0/contracts/0/greeks/delta",
+      "/candidates/0/snapshots/2/option_chain_slices/0/contracts/0/greeks/gamma",
+      "/candidates/0/snapshots/2/option_chain_slices/0/contracts/0/greeks/theta",
+      "/candidates/0/snapshots/2/option_chain_slices/0/contracts/0/greeks/vega",
+      "/candidates/0/snapshots/2/option_chain_slices/0/contracts/1/last",
+      "/candidates/0/snapshots/2/option_chain_slices/0/contracts/1/iv",
+      "/candidates/0/snapshots/2/option_chain_slices/0/contracts/1/greeks/delta",
+      "/candidates/0/snapshots/2/option_chain_slices/0/contracts/1/greeks/gamma",
+      "/candidates/0/snapshots/2/option_chain_slices/0/contracts/1/greeks/theta",
+      "/candidates/0/snapshots/2/option_chain_slices/0/contracts/1/greeks/vega",
+      "/candidates/1/snapshots/0/volume/avg_volume",
+      "/candidates/1/snapshots/0/volume/volume_vs_avg",
+      "/candidates/1/snapshots/0/iv/iv30_current",
+      "/candidates/1/snapshots/0/iv/iv30_history",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/0/iv",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/0/greeks/delta",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/0/greeks/gamma",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/0/greeks/theta",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/0/greeks/vega",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/1/iv",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/1/greeks/delta",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/1/greeks/gamma",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/1/greeks/theta",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/1/greeks/vega",
+      "/candidates/1/snapshots/1/quote/bid",
+      "/candidates/1/snapshots/1/quote/ask",
+      "/candidates/1/snapshots/1/volume/volume",
+      "/candidates/1/snapshots/1/volume/avg_volume",
+      "/candidates/1/snapshots/1/volume/volume_vs_avg",
+      "/candidates/1/snapshots/1/iv/iv30_current",
+      "/candidates/1/snapshots/1/iv/iv30_history",
+      "/candidates/1/snapshots/2/quote/bid",
+      "/candidates/1/snapshots/2/quote/ask",
+      "/candidates/1/snapshots/2/volume/volume",
+      "/candidates/1/snapshots/2/volume/avg_volume",
+      "/candidates/1/snapshots/2/volume/volume_vs_avg",
+      "/candidates/1/snapshots/2/iv/iv30_current",
+      "/candidates/1/snapshots/2/iv/iv30_history",
+      "/premarket_scans/0/earnings_reports/1/reported",
+      "/premarket_scans/0/earnings_reports/1/eps_actual",
+      "/premarket_scans/0/earnings_reports/1/revenue_actual_usd_bn",
+      "/premarket_scans/0/earnings_reports/1/revenue_estimate_usd_bn",
+      "/premarket_scans/0/earnings_reports/1/premarket_change_pct",
+      "/premarket_scans/0/earnings_reports/2/reported",
+      "/premarket_scans/0/earnings_reports/2/eps_actual",
+      "/premarket_scans/0/earnings_reports/2/revenue_actual_usd_bn",
+      "/premarket_scans/0/earnings_reports/2/revenue_estimate_usd_bn",
+      "/premarket_scans/0/earnings_reports/2/premarket_change_pct",
+      "/premarket_scans/0/earnings_reports/3/reported",
+      "/premarket_scans/0/earnings_reports/3/eps_actual",
+      "/premarket_scans/0/earnings_reports/3/revenue_actual_usd_bn",
+      "/premarket_scans/0/earnings_reports/3/revenue_estimate_usd_bn",
+      "/premarket_scans/0/earnings_reports/3/premarket_change_pct",
+      "/premarket_scans/0/earnings_reports/4/revenue_estimate_usd_bn",
+      "/premarket_scans/0/earnings_reports/5/revenue_estimate_usd_bn",
+      "/premarket_scans/0/earnings_reports/6/revenue_estimate_usd_bn",
+      "/global_snapshots/0/instruments/5/level",
+      "/global_snapshots/0/instruments/8/level",
+      "/global_snapshots/0/instruments/9/level",
+      "/global_snapshots/0/instruments/10/level"
+    ],
+    "stale": [
+      "/premarket_scan/screens/2/rows/0/last",
+      "/premarket_scan/screens/2/rows/0/change_pct",
+      "/premarket_scan/screens/2/rows/1/last",
+      "/premarket_scan/screens/2/rows/1/change_pct",
+      "/premarket_scan/screens/2/rows/2/last",
+      "/premarket_scan/screens/2/rows/2/change_pct",
+      "/premarket_scan/screens/2/rows/3/last",
+      "/premarket_scan/screens/2/rows/3/change_pct",
+      "/premarket_scan/screens/2/rows/4/last",
+      "/premarket_scan/screens/2/rows/4/change_pct",
+      "/premarket_scan/screens/2/rows/5/last",
+      "/premarket_scan/screens/2/rows/5/change_pct",
+      "/premarket_scan/screens/2/rows/6/last",
+      "/premarket_scan/screens/2/rows/6/change_pct",
+      "/premarket_scan/screens/3/rows/0/last",
+      "/premarket_scan/screens/3/rows/1/last",
+      "/premarket_scan/screens/3/rows/2/last",
+      "/premarket_scan/screens/3/rows/3/last",
+      "/premarket_scan/screens/3/rows/4/last",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/0/bid",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/0/ask",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/0/mid",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/0/last",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/0/volume",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/1/bid",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/1/ask",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/1/mid",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/1/last",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/1/volume",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/2/bid",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/2/ask",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/2/mid",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/2/last",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/2/volume",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/3/bid",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/3/ask",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/3/mid",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/3/last",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/3/volume",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/4/bid",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/4/ask",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/4/mid",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/4/last",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/4/volume",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/5/bid",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/5/ask",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/5/mid",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/5/last",
+      "/candidates/0/snapshots/0/option_chain_slices/0/contracts/5/volume",
+      "/candidates/1/catalysts/2",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/0/bid",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/0/ask",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/0/mid",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/0/last",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/0/volume",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/1/bid",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/1/ask",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/1/mid",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/1/last",
+      "/candidates/1/snapshots/0/option_chain_slices/0/contracts/1/volume",
+      "/premarket_scans/0/screens/2/rows/0/last",
+      "/premarket_scans/0/screens/2/rows/0/change_pct",
+      "/premarket_scans/0/screens/2/rows/1/last",
+      "/premarket_scans/0/screens/2/rows/1/change_pct",
+      "/premarket_scans/0/screens/2/rows/2/last",
+      "/premarket_scans/0/screens/2/rows/2/change_pct",
+      "/premarket_scans/0/screens/2/rows/3/last",
+      "/premarket_scans/0/screens/2/rows/3/change_pct",
+      "/premarket_scans/0/screens/2/rows/4/last",
+      "/premarket_scans/0/screens/2/rows/4/change_pct",
+      "/premarket_scans/0/screens/2/rows/5/last",
+      "/premarket_scans/0/screens/2/rows/5/change_pct",
+      "/premarket_scans/0/screens/2/rows/6/last",
+      "/premarket_scans/0/screens/2/rows/6/change_pct",
+      "/premarket_scans/0/screens/3/rows/0/last",
+      "/premarket_scans/0/screens/3/rows/1/last",
+      "/premarket_scans/0/screens/3/rows/2/last",
+      "/premarket_scans/0/screens/3/rows/3/last",
+      "/premarket_scans/0/screens/3/rows/4/last"
+    ],
+    "conflicting": [
+      "/premarket_scan/earnings_reports/0/premarket_change_pct",
+      "/global_snapshot/instruments/2/level",
+      "/global_snapshot/instruments/2/change_pct",
+      "/global_snapshot/instruments/3/change_pct",
+      "/global_snapshot/instruments/4/change_pct",
+      "/premarket_scans/0/earnings_reports/0/premarket_change_pct",
+      "/global_snapshots/0/instruments/2/level",
+      "/global_snapshots/0/instruments/2/change_pct",
+      "/global_snapshots/0/instruments/3/change_pct",
+      "/global_snapshots/0/instruments/4/change_pct"
+    ],
+    "notes": [
+      "Sample missing_data: Finviz unusual volume & top gainers empty; avg volume JPM/WDC; IV for all strikes; live option quotes premarket; GS/C/WFC actuals (found at preopen); JPM ex-div (found at preopen); CPI date (found at preopen); conflicting Asia indices and JPM premarket prints.",
+      "No paper position: every review VETO. No approvals exist."
+    ]
+  },
+  "premarket_scans": [
+    {
+      "run_id": "run-premarket",
+      "screens": [
+        {
+          "screen_id": "scr-unusualvolume",
+          "name": "ta_unusualvolume",
+          "source_id": "src-finviz-unusualvolume",
+          "filters": "sh_avgvol_o1000,sh_opt_option,sh_price_o10",
+          "fetched_at": "2026-10-13T07:52:00-04:00",
+          "status": "missing",
+          "rows": [],
+          "parse_notes": "Ticker first letter was doubled in raw parse (e.g. WWDC=WDC); corrected. Page not timestamped; values look prior-session/premarket -> rows marked stale with as_of = fetch time.",
+          "status_reason": "page returned no result rows"
+        },
+        {
+          "screen_id": "scr-topgainers",
+          "name": "ta_topgainers",
+          "source_id": "src-finviz-topgainers",
+          "filters": "sh_avgvol_o1000,sh_opt_option,sh_price_o10",
+          "fetched_at": "2026-10-13T07:52:00-04:00",
+          "status": "missing",
+          "rows": [],
+          "parse_notes": "Ticker first letter was doubled in raw parse (e.g. WWDC=WDC); corrected. Page not timestamped; values look prior-session/premarket -> rows marked stale with as_of = fetch time.",
+          "status_reason": "page returned no result rows"
+        },
+        {
+          "screen_id": "scr-toplosers",
+          "name": "ta_toplosers",
+          "source_id": "src-finviz-toplosers",
+          "filters": "sh_avgvol_o1000,sh_opt_option,sh_price_o10",
+          "fetched_at": "2026-10-13T07:52:00-04:00",
+          "status": "stale",
+          "rows": [
+            {
+              "rank": 1,
+              "ticker": "SNDX",
+              "last": {
+                "value": 14.81,
+                "source_id": "src-finviz-toplosers",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              },
+              "change_pct": {
+                "value": -10.51,
+                "source_id": "src-finviz-toplosers",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              }
+            },
+            {
+              "rank": 2,
+              "ticker": "S",
+              "last": {
+                "value": 23.56,
+                "source_id": "src-finviz-toplosers",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              },
+              "change_pct": {
+                "value": -8.18,
+                "source_id": "src-finviz-toplosers",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              }
+            },
+            {
+              "rank": 3,
+              "ticker": "FUN",
+              "last": {
+                "value": 11.0,
+                "source_id": "src-finviz-toplosers",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              },
+              "change_pct": {
+                "value": -7.72,
+                "source_id": "src-finviz-toplosers",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              }
+            },
+            {
+              "rank": 4,
+              "ticker": "WDC",
+              "last": {
+                "value": 363.52,
+                "source_id": "src-finviz-toplosers",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              },
+              "change_pct": {
+                "value": -6.05,
+                "source_id": "src-finviz-toplosers",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              }
+            },
+            {
+              "rank": 5,
+              "ticker": "BNTX",
+              "last": {
+                "value": 90.15,
+                "source_id": "src-finviz-toplosers",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              },
+              "change_pct": {
+                "value": -5.94,
+                "source_id": "src-finviz-toplosers",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              }
+            },
+            {
+              "rank": 6,
+              "ticker": "SKHY",
+              "last": {
+                "value": 153.26,
+                "source_id": "src-finviz-toplosers",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              },
+              "change_pct": {
+                "value": -5.53,
+                "source_id": "src-finviz-toplosers",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              }
+            },
+            {
+              "rank": 7,
+              "ticker": "STX",
+              "last": {
+                "value": 711.05,
+                "source_id": "src-finviz-toplosers",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              },
+              "change_pct": {
+                "value": -5.6,
+                "source_id": "src-finviz-toplosers",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              }
+            }
+          ],
+          "parse_notes": "Ticker first letter was doubled in raw parse (e.g. WWDC=WDC); corrected. Page not timestamped; values look prior-session/premarket -> rows marked stale with as_of = fetch time."
+        },
+        {
+          "screen_id": "scr-newhigh",
+          "name": "ta_newhigh",
+          "source_id": "src-finviz-newhigh",
+          "filters": "sh_avgvol_o1000,sh_opt_option,sh_price_o10",
+          "fetched_at": "2026-10-13T07:52:00-04:00",
+          "status": "stale",
+          "rows": [
+            {
+              "rank": 1,
+              "ticker": "ZIM",
+              "last": {
+                "value": 31.03,
+                "source_id": "src-finviz-newhigh",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              }
+            },
+            {
+              "rank": 2,
+              "ticker": "V",
+              "last": {
+                "value": 396.09,
+                "source_id": "src-finviz-newhigh",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              }
+            },
+            {
+              "rank": 3,
+              "ticker": "FRO",
+              "last": {
+                "value": 58.93,
+                "source_id": "src-finviz-newhigh",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              }
+            },
+            {
+              "rank": 4,
+              "ticker": "DHT",
+              "last": {
+                "value": 25.95,
+                "source_id": "src-finviz-newhigh",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              }
+            },
+            {
+              "rank": 5,
+              "ticker": "OSCR",
+              "last": {
+                "value": 34.46,
+                "source_id": "src-finviz-newhigh",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "status": "stale"
+              }
+            }
+          ],
+          "parse_notes": "Ticker first letter was doubled in raw parse (e.g. WWDC=WDC); corrected. Page not timestamped; values look prior-session/premarket -> rows marked stale with as_of = fetch time."
+        },
+        {
+          "screen_id": "scr-newlow",
+          "name": "ta_newlow",
+          "source_id": "src-finviz-newlow",
+          "filters": "sh_avgvol_o1000,sh_opt_option,sh_price_o10",
+          "fetched_at": "2026-10-13T07:52:00-04:00",
+          "status": "stale",
+          "rows": [
+            {
+              "rank": 1,
+              "ticker": "NAMS"
+            },
+            {
+              "rank": 2,
+              "ticker": "FUN"
+            },
+            {
+              "rank": 3,
+              "ticker": "OKLO"
+            },
+            {
+              "rank": 4,
+              "ticker": "QNT"
+            },
+            {
+              "rank": 5,
+              "ticker": "ACAD"
+            },
+            {
+              "rank": 6,
+              "ticker": "CBRS"
+            },
+            {
+              "rank": 7,
+              "ticker": "XE"
+            },
+            {
+              "rank": 8,
+              "ticker": "BIDU"
+            },
+            {
+              "rank": 9,
+              "ticker": "NNE"
+            },
+            {
+              "rank": 10,
+              "ticker": "FRVO"
+            }
+          ],
+          "parse_notes": "Ticker first letter was doubled in raw parse (e.g. WWDC=WDC); corrected. Page not timestamped; values look prior-session/premarket -> rows marked stale with as_of = fetch time."
+        }
+      ],
+      "earnings_reports": [
+        {
+          "run_id": "run-premarket",
+          "ticker": "JPM",
+          "fiscal_period": "Q3 2026",
+          "reported": {
+            "value": true,
+            "source_id": "src-sec-jpm-q3",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "eps_actual": {
+            "value": 5.57,
+            "source_id": "src-sec-jpm-q3",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok",
+            "note": "diluted"
+          },
+          "eps_estimate": {
+            "value": 5.93,
+            "source_id": "src-newsquawk-jpm",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "revenue_actual_usd_bn": {
+            "value": 50.172,
+            "source_id": "src-sec-jpm-q3",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "revenue_estimate_usd_bn": {
+            "value": 51.23,
+            "source_id": "src-newsquawk-jpm",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "premarket_change_pct": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "conflicting",
+            "conflicts": [
+              {
+                "value": -3.7,
+                "source_id": "src-wsj-jpm",
+                "as_of": "2026-10-13T07:03:00-04:00",
+                "note": "~$322"
+              },
+              {
+                "value": 0.78,
+                "source_id": "src-nasdaq-jpm-info-0752",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "note": "$336.91 realtime"
+              },
+              {
+                "value": 2.0,
+                "source_id": "src-tipranks-jpm",
+                "as_of": "2026-10-13T07:52:00-04:00",
+                "note": "~+2%, time not stated"
+              }
+            ]
+          },
+          "extra_metrics": {
+            "nii_usd_bn": {
+              "value": 27.036,
+              "source_id": "src-sec-jpm-q3",
+              "as_of": "2026-10-13T07:52:00-04:00",
+              "status": "ok"
+            }
+          }
+        },
+        {
+          "run_id": "run-premarket",
+          "ticker": "GS",
+          "fiscal_period": "Q3 2026",
+          "reported": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing",
+            "note": "not found in searches"
+          },
+          "eps_actual": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "eps_estimate": {
+            "value": 12.86,
+            "source_id": "src-morningstar-estimates",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "revenue_actual_usd_bn": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "revenue_estimate_usd_bn": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "premarket_change_pct": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          }
+        },
+        {
+          "run_id": "run-premarket",
+          "ticker": "C",
+          "fiscal_period": "Q3 2026",
+          "reported": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing",
+            "note": "not found in searches"
+          },
+          "eps_actual": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "eps_estimate": {
+            "value": 2.65,
+            "source_id": "src-morningstar-estimates",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "revenue_actual_usd_bn": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "revenue_estimate_usd_bn": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "premarket_change_pct": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          }
+        },
+        {
+          "run_id": "run-premarket",
+          "ticker": "WFC",
+          "fiscal_period": "Q3 2026",
+          "reported": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing",
+            "note": "not found in searches"
+          },
+          "eps_actual": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "eps_estimate": {
+            "value": 1.85,
+            "source_id": "src-morningstar-estimates",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "revenue_actual_usd_bn": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "revenue_estimate_usd_bn": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "premarket_change_pct": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          }
+        },
+        {
+          "run_id": "run-preopen",
+          "ticker": "GS",
+          "fiscal_period": "Q3 2026",
+          "reported": {
+            "value": true,
+            "source_id": "src-stocktitan-gs",
+            "as_of": "2026-10-13T09:09:00-04:00",
+            "status": "ok"
+          },
+          "eps_actual": {
+            "value": 17.01,
+            "source_id": "src-stocktitan-gs",
+            "as_of": "2026-10-13T09:09:00-04:00",
+            "status": "ok"
+          },
+          "eps_estimate": {
+            "value": 12.86,
+            "source_id": "src-morningstar-estimates",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "revenue_actual_usd_bn": {
+            "value": 18.68,
+            "source_id": "src-stocktitan-gs",
+            "as_of": "2026-10-13T09:09:00-04:00",
+            "status": "ok"
+          },
+          "revenue_estimate_usd_bn": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "premarket_change_pct": {
+            "value": 4.26,
+            "source_id": "src-nasdaq-premarket-0909",
+            "as_of": "2026-10-13T09:08:00-04:00",
+            "status": "ok"
+          }
+        },
+        {
+          "run_id": "run-preopen",
+          "ticker": "C",
+          "fiscal_period": "Q3 2026",
+          "reported": {
+            "value": true,
+            "source_id": "src-citi-q3",
+            "as_of": "2026-10-13T09:09:00-04:00",
+            "status": "ok"
+          },
+          "eps_actual": {
+            "value": 2.85,
+            "source_id": "src-citi-q3",
+            "as_of": "2026-10-13T09:09:00-04:00",
+            "status": "ok"
+          },
+          "eps_estimate": {
+            "value": 2.65,
+            "source_id": "src-morningstar-estimates",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "revenue_actual_usd_bn": {
+            "value": 23.8,
+            "source_id": "src-citi-q3",
+            "as_of": "2026-10-13T09:09:00-04:00",
+            "status": "ok"
+          },
+          "revenue_estimate_usd_bn": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "premarket_change_pct": {
+            "value": 0.45,
+            "source_id": "src-nasdaq-premarket-0909",
+            "as_of": "2026-10-13T09:08:00-04:00",
+            "status": "ok"
+          }
+        },
+        {
+          "run_id": "run-preopen",
+          "ticker": "WFC",
+          "fiscal_period": "Q3 2026",
+          "reported": {
+            "value": true,
+            "source_id": "src-wfc-q3",
+            "as_of": "2026-10-13T09:09:00-04:00",
+            "status": "ok"
+          },
+          "eps_actual": {
+            "value": 1.87,
+            "source_id": "src-wfc-q3",
+            "as_of": "2026-10-13T09:09:00-04:00",
+            "status": "ok"
+          },
+          "eps_estimate": {
+            "value": 1.85,
+            "source_id": "src-morningstar-estimates",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "revenue_actual_usd_bn": {
+            "value": 21.87,
+            "source_id": "src-wfc-q3",
+            "as_of": "2026-10-13T09:09:00-04:00",
+            "status": "ok"
+          },
+          "revenue_estimate_usd_bn": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "premarket_change_pct": {
+            "value": -2.81,
+            "source_id": "src-nasdaq-premarket-0909",
+            "as_of": "2026-10-13T09:08:00-04:00",
+            "status": "ok"
+          }
+        },
+        {
+          "run_id": "run-preopen",
+          "ticker": "JPM",
+          "fiscal_period": "Q3 2026",
+          "reported": {
+            "value": true,
+            "source_id": "src-sec-jpm-q3",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "eps_actual": {
+            "value": 5.57,
+            "source_id": "src-sec-jpm-q3",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "eps_estimate": {
+            "value": 5.93,
+            "source_id": "src-newsquawk-jpm",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "revenue_actual_usd_bn": {
+            "value": 50.172,
+            "source_id": "src-sec-jpm-q3",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "revenue_estimate_usd_bn": {
+            "value": 51.23,
+            "source_id": "src-newsquawk-jpm",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "premarket_change_pct": {
+            "value": 1.17,
+            "source_id": "src-nasdaq-premarket-0909",
+            "as_of": "2026-10-13T09:08:00-04:00",
+            "status": "ok",
+            "note": "premarket conflict resolved toward positive"
+          }
+        }
+      ]
+    }
+  ],
+  "global_snapshots": [
+    {
+      "run_id": "run-premarket",
+      "instruments": [
+        {
+          "symbol": "N225",
+          "name": "Nikkei 225",
+          "region": "asia_pacific",
+          "level": {
+            "value": 67777.52,
+            "source_id": "src-mainichi",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "change_pct": {
+            "value": -1.82,
+            "source_id": "src-mainichi",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "session_state": "close"
+        },
+        {
+          "symbol": "TOPIX",
+          "name": "TOPIX",
+          "region": "asia_pacific",
+          "level": {
+            "value": 4110.67,
+            "source_id": "src-mainichi",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok",
+            "note": "source attribution inferred from the sample's block-level source list"
+          },
+          "change_pct": {
+            "value": 0.14,
+            "source_id": "src-mainichi",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok",
+            "note": "source attribution inferred from the sample's block-level source list"
+          },
+          "session_state": "close"
+        },
+        {
+          "symbol": "KOSPI",
+          "name": "KOSPI",
+          "region": "asia_pacific",
+          "level": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "conflicting",
+            "conflicts": [
+              {
+                "value": 5914.35,
+                "source_id": "src-ilsole",
+                "as_of": null,
+                "note": "close"
+              },
+              {
+                "value": 6035.35,
+                "source_id": "src-eme",
+                "as_of": null
+              }
+            ]
+          },
+          "change_pct": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "conflicting",
+            "conflicts": [
+              {
+                "value": -7.4,
+                "source_id": "src-ilsole",
+                "as_of": null,
+                "note": "headline 7.4%; sample noted ~-7%"
+              },
+              {
+                "value": -5.5,
+                "source_id": "src-eme",
+                "as_of": null
+              }
+            ]
+          },
+          "session_state": "close"
+        },
+        {
+          "symbol": "HSI",
+          "name": "Hang Seng",
+          "region": "asia_pacific",
+          "level": {
+            "value": 24033.51,
+            "source_id": "src-ilsole",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "change_pct": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "conflicting",
+            "conflicts": [
+              {
+                "value": -1.0,
+                "source_id": "src-ilsole",
+                "as_of": null
+              },
+              {
+                "value": 0.2,
+                "source_id": "src-alliance",
+                "as_of": null
+              }
+            ]
+          },
+          "session_state": "close"
+        },
+        {
+          "symbol": "SHCOMP",
+          "name": "Shanghai Composite",
+          "region": "asia_pacific",
+          "level": {
+            "value": 3754.82,
+            "source_id": "src-ilsole",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok"
+          },
+          "change_pct": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "conflicting",
+            "conflicts": [
+              {
+                "value": -1.1,
+                "source_id": "src-ilsole",
+                "as_of": null
+              },
+              {
+                "value": 0.1,
+                "source_id": "src-alliance",
+                "as_of": null
+              }
+            ]
+          },
+          "session_state": "close"
+        },
+        {
+          "symbol": "TAIEX",
+          "name": "Taiex",
+          "region": "asia_pacific",
+          "level": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "change_pct": {
+            "value": -1.9,
+            "source_id": "src-ilsole",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok",
+            "note": "source attribution inferred from the sample's block-level source list"
+          },
+          "session_state": "close"
+        },
+        {
+          "symbol": "AS51",
+          "name": "ASX 200",
+          "region": "asia_pacific",
+          "level": {
+            "value": 8767.4,
+            "source_id": "src-ilsole",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok",
+            "note": "source attribution inferred from the sample's block-level source list"
+          },
+          "change_pct": {
+            "value": -0.2,
+            "source_id": "src-ilsole",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok",
+            "note": "source attribution inferred from the sample's block-level source list"
+          },
+          "session_state": "close"
+        },
+        {
+          "symbol": "SXXP",
+          "name": "STOXX 600",
+          "region": "europe",
+          "level": {
+            "value": 638.44,
+            "source_id": "src-eme",
+            "as_of": "2026-10-13T07:14:00+00:00",
+            "status": "ok"
+          },
+          "change_pct": {
+            "value": 0.44,
+            "source_id": "src-eme",
+            "as_of": "2026-10-13T07:14:00+00:00",
+            "status": "ok"
+          },
+          "session_state": "early"
+        },
+        {
+          "symbol": "DAX",
+          "name": "DAX",
+          "region": "europe",
+          "level": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "change_pct": {
+            "value": 0.2,
+            "source_id": "src-alliance",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok",
+            "note": "source attribution inferred from the sample's block-level source list"
+          },
+          "session_state": "early"
+        },
+        {
+          "symbol": "CAC",
+          "name": "CAC 40",
+          "region": "europe",
+          "level": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "change_pct": {
+            "value": 0.3,
+            "source_id": "src-alliance",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok",
+            "note": "source attribution inferred from the sample's block-level source list"
+          },
+          "session_state": "early"
+        },
+        {
+          "symbol": "UKX",
+          "name": "FTSE 100",
+          "region": "europe",
+          "level": {
+            "value": null,
+            "source_id": null,
+            "as_of": null,
+            "status": "missing"
+          },
+          "change_pct": {
+            "value": 1.0,
+            "source_id": "src-alliance",
+            "as_of": "2026-10-13T07:52:00-04:00",
+            "status": "ok",
+            "note": "approximate (~+1%); source attribution inferred from the sample's block-level source list"
+          },
+          "session_state": "early"
+        }
+      ],
+      "themes": [
+        {
+          "value": "AI/memory-chip selloff (CXMT news), lower oil, bank earnings",
+          "source_id": "src-eme",
+          "as_of": "2026-10-13T07:52:00-04:00",
+          "status": "ok"
+        }
+      ]
+    }
+  ]
+}

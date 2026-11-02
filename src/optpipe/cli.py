@@ -20,6 +20,7 @@ from pathlib import Path
 from .config import REPO_ROOT, load_settings
 from .records import paths, read_session, read_session_for_append, read_trace, render_markdown, write_session
 from .records.fields import BERLIN, NY
+from .records.guards import effective_verdict, merge
 
 DEFAULT_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "2026-10-13"
 
@@ -38,7 +39,7 @@ def summary(rec: dict, trace) -> str:
         o = r["overall"] if r else None
         why = (" <- " + ", ".join(o["blocking_rule_ids"])) if o and o["blocking_rule_ids"] else ""
         flags = (" flags " + ", ".join(o["flag_rule_ids"])) if o and o["flag_rule_ids"] else ""
-        lines.append(f"  {o['verdict'] if o else '-':5} {tk['ticket_id']:30} qty {tk['quantity']} "
+        lines.append(f"  {effective_verdict(r) if o else '-':5} {tk['ticket_id']:30} qty {tk['quantity']} "
                      f"limit {tk['limit_price']['amount']} {tk['limit_price']['price_type']} "
                      f"max loss ${tk['max_loss']['amount_usd']}{why}{flags}")
     lines.append(f"recommendation: {rt.recommendation}")
@@ -93,8 +94,7 @@ def watch(a, settings) -> int:
     rec = json.loads(sess.read_text())
     # Fail closed (FIX-SEC-001 P0-4): never watch a record Doodle's validator (or the optpipe guards) rejects.
     from .orchestrator import validate_file
-    from .records.guards import check_record
-    verrs = validate_file(settings, sess) + check_record(rec)
+    verrs = validate_file(settings, sess)              # Doodle's validator + records/guards.check_record, merged
     if verrs:
         print(f"optpipe watch: refusing to watch {sess.name}: the session record does not validate "
               f"({len(verrs)} error(s))\n  " + "\n  ".join(verrs), file=sys.stderr)
@@ -183,12 +183,23 @@ def main(argv: list[str] | None = None) -> int:
         print(render_markdown(read_session(a.file), read_trace(str(a.file).replace(".json", ".trace.json"))))
         return 0
     if a.cmd == "validate":
+        # exit codes as Doodle's validate_session CLI (spec 1.1.3): 0 = valid, 1 = record errors,
+        # 2 = unreadable input, missing/broken validator or a validator crash. Any non-zero is FAIL.
         import json
-        from .orchestrator import load_validator
+        from .orchestrator import ValidatorCrashed, load_validator, run_validator
+        from .records.guards import check_record
         mod, err = load_validator(discover(settings.spec_path))
         if mod is None:
             print(err, file=sys.stderr); return 2
-        errs = list(mod.validate(json.loads(Path(a.file).read_text()), base_dir=Path(a.file).resolve().parent))
+        try:
+            rec = json.loads(Path(a.file).read_text())
+        except (OSError, ValueError) as e:
+            print(f"SPEC-RECORD-UNREADABLE: {a.file}: {type(e).__name__}: {e} (fail closed)", file=sys.stderr); return 2
+        try:
+            errs = run_validator(mod, json.loads(json.dumps(rec)), base_dir=Path(a.file).resolve().parent)
+        except ValidatorCrashed as e:
+            print(str(e), file=sys.stderr); return 2
+        errs = merge(errs, check_record(rec) if isinstance(rec, dict) else [])
         from .records.store import verify_session_ref
         tp = Path(str(a.file).replace(".json", ".trace.json"))
         if tp.exists():
@@ -223,7 +234,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"wrote {w.json}  sha256 {w.json_sha256}  (schema {rec['schema_version']}, trace_ref -> {w.trace.name})\n"
           f"wrote {w.trace}  sha256 {w.trace_sha256}\nwrote {w.md}")
     if ferrs is not None:                      # always a list now; a missing validator is an error in it
-        print(f"validate_session {w.json.name}: " + (f"OK as {rec['schema_version']} (schema + invariants INV-01..{ {'1.1.2': '15', '1.1.1': '14'}.get(rec['schema_version'], '13') })" if not ferrs
+        print(f"validate_session {w.json.name}: " + (f"OK as {rec['schema_version']} (schema + invariants INV-01..{ {'1.1.3': '16', '1.1.2': '15', '1.1.1': '14'}.get(rec['schema_version'], '13') })" if not ferrs
                                                      else f"{len(ferrs)} error(s)\n  " + "\n  ".join(ferrs[:20])))
     v = trace.runs[-1].validation
     return 1 if (v.get("errors") or ferrs) else 0

@@ -38,10 +38,13 @@ def wrules(spec):
 
 
 def hypothetical(rec: dict) -> dict:
-    """The fixture tickets with the VETO removed and no approval: HYPOTHETICAL paper what-ifs."""
+    """The fixture tickets with the VETO removed and no approval: HYPOTHETICAL paper what-ifs. The reviews are
+    honest PASS reviews (results and overall agree), since a stored PASS over vetoing results is VETO (INV-16)."""
     r = copy.deepcopy(rec)
     for rv in r["risk_reviews"]:
-        rv["overall"]["verdict"] = "PASS"
+        for x in rv["results"]:
+            x["result"] = "PASS"
+        rv["overall"].update(verdict="PASS", blocking_rule_ids=[], flag_rule_ids=[])
     for i in r["idea_log"]:
         i["current_status"] = "proposed"
     return r
@@ -111,9 +114,11 @@ def test_hypothetical_rejected_approved_and_positions(rec):
         x["result"] = "PASS"
     rv2["overall"].update(verdict="PASS", blocking_rule_ids=[], flag_rule_ids=[])
     now = ny("2026-10-13T12:30:00")
+    tk2 = r["tickets"][2]                     # INV-05-TERMS (1.1.3): the approval carries the ticket's exact terms
     r["approvals"] = [{"approval_id": "apr-t2", "ticket_id": t2, "review_id": rv2["review_id"], "status": "active",
                        "acknowledged_flags": [], "approved_at": rt.pair(ny("2026-10-13T12:20:00")),
-                       "expires_at": rt.pair(ny("2026-10-13T16:00:00"))}]
+                       "expires_at": rt.pair(ny("2026-10-13T16:00:00")),
+                       "legs": copy.deepcopy(tk2["legs"]), "quantity": tk2["quantity"], "limit_price": tk2["limit_price"]}]
     r["paper_positions"] = [{"position_id": "pos-1", "ticket_id": r["tickets"][3]["ticket_id"], "status": "open"}]
     by = {(t.target_id, t.kind): t for t in targets_from_session(r, now)}
     assert by[(r["tickets"][1]["ticket_id"], "ticket")].status == "rejected"

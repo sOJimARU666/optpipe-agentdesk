@@ -36,6 +36,7 @@ from typing import Any, Callable, Optional, Protocol
 
 import yaml
 
+from ..records.guards import effective_verdict, review_errors
 from ..risk.engine import Calendar
 from . import engine as spec_engine
 from .engine import BERLIN, NY, SHADOW, mark_of
@@ -247,9 +248,9 @@ def _when(v) -> Optional[datetime]:
 
 def approval_blockers(rec: dict, appr: dict, now: datetime) -> list[str]:
     """Why an approval must NOT be honoured at `now`: [] when it stands. Status must be `active`, `now` must be
-    inside [approved_at, expires_at), and records/guards.approval_errors (unacknowledged flags, review whose rule
-    results veto) must be clean. Reads `status`, never a `decision` field (not in Doodle's approval schema)."""
-    from ..records.guards import approval_errors
+    inside [approved_at, expires_at), and records/guards review_errors + approval_errors (INV-16 tampered overall,
+    INV-05 unacknowledged flags / VETO review / foreign ticket / terms) must be clean. Reads `status`, never a `decision` field (not in Doodle's approval schema)."""
+    from ..records.guards import approval_errors, review_errors
     aid = appr.get("approval_id")
     st = appr.get("status")
     if st != "active":
@@ -264,7 +265,8 @@ def approval_blockers(rec: dict, appr: dict, now: datetime) -> list[str]:
     rv = reviews.get(appr.get("review_id"))
     if rv is None:
         return [f"approval {aid} references unknown review {appr.get('review_id')!r}"]
-    return approval_errors(appr, rv)
+    tk = next((t for t in rec.get("tickets") or [] if t.get("ticket_id") == appr.get("ticket_id")), None)
+    return [*review_errors(rv), *approval_errors(appr, rv, tk)]
 
 
 def _pick_approval(rec: dict, tid: str, now: datetime) -> tuple[Optional[dict], list[str]]:
@@ -288,12 +290,13 @@ def targets_from_session(rec: dict, now: Optional[datetime] = None) -> list[Targ
         tid = tk["ticket_id"]
         idea = ideas.get(tid) or {}
         rv = _latest_review(rec, tid)
-        verdict = (rv or {}).get("overall", {}).get("verdict")
+        verdict = effective_verdict(rv) if rv else None      # a tampered/empty review is VETO (INV-16, FIX-SEC-001)
         istat = idea.get("current_status", "proposed")
         appr, blockers = _pick_approval(rec, tid, now)
         astat = (appr or {}).get("status")
         if verdict == "VETO" or istat == "vetoed":
-            why = ", ".join((rv or {}).get("overall", {}).get("blocking_rule_ids") or []) or "idea_log vetoed"
+            why = ("; ".join(review_errors(rv)) if rv else "") or \
+                ", ".join((rv or {}).get("overall", {}).get("blocking_rule_ids") or []) or "idea_log vetoed"
             out.append(Target(tid, "ticket", tid, "vetoed", istat, True, False, tk,
                               f"VETOED ({why}): shadow only, end-of-day summary, no intraday alerts"))
         elif istat == "rejected" or astat == "revoked":
