@@ -91,6 +91,14 @@ def watch(a, settings) -> int:
     if not sess.exists():
         print(f"session file not found: {sess}", file=sys.stderr); return 2
     rec = json.loads(sess.read_text())
+    # Fail closed (FIX-SEC-001 P0-4): never watch a record Doodle's validator (or the optpipe guards) rejects.
+    from .orchestrator import validate_file
+    from .records.guards import check_record
+    verrs = validate_file(settings, sess) + check_record(rec)
+    if verrs:
+        print(f"optpipe watch: refusing to watch {sess.name}: the session record does not validate "
+              f"({len(verrs)} error(s))\n  " + "\n  ".join(verrs), file=sys.stderr)
+        return 2
     if a.live:
         src, clock = LiveNasdaqSource(settings.http.user_agent, settings.http.timeout_s), RealClock()
     else:
@@ -102,7 +110,7 @@ def watch(a, settings) -> int:
     s0 = clock.now()
     until = (datetime.fromisoformat(a.until) if a.until else
              datetime.combine(s0.astimezone(NY).date(), datetime.min.time(), NY).replace(hour=17))
-    wt = Watcher(rec, rules, cal, src, get_engine(a.engine), session_path=sess)
+    wt = Watcher(rec, rules, cal, src, get_engine(a.engine), session_path=sess, now=s0)
     doc = wt.run(clock, until, once=a.once)
     res = write_watch(doc, sess, Path(a.out))
     sm = doc["summary"]

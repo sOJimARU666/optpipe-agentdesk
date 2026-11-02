@@ -8,7 +8,11 @@ watcher_rules.yaml) and writes <session>.watch.json plus a .sha256 sidecar.
       - vetoed:   latest risk review is VETO, or the idea_log says vetoed. This is a SHADOW target, flagged
                   vetoed=True: no intraday alerts, one end-of-day summary.
       - rejected: SHADOW target.
-      - approved: the approval says approved. Watched as approved_pending.
+      - approved: an approval (spec schema: there is no `decision` field) with status `active`, valid at the
+                  watch start (approved_at <= now < expires_at), whose flags are all acknowledged and whose
+                  review's rule results do not veto (records/guards.py, FIX-SEC-001). Watched as approved_pending.
+                  Any other approval (revoked / expired / consumed / out of window / unacknowledged flags) is
+                  NOT honoured: the ticket stays HYPOTHETICAL, except `revoked`, which is a rejected shadow.
       - neither:  HYPOTHETICAL (no approval recorded). Watched as approved_pending and flagged
                   hypothetical=True, which is a paper what-if.
       - open paper_positions are watched as kind=position.
@@ -234,11 +238,51 @@ def _latest_review(rec: dict, tid: str) -> Optional[dict]:
     return rv[-1] if rv else None
 
 
-def targets_from_session(rec: dict) -> list[Target]:
+def _when(v) -> Optional[datetime]:
+    try:
+        return datetime.fromisoformat(_ny(v)) if v else None
+    except (TypeError, ValueError):
+        return None
+
+
+def approval_blockers(rec: dict, appr: dict, now: datetime) -> list[str]:
+    """Why an approval must NOT be honoured at `now`: [] when it stands. Status must be `active`, `now` must be
+    inside [approved_at, expires_at), and records/guards.approval_errors (unacknowledged flags, review whose rule
+    results veto) must be clean. Reads `status`, never a `decision` field (not in Doodle's approval schema)."""
+    from ..records.guards import approval_errors
+    aid = appr.get("approval_id")
+    st = appr.get("status")
+    if st != "active":
+        return [f"approval {aid} status {st!r}, not active"]
+    start, end = _when(appr.get("approved_at")), _when(appr.get("expires_at"))
+    if start is None or end is None:
+        return [f"approval {aid} has no valid approved_at/expires_at"]
+    if not start <= now < end:
+        return [f"approval {aid} not valid at {now.astimezone(NY):%Y-%m-%d %H:%M} NY "
+                f"(window {start.astimezone(NY):%Y-%m-%d %H:%M} to {end.astimezone(NY):%H:%M} NY)"]
+    reviews = {r.get("review_id"): r for r in rec.get("risk_reviews") or []}
+    rv = reviews.get(appr.get("review_id"))
+    if rv is None:
+        return [f"approval {aid} references unknown review {appr.get('review_id')!r}"]
+    return approval_errors(appr, rv)
+
+
+def _pick_approval(rec: dict, tid: str, now: datetime) -> tuple[Optional[dict], list[str]]:
+    """(approval, blockers) for a ticket: the last approval that stands at `now`, else the most relevant
+    one that does not (last active, else last recorded) with its blockers. (None, []) when there is none."""
+    mine = [a for a in rec.get("approvals") or [] if a.get("ticket_id") == tid]
+    checked = [(a, approval_blockers(rec, a, now)) for a in mine]
+    good = [(a, b) for a, b in checked if not b]
+    if good:
+        return good[-1]
+    active = [(a, b) for a, b in checked if a.get("status") == "active"]
+    return (active or checked or [(None, [])])[-1]
+
+
+def targets_from_session(rec: dict, now: Optional[datetime] = None) -> list[Target]:
+    """Targets at `now` (the watch start; default: the current time, so a stale approval is never honoured)."""
+    now = now or datetime.now(NY)
     ideas = {i.get("ticket_id"): i for i in rec.get("idea_log") or []}
-    approvals: dict[str, dict] = {}
-    for a in rec.get("approvals") or []:
-        approvals[a.get("ticket_id")] = a
     out = []
     for tk in rec.get("tickets") or []:
         tid = tk["ticket_id"]
@@ -246,19 +290,21 @@ def targets_from_session(rec: dict) -> list[Target]:
         rv = _latest_review(rec, tid)
         verdict = (rv or {}).get("overall", {}).get("verdict")
         istat = idea.get("current_status", "proposed")
-        appr = approvals.get(tid)
+        appr, blockers = _pick_approval(rec, tid, now)
+        astat = (appr or {}).get("status")
         if verdict == "VETO" or istat == "vetoed":
             why = ", ".join((rv or {}).get("overall", {}).get("blocking_rule_ids") or []) or "idea_log vetoed"
             out.append(Target(tid, "ticket", tid, "vetoed", istat, True, False, tk,
                               f"VETOED ({why}): shadow only, end-of-day summary, no intraday alerts"))
-        elif istat == "rejected" or (appr and appr.get("decision") == "rejected"):
+        elif istat == "rejected" or astat == "revoked":
             out.append(Target(tid, "ticket", tid, "rejected", istat, False, False, tk, "rejected: shadow only"))
-        elif appr and appr.get("decision") in ("approved", "approve"):
+        elif appr and not blockers:
             out.append(Target(tid, "ticket", tid, "approved_pending", istat, False, False, tk,
-                              "approved for paper; watched as approved_pending"))
+                              f"approved for paper ({appr.get('approval_id')}); watched as approved_pending"))
         else:
+            why = ("approval NOT honoured: " + "; ".join(blockers)) if appr else "no approval"
             out.append(Target(tid, "ticket", tid, "approved_pending", istat, False, True, tk,
-                              f"HYPOTHETICAL (record status {istat!r}, verdict {verdict or 'none'}, no approval): "
+                              f"HYPOTHETICAL (record status {istat!r}, verdict {verdict or 'none'}, {why}): "
                               "watched as a paper what-if"))
     tickets = {t["ticket_id"]: t for t in rec.get("tickets") or []}
     for p in rec.get("paper_positions") or []:
@@ -374,12 +420,14 @@ def _rel(p) -> str:
 
 class Watcher:
     def __init__(self, rec: dict, rules: dict, cal: Calendar, source: QuoteSource,
-                 engine: Optional[RuleEngine] = None, session_path: Optional[Path] = None):
+                 engine: Optional[RuleEngine] = None, session_path: Optional[Path] = None,
+                 now: Optional[datetime] = None):
+        """`now` = the watch start (the clock's first reading): approvals are judged valid or not at that time."""
         spec_engine.check_rules(rules)
         self.rec, self.rules, self.cal, self.source = rec, rules, cal, source
         self.engine = engine or SpecEngine()
         self.session_path = session_path
-        self.targets = targets_from_session(rec)
+        self.targets = targets_from_session(rec, now)
         self.events, _, self.exdivs = session_events(rec)
         self.alerts: list[dict] = []
         self.wakes: list[dict] = []
@@ -389,7 +437,8 @@ class Watcher:
             self.notes.append("no watched targets: every ticket is vetoed/rejected (shadow only); quotes are fetched "
                               "once per session day for the shadow end-of-day mark")
         if any(t.hypothetical for t in self.targets):
-            self.notes.append("HYPOTHETICAL targets have no approval in the record; their alerts are paper what-ifs")
+            self.notes.append("HYPOTHETICAL targets have no approval that stands (active, in its window, flags acknowledged); "
+                              "their alerts are paper what-ifs")
         if any(_conds(t.ticket.get("target_rules"), "underlying_last") for t in self.targets):
             self.notes.append("underlying_last target conditions are not a watcher rule in watcher_rules v1.1.0 "
                               "(W02 watches stop levels and breakevens only)")

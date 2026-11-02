@@ -103,9 +103,19 @@ def test_hypothetical_rejected_approved_and_positions(rec):
     ts = targets_from_session(r)
     assert all(t.hypothetical and t.status == "approved_pending" and not t.vetoed for t in ts)
     r["idea_log"][1]["current_status"] = "rejected"
-    r["approvals"] = [{"ticket_id": r["tickets"][2]["ticket_id"], "decision": "approved"}]
+    # A schema-shaped approval (status `active`, inside its window, every flag acknowledged) of an honest PASS
+    # review. The old non-schema {"decision": "approved"} no longer counts (FIX-SEC-001 P0-4, test_sec001_watcher.py).
+    t2 = r["tickets"][2]["ticket_id"]
+    rv2 = next(x for x in reversed(r["risk_reviews"]) if x["ticket_id"] == t2)
+    for x in rv2["results"]:
+        x["result"] = "PASS"
+    rv2["overall"].update(verdict="PASS", blocking_rule_ids=[], flag_rule_ids=[])
+    now = ny("2026-10-13T12:30:00")
+    r["approvals"] = [{"approval_id": "apr-t2", "ticket_id": t2, "review_id": rv2["review_id"], "status": "active",
+                       "acknowledged_flags": [], "approved_at": rt.pair(ny("2026-10-13T12:20:00")),
+                       "expires_at": rt.pair(ny("2026-10-13T16:00:00"))}]
     r["paper_positions"] = [{"position_id": "pos-1", "ticket_id": r["tickets"][3]["ticket_id"], "status": "open"}]
-    by = {(t.target_id, t.kind): t for t in targets_from_session(r)}
+    by = {(t.target_id, t.kind): t for t in targets_from_session(r, now)}
     assert by[(r["tickets"][1]["ticket_id"], "ticket")].status == "rejected"
     appr = by[(r["tickets"][2]["ticket_id"], "ticket")]
     assert appr.status == "approved_pending" and not appr.hypothetical
