@@ -52,13 +52,13 @@ def summary(rec: dict, trace) -> str:
     return "\n".join(lines)
 
 
-LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+LOOPBACK = {"127.0.0.1", "::1"}   # literal loopback addresses only; no hostnames (FIX-SEC-001)
 
 
 def serve(out: str, host: str, port: int) -> int:
-    """Run the dashboard with uvicorn. Refuses any non-loopback bind (no 0.0.0.0)."""
+    """Run the dashboard with uvicorn. Refuses any bind other than 127.0.0.1 or ::1 (no all-interfaces bind, no hostnames)."""
     if host not in LOOPBACK:
-        print(f"refusing to bind {host!r}: the dashboard is local-only (use 127.0.0.1)", file=sys.stderr)
+        print(f"refusing to bind {host!r}: the dashboard is local-only (use 127.0.0.1 or ::1)", file=sys.stderr)
         return 2
     import uvicorn
     from .dashboard import create_app
@@ -141,7 +141,7 @@ def main(argv: list[str] | None = None) -> int:
         sub.add_parser(name).add_argument("file")
     sv = sub.add_parser("serve", help="read-only local dashboard over out/ (GET only, loopback only)")
     sv.add_argument("--out", default=str(REPO_ROOT / "out"))
-    sv.add_argument("--host", default="127.0.0.1", help="loopback only: 127.0.0.1, ::1 or localhost")
+    sv.add_argument("--host", default="127.0.0.1", help="loopback only: 127.0.0.1 or ::1")
     sv.add_argument("--port", type=int, default=8765)
     w = sub.add_parser("watch", help="paper-only watcher over a session's tickets (alert only, no order)")
     w.add_argument("--session", help="session JSON (default: <out>/session-<date>.json)")

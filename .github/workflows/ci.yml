@@ -1,4 +1,4 @@
-# Local-only CI definition (this repo has no remote and is never pushed - Eugene's rule).
+# CI for the private GitHub repo: runs on every push and pull request (any base branch) and on manual dispatch.
 # PAPER ONLY: nothing here talks to a broker; all tests run offline from fixtures.
 name: ci
 on: [push, pull_request, workflow_dispatch]
