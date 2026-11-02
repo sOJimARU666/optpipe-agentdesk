@@ -419,12 +419,36 @@ class Orchestrator:
 
     def validate(self, rec: dict) -> dict:
         """errors: the 1.1.2 record against Doodle's validator + schema (the INV-11 trace file check runs
-        on the written file, see validate_file)."""
-        mod = self.spec.load_module("session_validator") if self.spec else None
+        on the written file, see validate_file). Fails closed: a missing or unimportable validator is an
+        error, never an OK (FIX-SEC-001 P0-5)."""
+        mod, err = load_validator(self.spec)
         if mod is None:
-            return {"validator": None, "errors": [], "note": "spec validate_session.py not found; pydantic only"}
+            return {"validator": None, "errors": [err], "note": "spec validator unavailable; record NOT validated"}
         from .config import display_path
         return {"validator": display_path(self.spec.path("session_validator")), "errors": list(mod.validate(copy.deepcopy(rec)))}
+
+
+VALIDATOR_MISSING = "SPEC-VALIDATOR-MISSING"
+VALIDATOR_BROKEN = "SPEC-VALIDATOR-IMPORT-FAILED"
+
+
+def load_validator(spec) -> tuple[Optional[Any], Optional[str]]:
+    """(module, None) for Doodle's validate_session.py, or (None, error) when it is missing, fails to import or
+    has no validate(). Callers must treat the error as a failed validation (fail closed, FIX-SEC-001 P0-5)."""
+    from .config import display_path
+    where = display_path(getattr(spec, "root", None)) if spec is not None else None
+    if spec is None or spec.path("session_validator") is None:
+        return None, (f"{VALIDATOR_MISSING}: validate_session.py not found in spec dir {where}; "
+                      "the record cannot be validated (fail closed)")
+    try:
+        mod = spec.load_module("session_validator")
+    except Exception as e:  # noqa: BLE001 - any import failure must fail closed
+        return None, (f"{VALIDATOR_BROKEN}: validate_session.py in {where} could not be imported "
+                      f"({type(e).__name__}: {e}); the record cannot be validated (fail closed)")
+    if mod is None or not callable(getattr(mod, "validate", None)):
+        return None, (f"{VALIDATOR_BROKEN}: validate_session.py in {where} has no validate(); "
+                      "the record cannot be validated (fail closed)")
+    return mod, None
 
 
 def run_session(settings: Settings, inputs: SessionInputs, as_of: datetime, fixtures_dir: Optional[Path],
@@ -437,11 +461,12 @@ def run_session(settings: Settings, inputs: SessionInputs, as_of: datetime, fixt
     return rec, trace
 
 
-def validate_file(settings: Settings, path: Path) -> Optional[list[str]]:
-    """Doodle's validator on a written record file, with base_dir so INV-11 checks trace_ref against the trace."""
+def validate_file(settings: Settings, path: Path) -> list[str]:
+    """Doodle's validator on a written record file, with base_dir so INV-11 checks trace_ref against the trace.
+    Never None: a missing/broken validator is returned as an error (fail closed, FIX-SEC-001 P0-5)."""
     import json
-    mod = discover(settings.spec_path).load_module("session_validator")
+    mod, err = load_validator(discover(settings.spec_path))
     if mod is None:
-        return None
+        return [err]
     p = Path(path)
     return list(mod.validate(json.loads(p.read_text()), base_dir=p.resolve().parent))
