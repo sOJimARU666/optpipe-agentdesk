@@ -27,6 +27,9 @@ def ny(s: str) -> datetime:
     return datetime.fromisoformat(s).replace(tzinfo=NY)
 
 
+WATCH_NOW = ny("2026-10-13T12:30:00")      # targets_from_session needs an explicit watch start (FIX-SEC-001 N7)
+
+
 @pytest.fixture(scope="module")
 def cal(raw_rules):
     return Calendar(MarketHours.model_validate(raw_rules["config"]["market_hours"]))
@@ -84,7 +87,7 @@ def only_jpm_bcs(rec):
 
 def run_at(rec, wrules, cal, times, fn):
     src = DictSource(fn)
-    w = Watcher(rec, wrules, cal, src)
+    w = Watcher(rec, wrules, cal, src, now=times[0])
     for t in times:
         w.step(t)
     return w, src
@@ -96,14 +99,14 @@ def rules_hit(w):
 
 # ------------------------------------------------------------------ targets
 def test_vetoed_tickets_are_flagged_shadow(rec):
-    ts = targets_from_session(rec)
+    ts = targets_from_session(rec, WATCH_NOW)
     assert ts and all(t.vetoed and t.status == "vetoed" and t.shadow and not t.hypothetical for t in ts)
     assert all("VETOED" in t.note and "R0" in t.note for t in ts)
 
 
 def test_hypothetical_rejected_approved_and_positions(rec):
     r = hypothetical(rec)
-    ts = targets_from_session(r)
+    ts = targets_from_session(r, WATCH_NOW)
     assert all(t.hypothetical and t.status == "approved_pending" and not t.vetoed for t in ts)
     r["idea_log"][1]["current_status"] = "rejected"
     # A schema-shaped approval (status `active`, inside its window, every flag acknowledged) of an honest PASS
@@ -131,7 +134,7 @@ def test_one_vetoed_among_hypothetical_stays_vetoed(rec):
     r = hypothetical(rec)
     r["risk_reviews"][-1]["overall"]["verdict"] = "VETO"
     vid = r["risk_reviews"][-1]["ticket_id"]
-    t = {x.ticket_id: x for x in targets_from_session(r)}
+    t = {x.ticket_id: x for x in targets_from_session(r, WATCH_NOW)}
     assert t[vid].vetoed and t[vid].shadow and sum(x.vetoed for x in t.values()) == 1
 
 
@@ -155,7 +158,7 @@ def test_market_state(cal, t, state):
 def _count_run(rec, wrules, cal, start, until):
     src = DictSource(lambda now, s, c: quotes(now, {"JPM": 336.0, "WDC": 363.0},
                                               {cid: (1.0, 1.1) for cid in c}))
-    w = Watcher(hypothetical(rec), wrules, cal, src)
+    w = Watcher(hypothetical(rec), wrules, cal, src, now=ny(start))
     doc = w.run(SimClock(ny(start)), ny(until))
     return doc, src
 
@@ -185,14 +188,14 @@ def test_early_close_polls_stop_at_13_00(rec, wrules, cal):
 
 
 def test_closed_jumps_to_next_open(cal, rec, wrules):
-    w = Watcher(hypothetical(rec), wrules, cal, DictSource(lambda *a: {}))
+    w = Watcher(hypothetical(rec), wrules, cal, DictSource(lambda *a: {}), now=ny("2026-10-16T17:00:00"))
     assert w.step(ny("2026-10-16T17:00:00")) == ny("2026-10-19T09:30:00")      # Fri -> Mon
     assert w.step(ny("2026-11-25T16:30:00")) == ny("2026-11-27T09:30:00")      # skips Thanksgiving
 
 
 def test_full_replay_day_hypothetical(rec, wrules, cal):
     src = ReplayTape(TAPE)
-    doc = Watcher(hypothetical(rec), wrules, cal, src).run(SimClock(ny("2026-10-13T07:00:00")), ny("2026-10-13T17:00:00"))
+    doc = Watcher(hypothetical(rec), wrules, cal, src, now=ny("2026-10-13T07:00:00")).run(SimClock(ny("2026-10-13T07:00:00")), ny("2026-10-13T17:00:00"))
     assert validate_watch(doc) == []
     calls = [datetime.fromisoformat(c["at"]).astimezone(NY) for c in src.calls]
     assert min(calls) == ny("2026-10-13T09:30:00") and max(calls) < ny("2026-10-13T16:00:00")
@@ -278,7 +281,7 @@ def test_rule_w07_event_eve(rec, wrules, cal):
 
 def test_shadow_eod_for_vetoed_only_after_close(rec, wrules, cal):
     src = ReplayTape(TAPE)
-    w = Watcher(rec, wrules, cal, src)
+    w = Watcher(rec, wrules, cal, src, now=ny("2026-10-13T07:00:00"))
     doc = w.run(SimClock(ny("2026-10-13T07:00:00")), ny("2026-10-13T17:00:00"))
     assert len(src.calls) == 1 and src.calls[0]["at"].startswith("2026-10-13T15:55")
     assert [a["rule_id"] for a in doc["alerts"]] == ["SHADOW_EOD"] * len(rec["tickets"])
@@ -293,7 +296,7 @@ def test_shadow_eod_for_vetoed_only_after_close(rec, wrules, cal):
 def test_watch_json_and_sidecar(rec, wrules, cal, tmp_path):
     sess = tmp_path / "session-2026-10-13.json"
     sess.write_text(json.dumps(rec))
-    w = Watcher(rec, wrules, cal, ReplayTape(TAPE), session_path=sess)
+    w = Watcher(rec, wrules, cal, ReplayTape(TAPE), session_path=sess, now=ny("2026-10-13T07:00:00"))
     doc = w.run(SimClock(ny("2026-10-13T07:00:00")), ny("2026-10-13T17:00:00"))
     res = write_watch(doc, sess)
     assert res.json_path.name == "session-2026-10-13.watch.json"
@@ -308,7 +311,7 @@ def test_watch_json_and_sidecar(rec, wrules, cal, tmp_path):
 
 
 def test_validate_watch_catches_violations(rec, wrules, cal):
-    doc = Watcher(rec, wrules, cal, ReplayTape(TAPE)).run(SimClock(ny("2026-10-13T07:00:00")), ny("2026-10-13T17:00:00"))
+    doc = Watcher(rec, wrules, cal, ReplayTape(TAPE), now=ny("2026-10-13T07:00:00")).run(SimClock(ny("2026-10-13T07:00:00")), ny("2026-10-13T17:00:00"))
     bad = copy.deepcopy(doc)
     bad["wakes"][0]["quote_calls"] = 1                       # 07:00 premarket
     bad["alerts"][0]["rule_id"] = "W01_MARK_VS_STOP_TARGET"  # shadow target alerted intraday
@@ -325,7 +328,7 @@ def test_pluggable_engine(rec, wrules, cal):
             Quiet.seen += 1
             return [], state or {}, 300
     register_engine("quiet", Quiet)
-    doc = Watcher(hypothetical(rec), wrules, cal, ReplayTape(TAPE), rt.get_engine("quiet")).run(
+    doc = Watcher(hypothetical(rec), wrules, cal, ReplayTape(TAPE), rt.get_engine("quiet"), now=ny("2026-10-13T09:30:00")).run(
         SimClock(ny("2026-10-13T09:30:00")), ny("2026-10-13T10:00:00"))
     assert Quiet.seen > 0 and doc["alerts"] == [] and doc["engine"] == "quiet"
     with pytest.raises(KeyError):

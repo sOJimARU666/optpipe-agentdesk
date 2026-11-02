@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 
 from ..scenario import tag_for_record
 from .data import OutDir, Session, berlin, clock, compact, fval, ftitle, pair
-from ..records.guards import effective_verdict
+from ..records.guards import effective_verdict, reviews_by_time
 
 HERE = Path(__file__).parent
 PAGES = ("today", "tickets", "timeline", "history")
@@ -100,12 +100,11 @@ def watch_model(s: Session) -> Optional[dict]:
 
 def tickets_model(s: Session) -> list[dict]:
     reviews = defaultdict(list)
-    order = {r["run_id"]: i for i, r in enumerate(s.runs)}
     for rv in s.record.get("risk_reviews", []):
         reviews[rv["ticket_id"]].append(rv)
     out = []
     for t in s.record.get("tickets", []):
-        rvs = sorted(reviews.get(t["ticket_id"], []), key=lambda r: order.get(r["run_id"], 99))
+        rvs = reviews_by_time(reviews.get(t["ticket_id"], []))   # the watcher's latest-review rule (FIX-SEC-001 N6)
         out.append({"t": t, "reviews": rvs, "latest": rvs[-1] if rvs else None})
     return out
 

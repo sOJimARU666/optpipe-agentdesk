@@ -18,7 +18,7 @@ Flag acknowledgement must be an exact match: an absent `acknowledged_flags` ackn
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Iterable
 
 BLOCKING, FLAGGING = "blocking", "flag"
@@ -93,6 +93,22 @@ def _ts(pair: dict | None) -> datetime | None:
         return datetime.fromisoformat(pair["ny"]) if pair else None
     except (KeyError, TypeError, ValueError):
         return None
+
+
+def reviews_by_time(reviews: Iterable[dict]) -> list[dict]:
+    """Reviews oldest -> newest by `evaluated_at` (NY instant), as spec/watcher_reference.target_from_session sorts
+    them. The sort is stable, so reviews with the same instant keep their array order and the one listed last is the
+    latest (the reference's tie-break). Undated reviews (schema-invalid) sort first; callers that must fail closed
+    check them separately (watcher/runtime.py)."""
+    rv = list(reviews)
+    return sorted(rv, key=lambda r: (_ts(r.get("evaluated_at")) is not None,
+                                     _ts(r.get("evaluated_at")) or datetime.min.replace(tzinfo=timezone.utc)))
+
+
+def latest_review(reviews: Iterable[dict]) -> dict | None:
+    """The latest review by `evaluated_at` (never by list position); None when there is none."""
+    rv = reviews_by_time(reviews)
+    return rv[-1] if rv else None
 
 
 def _terms_differ(a: dict, tk: dict) -> bool:
