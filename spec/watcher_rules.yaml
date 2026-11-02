@@ -3,7 +3,7 @@
 # Tests: test_watcher_reference.py. Market hours/holidays come from risk_rules.yaml config.market_hours.
 # The watcher NEVER places, modifies or cancels orders (paper or live). Every alert says so.
 # All timestamps quoted; never let YAML auto-convert.
-watcher_version: "1.1.0"
+watcher_version: "1.1.3"   # labels track spec VERSION from 1.1.3; 1.1.3: `detail` listed in alert_fields, approval state read only from approvals[].status (no `decision` field)
 
 config:
   alert_text: "alert only, no order"       # must appear in every alert message
@@ -43,7 +43,7 @@ dedupe:
     (rule_id, target_id), a new alert is held back unless it escalates to exit_signal. Suppressed or held-back alerts do
     not update the state. The shadow summary is deduped per (target_id, NY date).
 
-alert_fields: [rule_id, level, target_id, value, threshold, quote_as_of, at, message]
+alert_fields: [rule_id, level, target_id, value, threshold, quote_as_of, at, detail, message]
 message_format: "[{level}] {rule_id} {target_id}: {detail} | value={value} threshold={threshold} quote_as_of={quote_as_of} | alert only, no order"
 
 definitions:

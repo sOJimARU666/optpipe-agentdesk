@@ -27,8 +27,10 @@ def D(x) -> Decimal:
 
 
 def combine(results) -> str:
+    """Worst result by precedence PASS < FLAG < UNKNOWN < VETO. Spec 1.1.3 (risk_reference.combine): no results ->
+    UNKNOWN (fail closed; was PASS), so a rule evaluated over zero legs / quotes can never pass silently."""
     results = list(results)
-    return max(results, key=PREC.__getitem__) if results else "PASS"
+    return max(results, key=PREC.__getitem__) if results else "UNKNOWN"
 
 
 def _ts(v) -> datetime:

@@ -47,8 +47,10 @@ def ts(s: str) -> datetime:
 
 
 def combine(results) -> str:
+    """Worst result by precedence PASS < FLAG < UNKNOWN < VETO. Spec 1.1.3: no results -> UNKNOWN (fail closed;
+    was PASS), so a per-leg rule evaluated over zero legs can never pass silently."""
     results = list(results)
-    return max(results, key=PREC.__getitem__) if results else "PASS"
+    return max(results, key=PREC.__getitem__) if results else "UNKNOWN"
 
 
 def res(rule, result, measured, threshold, reason, per_leg=None):

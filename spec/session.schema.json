@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://poodle.local/trading/spec/session.schema.json",
   "title": "Paper US options trading session record",
-  "description": "Canonical per-session record for a PAPER-ONLY US equity options workflow (scan -> candidates -> tickets -> risk review -> approval -> simulated fill -> watch -> close). No broker, no live orders: 'executed' always means a simulated paper fill. Sourced market data is ALWAYS wrapped in a Field object (value + source_id + as_of + status). Identifiers, keys, and decisions (ticket legs, limit prices, verdicts) are plain values because they are authored by the system/user, not observed. Cross-object invariants that JSON Schema cannot express are listed in x-invariants and enforced by validate_session.py. Schema v1.1 / 1.1.1 / 1.1.2 (see CHANGELOG.md; 1.1.2 adds INV-15 vertical stop/target comparison direction; 1.1.1 adds INV-13 credit rounding and INV-14 vertical consistency; adds per-run premarket_scans/global_snapshots, raw tick fields, trace_ref, integer open interest, 'closed' phase) is a backward-compatible superset of v1.0: every valid 1.0.0 record is a valid record under this schema.",
+  "description": "Canonical per-session record for a PAPER-ONLY US equity options workflow (scan -> candidates -> tickets -> risk review -> approval -> simulated fill -> watch -> close). No broker, no live orders: 'executed' always means a simulated paper fill. Sourced market data is ALWAYS wrapped in a Field object (value + source_id + as_of + status). Identifiers, keys, and decisions (ticket legs, limit prices, verdicts) are plain values because they are authored by the system/user, not observed. Cross-object invariants that JSON Schema cannot express are listed in x-invariants and enforced by validate_session.py. Schema v1.1 / 1.1.1 / 1.1.2 / 1.1.3 (see CHANGELOG.md; 1.1.3 adds flag acknowledgement and specific error ids to INV-05, approval status/ticket/terms checks to INV-06, tighter INV-03/INV-04 and the new INV-16 overall-verdict consistency, same shape as 1.1.2; 1.1.2 adds INV-15 vertical stop/target comparison direction; 1.1.1 adds INV-13 credit rounding and INV-14 vertical consistency; adds per-run premarket_scans/global_snapshots, raw tick fields, trace_ref, integer open interest, 'closed' phase) is a backward-compatible superset of v1.0: every valid 1.0.0 record is a valid record under this schema.",
   "$comment": "MARKET HOURS: all US market-hours, DTE, expiry, hold-window, and 'during market hours' logic MUST be computed in America/New_York (IANA zone via zoneinfo), never by a fixed offset from Europe/Berlin. US and EU DST transitions differ: e.g. 2026-10-25 (EU ends DST) to 2026-11-01 (US ends DST) the NY-Berlin gap is 5h, so the 09:30 ET open is 14:30 Berlin, not 15:30; likewise in March (US starts 2nd Sunday, EU last Sunday). Berlin times are display-only.",
   "x-market-hours": {
     "timezone": "America/New_York",
@@ -18,19 +18,20 @@
   "x-invariants": [
     "INV-01 every source_id referenced anywhere exists in sources[].id",
     "INV-02 every TsPair has ny and berlin denoting the same instant; ny offset is -04:00 or -05:00 and matches America/New_York DST for that instant; berlin offset is +01:00 or +02:00 and matches Europe/Berlin",
-    "INV-03 ids are unique within their array (sources, runs, candidates, contracts, tickets, legs, reviews, approvals, positions, watches, alerts, ideas, events)",
-    "INV-04 all *_id references resolve (run_id, candidate_id, ticket_id, review_id, approval_id, position_id, watch_id, event_id, contract_id, leg_id)",
-    "INV-05 an approval may only reference a review whose overall.verdict is PASS or FLAG, for the same ticket, and its legs/quantity/limit_price must equal the ticket's exactly",
-    "INV-06 a paper_position requires an approval with status active at every fill time; every opening fill price respects the approved limit (debit <= limit, credit >= limit)",
+    "INV-03 ids are unique within their array (sources, runs, candidates, contracts, tickets, legs, reviews, approvals, positions, watches, alerts, ideas, events). Enforced for every version on the top-level arrays; 1.1.3 records also: leg_id and contract_id unique within each ticket's legs (INV-03-LEG), contract_id unique within each option_chain_slice (INV-03-CONTRACT), fill_id unique across all paper_positions (INV-03-FILL)",
+    "INV-04 all *_id references resolve (run_id, candidate_id, ticket_id, review_id, approval_id, position_id, watch_id, event_id, contract_id, leg_id). 1.1.3 records also: every paper_positions[].fills[].leg_id is a leg of the position's ticket (INV-04-FILL-LEG) and its contract_id equals that leg's contract_id (INV-04-FILL-CONTRACT); every marks[].leg_marks[].leg_id is a leg of the position's ticket (INV-04-MARK-LEG)",
+    "INV-05 an approval may only reference a review whose overall.verdict is PASS or FLAG, for the same ticket, and its legs/quantity/limit_price must equal the ticket's exactly. 1.1.3 records: expires_at > approved_at, and an approval of a FLAG review must acknowledge every flagged rule_id in acknowledged_flags and nothing else: flagged = results FLAG or UNKNOWN with severity soft (risk_reference.overall) plus any recorded overall.flag_rule_ids (INV-05-ACK-MISSING: a flagged id is not listed, an absent acknowledged_flags lists nothing; INV-05-ACK-EXTRA: a listed id was not flagged, incl. any id on a PASS review; INV-05-ACK-DUPLICATE: an id listed twice). Specific error ids: INV-05-VETO (recorded overall.verdict VETO, or its rule results give VETO, or it has no rule results), INV-05-FOREIGN (review for another ticket), INV-05-TERMS (legs/quantity/limit_price differ from the ticket), INV-05-EXPIRY (expires_at <= approved_at). Acknowledgement is not evaluated for a VETO review (already INV-05-VETO)",
+    "INV-06 a paper_position requires an approval with status active at every fill time; every opening fill price respects the approved limit (debit <= limit, credit >= limit). 1.1.3 records (approvals[].status is the canonical approval state; there is no 'decision' field): the approval must be active at every opening fill: status 'active', or 'revoked'/'expired'/'consumed' with status_changed_at strictly after the fill (INV-06-STATUS: status changed at or before an opening fill, so a 'consumed' stamp must come after the last opening fill; INV-06-STATUS-UNDATED: non-active status without status_changed_at); the approval must be for the position's ticket (INV-06-TICKET) and its legs/quantity/limit_price must equal that ticket's (INV-06-TERMS); it must not approve a VETO review (INV-06-VETO); every opening fill satisfies approved_at <= filled_at <= expires_at (INV-06-BEFORE / INV-06-EXPIRED); opening fills match the approved leg side (buy -> buy_to_open, sell -> sell_to_open) and per leg total opening qty <= approval.quantity * ratio (INV-06-QTY); entry net per spread unit = sum(+price*qty buy_to_open, -price*qty sell_to_open) / approval.quantity respects the limit in exact Decimal (INV-06-LIMIT). Closing fills are not time-limited by expires_at.",
     "INV-07 idea_log history is chronological and current_status equals the last history entry's status",
     "INV-08 a ticket's legs reference contract_ids present in the referenced candidate's option_chain_slices",
     "INV-09 Field.as_of must be <= the fetched_at of its source when status is ok or stale (data cannot be newer than its fetch)",
-    "INV-10 (v1.1) run phase vs NY clock: 'closed' requires schema_version 1.1.0, 1.1.1 or 1.1.2 and runs[].started (America/New_York) in the closed window (before 04:00, at/after 16:00 or the 13:00 early close, weekend, NYSE holiday per risk_rules.yaml config.market_hours); in 1.1.x records every run started in that window must have phase 'closed' and 'afterhours' is not used",
-    "INV-11 (v1.1) trace_ref requires schema_version 1.1.0, 1.1.1 or 1.1.2; when validating a file, trace_ref.path resolves inside the record's directory, exists, and its SHA-256 equals trace_ref.sha256",
-    "INV-12 (v1.1) premarket_scans[] and global_snapshots[] require schema_version 1.1.0, 1.1.1 or 1.1.2; within each array run_id is unique and references an existing runs[].run_id; when the singular premarket_scan / global_snapshot is also present its run_id must appear in the array",
-    "INV-13 (v1.1) raw tick fields (limit_price.raw_amount/tick_size/rounding; Condition.raw_value/tick_size/rounding on ticket entry/exit/stop/target rules and watcher_rules) require schema_version 1.1.0, 1.1.1 or 1.1.2; tick_size must equal the tick rule for the ticket's underlying at the raw price (risk_rules.yaml config.tick_rules); rounded == round(raw, tick_size, rounding) exactly (Decimal); debit limit rounds down, stop conditions round up, target conditions round down; for 1.1.1 records credit verticals (bull_put_credit_spread, bear_call_credit_spread) must round the min-credit limit up, stop conditions down and target conditions up",
-    "INV-14 (1.1.1 and 1.1.2 records) vertical tickets (bull_call_debit_spread, bear_put_debit_spread, bull_put_credit_spread, bear_call_credit_spread): legs must form the declared vertical (2 legs, same type and expiry, 1:1, one buy one sell, strikes in the right order, matching price_type); width, strikes and the LIMIT price (max debit / min credit) come from the legs and limit_price; stop/target = the position_value condition (cost to close) in stop_rules/target_rules (exactly one each). Credit: 0 < credit < width; credit < stop < width; 0 <= target < credit; max_loss = (width - credit)*100*qty; max_profit = credit*100*qty; breakeven = short_strike - credit (put) / + credit (call); (stop - credit)*100*qty <= max_loss. Debit: 0 < debit < width; 0 < stop < debit; debit < target <= width; max_loss = debit*100*qty; max_profit = (width - debit)*100*qty; breakeven = long_strike + debit (call) / - debit (put). Stored max_loss/max_profit amount_usd and the breakeven at the limit must equal the computed values (0.01 tolerance on $ amounts), unlimited false, at_price (if set) = limit; any other breakevens[] must match the formula at their own at_price. Exact Decimal arithmetic; inequalities strict as written.",
-    "INV-15 (1.1.2 records only) vertical tickets: the comparison operator of the single position_value condition (cost to close; the same condition INV-14 reads) in stop_rules and in target_rules. Debit verticals (bull_call_debit_spread, bear_put_debit_spread): stop op 'lte', target op 'gte'. Credit verticals (bull_put_credit_spread, bear_call_credit_spread), where position_value is the cost to buy the spread back: stop op 'gte', target op 'lte'. A missing or duplicate condition is reported by INV-14 only."
+    "INV-10 (v1.1) run phase vs NY clock: 'closed' requires schema_version 1.1.0, 1.1.1, 1.1.2 or 1.1.3 and runs[].started (America/New_York) in the closed window (before 04:00, at/after 16:00 or the 13:00 early close, weekend, NYSE holiday per risk_rules.yaml config.market_hours); in 1.1.x records every run started in that window must have phase 'closed' and 'afterhours' is not used",
+    "INV-11 (v1.1) trace_ref requires schema_version 1.1.0, 1.1.1, 1.1.2 or 1.1.3; when validating a file, trace_ref.path resolves inside the record's directory, exists, and its SHA-256 equals trace_ref.sha256",
+    "INV-12 (v1.1) premarket_scans[] and global_snapshots[] require schema_version 1.1.0, 1.1.1, 1.1.2 or 1.1.3; within each array run_id is unique and references an existing runs[].run_id; when the singular premarket_scan / global_snapshot is also present its run_id must appear in the array",
+    "INV-13 (v1.1) raw tick fields (limit_price.raw_amount/tick_size/rounding; Condition.raw_value/tick_size/rounding on ticket entry/exit/stop/target rules and watcher_rules) require schema_version 1.1.0, 1.1.1, 1.1.2 or 1.1.3; tick_size must equal the tick rule for the ticket's underlying at the raw price (risk_rules.yaml config.tick_rules); rounded == round(raw, tick_size, rounding) exactly (Decimal); debit limit rounds down, stop conditions round up, target conditions round down; for 1.1.1, 1.1.2 and 1.1.3 records credit verticals (bull_put_credit_spread, bear_call_credit_spread) must round the min-credit limit up, stop conditions down and target conditions up",
+    "INV-14 (1.1.1, 1.1.2 and 1.1.3 records) vertical tickets (bull_call_debit_spread, bear_put_debit_spread, bull_put_credit_spread, bear_call_credit_spread): legs must form the declared vertical (2 legs, same type and expiry, 1:1, one buy one sell, strikes in the right order, matching price_type); width, strikes and the LIMIT price (max debit / min credit) come from the legs and limit_price; stop/target = the position_value condition (cost to close) in stop_rules/target_rules (exactly one each). Credit: 0 < credit < width; credit < stop < width; 0 <= target < credit; max_loss = (width - credit)*100*qty; max_profit = credit*100*qty; breakeven = short_strike - credit (put) / + credit (call); (stop - credit)*100*qty <= max_loss. Debit: 0 < debit < width; 0 < stop < debit; debit < target <= width; max_loss = debit*100*qty; max_profit = (width - debit)*100*qty; breakeven = long_strike + debit (call) / - debit (put). Stored max_loss/max_profit amount_usd and the breakeven at the limit must equal the computed values (0.01 tolerance on $ amounts), unlimited false, at_price (if set) = limit; any other breakevens[] must match the formula at their own at_price. Exact Decimal arithmetic; inequalities strict as written.",
+    "INV-15 (1.1.2 and 1.1.3 records) vertical tickets: the comparison operator of the single position_value condition (cost to close; the same condition INV-14 reads) in stop_rules and in target_rules. Debit verticals (bull_call_debit_spread, bear_put_debit_spread): stop op 'lte', target op 'gte'. Credit verticals (bull_put_credit_spread, bear_call_credit_spread), where position_value is the cost to buy the spread back: stop op 'gte', target op 'lte'. A missing or duplicate condition is reported by INV-14 only.",
+    "INV-16 (1.1.3 records only) overall-verdict consistency: every risk_reviews[].overall must equal risk_reference.overall(results): verdict exactly (INV-16-VERDICT), blocking_rule_ids as a set without duplicates (INV-16-BLOCKING: VETO or hard UNKNOWN), flag_rule_ids as a set without duplicates (INV-16-FLAGS: FLAG or soft UNKNOWN); so a stored PASS/FLAG over any VETO or hard UNKNOWN fails. A review with no rule results fails (INV-16-EMPTY; risk_reference.combine([]) is UNKNOWN, fail closed). Precedence within a rule: PASS < FLAG < UNKNOWN < VETO (risk_reference.combine)"
   ],
   "type": "object",
   "additionalProperties": false,
@@ -58,9 +59,10 @@
         "1.0.0",
         "1.1.0",
         "1.1.1",
-        "1.1.2"
+        "1.1.2",
+        "1.1.3"
       ],
-      "description": "1.0.0 = v1 record; 1.1.0 = may use v1.1 additions (run phase 'closed', trace_ref, premarket_scans/global_snapshots, raw tick fields); 1.1.1 = same shape as 1.1.0 plus the stricter checks INV-13 credit directions and INV-14 vertical consistency; 1.1.2 = same shape and checks as 1.1.1 plus INV-15 vertical stop/target comparison direction. Integer open_interest applies to all (integral floats like 472.0 still validate)."
+      "description": "1.0.0 = v1 record; 1.1.0 = may use v1.1 additions (run phase 'closed', trace_ref, premarket_scans/global_snapshots, raw tick fields); 1.1.1 = same shape as 1.1.0 plus the stricter checks INV-13 credit directions and INV-14 vertical consistency; 1.1.2 = same shape and checks as 1.1.1 plus INV-15 vertical stop/target comparison direction. Integer open_interest applies to all (integral floats like 472.0 still validate). 1.1.3 = same shape as 1.1.2 plus stricter checks on 1.1.3 records only: INV-03 leg/contract/fill uniqueness, INV-04 fill/leg_mark leg and contract resolution, INV-05 flag acknowledgement and specific error ids, INV-06 approval status/ticket/terms at fills, INV-16 overall verdict = aggregate of rule results. Records 1.0.0-1.1.2 validate exactly as before (same error strings)."
     },
     "session": {
       "type": "object",
@@ -411,7 +413,7 @@
       }
     },
     "premarket_scans": {
-      "description": "(v1.1, 1.1.0 / 1.1.1 / 1.1.2 records only) one premarket scan per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'premarket_scan', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+      "description": "(v1.1, 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 records only) one premarket scan per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'premarket_scan', if present, is kept for v1 readers and must be one of these entries (same run_id).",
       "type": "array",
       "items": {
         "$ref": "#/properties/premarket_scan"
@@ -482,7 +484,7 @@
       }
     },
     "global_snapshots": {
-      "description": "(v1.1, 1.1.0 / 1.1.1 / 1.1.2 records only) one global snapshot per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'global_snapshot', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+      "description": "(v1.1, 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 records only) one global snapshot per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'global_snapshot', if present, is kept for v1 readers and must be one of these entries (same run_id).",
       "type": "array",
       "items": {
         "$ref": "#/properties/global_snapshot"
@@ -1180,19 +1182,21 @@
                   "FLAG",
                   "VETO"
                 ],
-                "description": "VETO if any rule VETO or any hard rule UNKNOWN; else FLAG if any FLAG or soft UNKNOWN; else PASS"
+                "description": "VETO if any rule VETO or any hard rule UNKNOWN; else FLAG if any FLAG or soft UNKNOWN; else PASS; 1.1.3 records: must equal risk_reference.overall(results) (INV-16), as must blocking_rule_ids and flag_rule_ids (as sets)"
               },
               "blocking_rule_ids": {
                 "type": "array",
                 "items": {
                   "type": "string"
-                }
+                },
+                "description": "rule_ids whose result is VETO, or UNKNOWN with severity hard (1.1.3: INV-16)"
               },
               "flag_rule_ids": {
                 "type": "array",
                 "items": {
                   "type": "string"
-                }
+                },
+                "description": "rule_ids whose result is FLAG, or UNKNOWN with severity soft; an approval must acknowledge each (1.1.3: INV-05)"
               },
               "approval_required": {
                 "const": true,
@@ -1244,7 +1248,7 @@
       }
     },
     "approvals": {
-      "description": "Contract-level approvals. Bound to exact legs + quantity + limit; any change requires a new approval. Never valid for a VETO review.",
+      "description": "Contract-level approvals. Bound to exact legs + quantity + limit; any change requires a new approval. Never valid for a VETO review. The approval state is approvals[].status (canonical; there is no 'decision' field and additionalProperties is false, so a 'decision' key is a schema error): only 'active' is a usable approval; 'expired', 'revoked', 'consumed' or no approval mean NOT approved for a new entry. A rejected idea is idea_log current_status 'rejected', not an approval field.",
       "type": "array",
       "items": {
         "type": "object",
@@ -1323,7 +1327,7 @@
             "items": {
               "type": "string"
             },
-            "description": "FLAG rule_ids the approver explicitly accepted"
+            "description": "FLAG rule_ids the approver explicitly accepted. 1.1.3 (INV-05): must equal the review's flagged rule_ids exactly (FLAG or soft UNKNOWN results): no missing, no extra, no duplicates; empty or absent for a PASS review."
           },
           "status": {
             "enum": [
@@ -1331,10 +1335,12 @@
               "expired",
               "revoked",
               "consumed"
-            ]
+            ],
+            "description": "Canonical approval state (consumers must read this field; there is no 'decision' field). active = approved and usable until expires_at; consumed = used by a paper position; expired / revoked = not approved. 1.1.3 (INV-06): an opening fill is valid only while the approval is active (status_changed_at strictly after the fill for any non-active status)."
           },
           "status_changed_at": {
-            "$ref": "#/$defs/TsPair"
+            "$ref": "#/$defs/TsPair",
+            "description": "when status last changed; 1.1.3: required for any status other than 'active' (INV-06)"
           }
         }
       }
@@ -2580,5 +2586,6 @@
       "credit target_rules conditions (1.1.1, 1.1.2)": "up",
       "other / watcher conditions": "any (consistency only); credit in 1.1.0 records: any"
     }
-  }
+  },
+  "x-validator-contract": "validate_session.py CLI: exit 0 only when every given file was read, parsed as a JSON object and validated with no errors; exit 1 when any record has schema/invariant errors (an unknown schema_version is a schema error); exit 2 when any file cannot be read or parsed, is not a JSON object, or the validator raises. Consumers must treat any non-zero exit, and a missing or unimportable validate_session.py, as FAIL (fail closed)."
 }

@@ -1,9 +1,11 @@
-"""Reference evaluator for watcher_rules.yaml (alert-only Watcher, spec v1.1).
+"""Reference evaluator for watcher_rules.yaml (alert-only Watcher, spec v1.1; target_from_session added in spec 1.1.3).
 
 Purpose: prove the watcher rules are unambiguous. Not production code.
 poll(inp, state) is a pure function: it returns the alerts to SEND for this poll, the new
 dedupe/cooldown/streak state, and the seconds until the next poll (None = market closed).
 It never creates, changes or cancels an order: every alert message ends with "alert only, no order".
+Approval state (target_from_session / real_approval) is read ONLY from approvals[].status; there is no
+'decision' field (see watcher_rules.md "Approval state").
 """
 from __future__ import annotations
 
@@ -301,3 +303,66 @@ def poll(inp: dict, state: dict | None = None, wr: dict | None = None, cal: rr.C
                     for l in w.legs)
     nxt = cfg["fast_poll_seconds"] if (w.near or last_hour) else cfg["poll_seconds"]
     return sent_alerts, state, nxt
+
+
+# ------------------------------------------------- session -> ticket target (spec 1.1.3, FIX-SEC-001)
+# APPROVAL STATE IS READ ONLY FROM approvals[].status. There is no 'decision' field in the schema (approval objects have
+# additionalProperties: false, so a record carrying 'decision' is schema-invalid); never read, trust or fall back to it.
+def real_approval(sess: dict, ticket_id: str, now: str | None = None) -> dict | None:
+    """The approval that makes `ticket_id` really approved, or None.
+
+    The canonical approval field is approvals[].status (there is no 'decision' field). An approval counts only if
+    status == 'active', it is for this ticket, it is not expired at `now` (approved_at <= now < expires_at; any time
+    when now is None), and it passes the 1.1.3 approval checks (validate_session.approval_errors: not a VETO review,
+    same ticket, legs/qty/limit equal the ticket, every flag acknowledged). 'expired', 'revoked', 'consumed' or no
+    approval -> None."""
+    import validate_session as vs  # local import: the validator loads the schema at import time
+
+    tk = next((t for t in sess.get("tickets", []) if t["ticket_id"] == ticket_id), None)
+    rvs = {r["review_id"]: r for r in sess.get("risk_reviews", [])}
+    t = ts(now) if now else None
+    for a in sess.get("approvals", []):
+        if a.get("ticket_id") != ticket_id or a.get("status") != "active":
+            continue
+        if t is not None and not (ts(a["approved_at"]["ny"]) <= t < ts(a["expires_at"]["ny"])):
+            continue
+        rv = rvs.get(a.get("review_id"))
+        if rv is None or tk is None or vs.approval_errors(a, rv, tk):
+            continue
+        return a
+    return None
+
+
+def target_from_session(sess: dict, ticket_id: str, now: str | None = None) -> dict:
+    """Watcher target for a ticket, derived from a session record (scope in watcher_rules.yaml).
+
+    Order matters (VETO first, so an approval can never un-veto a ticket):
+      1. the latest risk review of the ticket is VETO (recorded verdict or what its rule results give), or any approval of
+         the ticket points at a VETO review, or the idea is 'vetoed'  -> status 'vetoed'   (shadow only)
+      2. idea 'rejected'                                               -> status 'rejected' (shadow only)
+      3. idea 'approved_pending' / 'approved' / no idea               -> status 'approved_pending' (watched pre-entry);
+         approved = a real approval exists (real_approval), hypothetical = not approved
+      4. any other idea status (proposed, simulated, executed, closed) -> that status (not watched as a ticket;
+         an entered trade is watched as its paper position)."""
+    reviews = sorted((r for r in sess.get("risk_reviews", []) if r["ticket_id"] == ticket_id),
+                     key=lambda r: ts(r["evaluated_at"]["ny"]))
+    rv_by_id = {r["review_id"]: r for r in sess.get("risk_reviews", [])}
+    idea = next((i for i in sess.get("idea_log", []) if i.get("ticket_id") == ticket_id), None)
+    istatus = idea["current_status"] if idea else None
+
+    import validate_session as vs
+
+    def veto(rv):  # recorded VETO, derived VETO, or no rule results (fail closed)
+        return rv is not None and vs.review_is_veto(rv)
+
+    base = {"kind": "ticket", "id": ticket_id, "ticket_id": ticket_id}
+    if (reviews and veto(reviews[-1])) or istatus == "vetoed" or any(
+            veto(rv_by_id.get(a.get("review_id"))) for a in sess.get("approvals", []) if a.get("ticket_id") == ticket_id):
+        return {**base, "status": "vetoed", "approved": False, "hypothetical": True, "approval_id": None}
+    if istatus == "rejected":
+        return {**base, "status": "rejected", "approved": False, "hypothetical": True, "approval_id": None}
+    if istatus in (None, "approved_pending", "approved"):
+        a = real_approval(sess, ticket_id, now)
+        return {**base, "status": "approved_pending", "approved": a is not None, "hypothetical": a is None,
+                "approval_id": a["approval_id"] if a else None}
+    return {**base, "status": istatus, "approved": False, "hypothetical": True, "approval_id": None}

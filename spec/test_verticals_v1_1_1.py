@@ -222,12 +222,12 @@ def sync_approvals(s):
 
 
 def test_example_is_1_1_2_and_passes_inv14():
-    assert EXAMPLE["schema_version"] == "1.1.2" and vs.validate(EXAMPLE) == []
+    assert EXAMPLE["schema_version"] == "1.1.3" and vs.validate(EXAMPLE) == []   # example tracks current version
     assert vs.vertical_errors(tk(EXAMPLE)) == []
 
 
 def test_inv14_only_for_1_1_1_and_later():
-    for version in ("1.1.0", "1.1.1", "1.1.2"):
+    for version in ("1.1.0", "1.1.1", "1.1.2", "1.1.3"):
         s = ex(version); tk(s)["max_loss"]["amount_usd"] = 350.0
         e = [x for x in vs.validate(s) if x.startswith("INV-14")]
         assert bool(e) == (version != "1.1.0"), e

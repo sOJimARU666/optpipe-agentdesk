@@ -36,6 +36,7 @@ from typing import Any, Callable, Optional, Protocol
 
 import yaml
 
+from ..records.guards import effective_verdict, latest_review, review_errors
 from ..risk.engine import Calendar
 from . import engine as spec_engine
 from .engine import BERLIN, NY, SHADOW, mark_of
@@ -234,8 +235,33 @@ class Target:
 
 
 def _latest_review(rec: dict, tid: str) -> Optional[dict]:
-    rv = [r for r in rec.get("risk_reviews") or [] if r["ticket_id"] == tid]
-    return rv[-1] if rv else None
+    """The ticket's latest review by `evaluated_at`, stable tie-break = last listed (spec/watcher_reference.py
+    target_from_session, watcher_rules.md 'VETO comes first'). Never by list position alone (FIX-SEC-001 R1)."""
+    return latest_review(r for r in rec.get("risk_reviews") or [] if r.get("ticket_id") == tid)
+
+
+def _veto_reasons(rec: dict, tid: str, rv: Optional[dict], istat: str) -> list[str]:
+    """Why the ticket is vetoed ([] when it is not), VETO first so an approval can never un-veto a ticket
+    (spec/watcher_reference.py:336-362, watcher_rules.md:15):
+      - its latest review (by evaluated_at) is VETO: recorded, derived from its rule results, empty, or tampered;
+      - any approval of the ticket points at a VETO review;
+      - an undated review of the ticket is VETO (cannot be ordered, so fail closed);
+      - the idea_log says vetoed."""
+    out: list[str] = []
+    if rv is not None and effective_verdict(rv) == "VETO":
+        out.append("; ".join(review_errors(rv)) or ", ".join(rv.get("overall", {}).get("blocking_rule_ids") or [])
+                   or f"latest review {rv.get('review_id')} is VETO")
+    reviews = {r.get("review_id"): r for r in rec.get("risk_reviews") or []}
+    for a in rec.get("approvals") or []:
+        arv = reviews.get(a.get("review_id"))
+        if a.get("ticket_id") == tid and arv is not None and arv is not rv and effective_verdict(arv) == "VETO":
+            out.append(f"approval {a.get('approval_id')} points at VETO review {arv.get('review_id')}")
+    for r in rec.get("risk_reviews") or []:
+        if r.get("ticket_id") == tid and r is not rv and _when(r.get("evaluated_at")) is None and effective_verdict(r) == "VETO":
+            out.append(f"undated VETO review {r.get('review_id')}")
+    if istat == "vetoed":
+        out.append("idea_log vetoed")
+    return out
 
 
 def _when(v) -> Optional[datetime]:
@@ -247,9 +273,9 @@ def _when(v) -> Optional[datetime]:
 
 def approval_blockers(rec: dict, appr: dict, now: datetime) -> list[str]:
     """Why an approval must NOT be honoured at `now`: [] when it stands. Status must be `active`, `now` must be
-    inside [approved_at, expires_at), and records/guards.approval_errors (unacknowledged flags, review whose rule
-    results veto) must be clean. Reads `status`, never a `decision` field (not in Doodle's approval schema)."""
-    from ..records.guards import approval_errors
+    inside [approved_at, expires_at), and records/guards review_errors + approval_errors (INV-16 tampered overall,
+    INV-05 unacknowledged flags / VETO review / foreign ticket / terms) must be clean. Reads `status`, never a `decision` field (not in Doodle's approval schema)."""
+    from ..records.guards import approval_errors, review_errors
     aid = appr.get("approval_id")
     st = appr.get("status")
     if st != "active":
@@ -264,7 +290,8 @@ def approval_blockers(rec: dict, appr: dict, now: datetime) -> list[str]:
     rv = reviews.get(appr.get("review_id"))
     if rv is None:
         return [f"approval {aid} references unknown review {appr.get('review_id')!r}"]
-    return approval_errors(appr, rv)
+    tk = next((t for t in rec.get("tickets") or [] if t.get("ticket_id") == appr.get("ticket_id")), None)
+    return [*review_errors(rv), *approval_errors(appr, rv, tk)]
 
 
 def _pick_approval(rec: dict, tid: str, now: datetime) -> tuple[Optional[dict], list[str]]:
@@ -279,21 +306,27 @@ def _pick_approval(rec: dict, tid: str, now: datetime) -> tuple[Optional[dict], 
     return (active or checked or [(None, [])])[-1]
 
 
-def targets_from_session(rec: dict, now: Optional[datetime] = None) -> list[Target]:
-    """Targets at `now` (the watch start; default: the current time, so a stale approval is never honoured)."""
-    now = now or datetime.now(NY)
+def targets_from_session(rec: dict, now: datetime) -> list[Target]:
+    """Targets at `now` (the watch start). `now` is required: there is no wall-clock default, so a caller can never
+    honour an approval against the wrong time (FIX-SEC-001 N7).
+
+    Deliberate divergence from spec/watcher_reference.py (N4): a `revoked` approval maps to `rejected` (shadow only,
+    more conservative) where the reference gives `approved_pending` hypothetical. Neither treats it as approved."""
+    if not isinstance(now, datetime):
+        raise TypeError("targets_from_session: `now` must be a datetime (the watch start)")
     ideas = {i.get("ticket_id"): i for i in rec.get("idea_log") or []}
     out = []
     for tk in rec.get("tickets") or []:
         tid = tk["ticket_id"]
         idea = ideas.get(tid) or {}
         rv = _latest_review(rec, tid)
-        verdict = (rv or {}).get("overall", {}).get("verdict")
+        verdict = effective_verdict(rv) if rv else None      # a tampered/empty review is VETO (INV-16, FIX-SEC-001)
         istat = idea.get("current_status", "proposed")
         appr, blockers = _pick_approval(rec, tid, now)
         astat = (appr or {}).get("status")
-        if verdict == "VETO" or istat == "vetoed":
-            why = ", ".join((rv or {}).get("overall", {}).get("blocking_rule_ids") or []) or "idea_log vetoed"
+        vetoes = _veto_reasons(rec, tid, rv, istat)
+        if vetoes:
+            why = "; ".join(vetoes)
             out.append(Target(tid, "ticket", tid, "vetoed", istat, True, False, tk,
                               f"VETOED ({why}): shadow only, end-of-day summary, no intraday alerts"))
         elif istat == "rejected" or astat == "revoked":
@@ -420,9 +453,10 @@ def _rel(p) -> str:
 
 class Watcher:
     def __init__(self, rec: dict, rules: dict, cal: Calendar, source: QuoteSource,
-                 engine: Optional[RuleEngine] = None, session_path: Optional[Path] = None,
-                 now: Optional[datetime] = None):
-        """`now` = the watch start (the clock's first reading): approvals are judged valid or not at that time."""
+                 engine: Optional[RuleEngine] = None, session_path: Optional[Path] = None, *,
+                 now: datetime):
+        """`now` = the watch start (the clock's first reading): approvals are judged valid or not at that time.
+        Required, keyword-only (FIX-SEC-001 N7): no wall-clock fallback."""
         spec_engine.check_rules(rules)
         self.rec, self.rules, self.cal, self.source = rec, rules, cal, source
         self.engine = engine or SpecEngine()

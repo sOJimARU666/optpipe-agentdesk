@@ -12,6 +12,7 @@ from typing import Any, Optional
 from ..agent import Agent
 from ..models.contracts import RiskInput, RiskOutput
 from ..records.fields import tspair
+from ..records.guards import effective_verdict
 from .adapter import review_input_from_session
 from .engine import evaluate
 from .ruleset import Ruleset
@@ -64,11 +65,11 @@ class RiskOfficerAgent(Agent[RiskInput, RiskOutput]):
 
     def summarize_output(self, out: RiskOutput) -> dict[str, Any]:
         d = out.model_dump(mode="json")["risk_reviews"]
-        return {r["ticket_id"]: {"verdict": r["overall"]["verdict"], "blocking": r["overall"]["blocking_rule_ids"],
+        return {r["ticket_id"]: {"verdict": effective_verdict(r), "blocking": r["overall"]["blocking_rule_ids"],
                                  "flags": r["overall"]["flag_rule_ids"]} for r in d}
 
     def verdict(self, out: RiskOutput) -> Optional[str]:
         d = out.model_dump(mode="json")["risk_reviews"]
-        ok = [r["ticket_id"] for r in d if r["overall"]["verdict"] != "VETO"]
+        ok = [r["ticket_id"] for r in d if effective_verdict(r) != "VETO"]
         return (f"{len(ok)} ticket(s) not vetoed (still need Eugene's approval): {', '.join(ok)}" if ok
                 else "every ticket VETO -> NO TRADE")

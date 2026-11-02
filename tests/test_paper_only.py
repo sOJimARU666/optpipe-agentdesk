@@ -395,8 +395,10 @@ def test_watcher_never_force_closes(rec, settings, spec):
     from optpipe.watcher import WatcherAgent
     import copy
     r = copy.deepcopy(rec)
-    for rv in r["risk_reviews"]:
-        rv["overall"]["verdict"] = "PASS"
+    for rv in r["risk_reviews"]:              # an honest PASS: results and overall agree (INV-16, FIX-SEC-001)
+        for x in rv["results"]:
+            x["result"] = "PASS"
+        rv["overall"].update(verdict="PASS", blocking_rule_ids=[], flag_rule_ids=[])
     from optpipe.models.contracts import WatcherInput
     rules = WatcherAgent().run(WatcherInput(tickets=r["tickets"], risk_reviews=r["risk_reviews"]))
     rules = rules.model_dump(mode="json")["watcher_rules"]

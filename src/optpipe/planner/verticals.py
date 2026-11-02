@@ -182,7 +182,7 @@ def direction_errors(t: dict) -> list[str]:
     return out
 
 
-def validate_vertical(t: dict, schema_version: str = "1.1.2") -> list[str]:
+def validate_vertical(t: dict, schema_version: str = "1.1.3") -> list[str]:
     """Vertical checks for one ticket ([] = OK) as they apply to a record of `schema_version`:
     INV-14 from 1.1.1, plus INV-15 (stop/target op) from 1.1.2. Non-vertical strategies return []."""
     if not is_vertical(t.get("strategy", "")) or _ver(schema_version) < INV14_FROM:

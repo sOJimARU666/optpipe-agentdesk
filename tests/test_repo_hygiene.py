@@ -46,8 +46,18 @@ def _hits(rx, allow=lambda n, m: False):
             for m in rx.finditer(line) if not allow(n, m)]
 
 
+# Doodle's pinned spec 1.1.3 (byte-checked by scripts/sync_spec.py --check, never edited here) has one optional,
+# local-only fixture location in its back-compat test (`if p.is_file()`). Allowed for that file and prefix only;
+# raised with Doodle to drop in the next release.
+PINNED_SPEC_ABS_ALLOW = {("spec/test_invariants_v1_1_3.py", "/tmp/pv2/")}
+
+
+def _abs_allowed(n, m):
+    return n in ABS_ALLOW or any(n == f and m.group(0).startswith(pre) for f, pre in PINNED_SPEC_ABS_ALLOW)
+
+
 def test_no_absolute_box_paths():
-    assert _hits(ABS_PATH, lambda n, m: n in ABS_ALLOW) == []
+    assert _hits(ABS_PATH, _abs_allowed) == []
 
 
 def test_no_secrets_or_tokens():

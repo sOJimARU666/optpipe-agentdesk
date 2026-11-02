@@ -11,6 +11,7 @@ from typing import Any
 from ..agent import Agent
 from ..models.contracts import WatcherInput, WatcherOutput
 from ..records.fields import slug
+from ..records.guards import effective_verdict
 
 
 class WatcherAgent(Agent[WatcherInput, WatcherOutput]):
@@ -21,7 +22,7 @@ class WatcherAgent(Agent[WatcherInput, WatcherOutput]):
 
     def run(self, inp: WatcherInput) -> WatcherOutput:
         d = inp.model_dump(mode="json")
-        vetoed = {r["ticket_id"] for r in d["risk_reviews"] if r["overall"]["verdict"] == "VETO"}
+        vetoed = {r["ticket_id"] for r in d["risk_reviews"] if effective_verdict(r) == "VETO"}   # INV-16-safe
         rules = []
         for t in d["tickets"]:
             if t["ticket_id"] in vetoed:
