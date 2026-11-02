@@ -18,7 +18,8 @@ def test_serve_default_host_is_127_0_0_1(runs, tmp_path):
     assert len(runs) == 1 and runs[0]["host"] == "127.0.0.1"
 
 
-@pytest.mark.parametrize("host", ["0.0.0.0", "::", "", "192.168.1.5", "10.0.0.1", "example.com", "localhost"])
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "[::]", "", " ", "*", "0", "::0", "0:0:0:0:0:0:0:0", "[::1]", " ::1",
+                                  "::ffff:127.0.0.1", "127.0.0.2", "192.168.1.5", "10.0.0.1", "example.com", "localhost"])
 def test_serve_refuses_all_interfaces(runs, tmp_path, capsys, host):
     assert cli.main(["serve", "--out", str(tmp_path), "--host", host]) == 2
     assert runs == []                                    # uvicorn.run never called
