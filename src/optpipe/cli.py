@@ -46,8 +46,9 @@ def summary(rec: dict, trace) -> str:
     lines.append(f"data quality: {len(dq['missing'])} missing, {len(dq['stale'])} stale, "
                  f"{len(dq['conflicting'])} conflicting")
     v = rt.validation
-    lines.append(f"validate_session: {'OK' if not v.get('errors') else str(len(v['errors'])) + ' error(s)'}"
-                 f"{'' if v.get('validator') else ' (spec validator not found)'} (record {rec['schema_version']}, Doodle's schema)")
+    ok = not v.get("errors") and bool(v.get("validator"))     # never OK without the validator (FIX-SEC-001 P0-5)
+    lines.append(f"validate_session: {'OK' if ok else str(len(v.get('errors') or [])) + ' error(s)'}"
+                 f"{'' if v.get('validator') else ' (spec validator unavailable: NOT validated)'} (record {rec['schema_version']}, Doodle's schema)")
     lines.append("trace: " + " -> ".join(f"{s.stage}({s.duration_ms:.0f}ms)" for s in rt.steps))
     return "\n".join(lines)
 
@@ -175,9 +176,10 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if a.cmd == "validate":
         import json
-        mod = discover(settings.spec_path).load_module("session_validator")
+        from .orchestrator import load_validator
+        mod, err = load_validator(discover(settings.spec_path))
         if mod is None:
-            print("spec validate_session.py not found"); return 2
+            print(err, file=sys.stderr); return 2
         errs = list(mod.validate(json.loads(Path(a.file).read_text()), base_dir=Path(a.file).resolve().parent))
         from .records.store import verify_session_ref
         tp = Path(str(a.file).replace(".json", ".trace.json"))
@@ -190,7 +192,11 @@ def main(argv: list[str] | None = None) -> int:
         print("\n".join(errs) if errs else "OK: 0 errors")
         return 1 if errs else 0
 
-    from .orchestrator import load_inputs, run_session
+    from .orchestrator import load_inputs, load_validator, run_session
+    _, verr = load_validator(discover(settings.spec_path))
+    if verr:                                   # fail closed before anything is run or written (FIX-SEC-001 P0-5)
+        print(f"optpipe run: refusing to run without Doodle's session validator.\n{verr}", file=sys.stderr)
+        return 2
     fixtures = None if a.live else Path(a.fixtures)
     ip = a.inputs or (fixtures / "session_inputs.yaml" if fixtures and (fixtures / "session_inputs.yaml").exists() else None)
     inputs = load_inputs(ip)
@@ -208,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
     ferrs = validate_file(settings, w.json)
     print(f"wrote {w.json}  sha256 {w.json_sha256}  (schema {rec['schema_version']}, trace_ref -> {w.trace.name})\n"
           f"wrote {w.trace}  sha256 {w.trace_sha256}\nwrote {w.md}")
-    if ferrs is not None:
+    if ferrs is not None:                      # always a list now; a missing validator is an error in it
         print(f"validate_session {w.json.name}: " + (f"OK as {rec['schema_version']} (schema + invariants INV-01..{ {'1.1.2': '15', '1.1.1': '14'}.get(rec['schema_version'], '13') })" if not ferrs
                                                      else f"{len(ferrs)} error(s)\n  " + "\n  ".join(ferrs[:20])))
     v = trace.runs[-1].validation
