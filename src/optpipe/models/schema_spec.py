@@ -4,7 +4,7 @@ Regenerate: .venv/bin/python scripts/gen_models.py
 """
 from __future__ import annotations
 
-SCHEMA_SHA256 = "369398df79262e379140955299d4cad7522b9f0bb6523274a06f301cf9e5e42b"
+SCHEMA_SHA256 = "6da9bf27541602553069681b24508d9d18b6275c33dee0b1719a2c13a92a268f"
 SCHEMA_SOURCE = "<spec>/session.schema.json"
 
 from datetime import date as date_aliased
@@ -35,6 +35,8 @@ class SchemaVersion(Enum):
     field_1_1_1 = '1.1.1'
     field_1_1_2 = '1.1.2'
     field_1_1_3 = '1.1.3'
+    field_1_1_4 = '1.1.4'
+    field_1_1_5 = '1.1.5'
 
 
 class NyBerlinOffsetHours(IntEnum):
@@ -1346,7 +1348,7 @@ class PaperUSOptionsTradingSessionRecord(BaseModel):
     )
     schema_version: SchemaVersion = Field(
         ...,
-        description="1.0.0 = v1 record; 1.1.0 = may use v1.1 additions (run phase 'closed', trace_ref, premarket_scans/global_snapshots, raw tick fields); 1.1.1 = same shape as 1.1.0 plus the stricter checks INV-13 credit directions and INV-14 vertical consistency; 1.1.2 = same shape and checks as 1.1.1 plus INV-15 vertical stop/target comparison direction. Integer open_interest applies to all (integral floats like 472.0 still validate). 1.1.3 = same shape as 1.1.2 plus stricter checks on 1.1.3 records only: INV-03 leg/contract/fill uniqueness, INV-04 fill/leg_mark leg and contract resolution, INV-05 flag acknowledgement and specific error ids, INV-06 approval status/ticket/terms at fills, INV-16 overall verdict = aggregate of rule results. Records 1.0.0-1.1.2 validate exactly as before (same error strings).",
+        description="1.0.0 = v1 record; 1.1.0 = may use v1.1 additions (run phase 'closed', trace_ref, premarket_scans/global_snapshots, raw tick fields); 1.1.1 = same shape as 1.1.0 plus the stricter checks INV-13 credit directions and INV-14 vertical consistency; 1.1.2 = same shape and checks as 1.1.1 plus INV-15 vertical stop/target comparison direction. Integer open_interest applies to all (integral floats like 472.0 still validate). 1.1.3 = same shape as 1.1.2 plus stricter checks on 1.1.3 records only: INV-03 leg/contract/fill uniqueness, INV-04 fill/leg_mark leg and contract resolution, INV-05 flag acknowledgement and specific error ids, INV-06 approval status/ticket/terms at fills, INV-16 overall verdict = aggregate of rule results. Records 1.0.0-1.1.2 validate exactly as before (same error strings). 1.1.4 = same shape and checks as 1.1.3 (no new invariants; spec 1.1.4 changed tests, fixtures and the watcher approval mapping only); everything described as '1.1.3 records' below applies to 1.1.4 records too, and 1.1.3 records validate exactly as before. 1.1.5 = same shape and checks as 1.1.3 / 1.1.4 (no new invariants; spec 1.1.5 changed the watcher target mapping only); everything described as '1.1.3 records' below applies to 1.1.5 records too, and 1.1.4 and older records validate exactly as before.",
     )
     session: Session
     sources: list[Source]
@@ -1358,12 +1360,12 @@ class PaperUSOptionsTradingSessionRecord(BaseModel):
     premarket_scan: PremarketScanModel
     premarket_scans: list[PremarketScan] | None = Field(
         None,
-        description="(v1.1, 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 records only) one premarket scan per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'premarket_scan', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+        description="(v1.1, 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 / 1.1.4 / 1.1.5 records only) one premarket scan per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'premarket_scan', if present, is kept for v1 readers and must be one of these entries (same run_id).",
     )
     global_snapshot: GlobalSnapshotModel
     global_snapshots: list[GlobalSnapshot] | None = Field(
         None,
-        description="(v1.1, 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 records only) one global snapshot per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'global_snapshot', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+        description="(v1.1, 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 / 1.1.4 / 1.1.5 records only) one global snapshot per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'global_snapshot', if present, is kept for v1 readers and must be one of these entries (same run_id).",
     )
     event_calendar: EventCalendar = Field(
         ...,

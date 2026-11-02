@@ -43,7 +43,7 @@ def _with_run(ny_wall: str, phase: str, version: str = "1.1.0") -> dict:
 
 
 def test_example_is_v1_1():
-    assert EXAMPLE["schema_version"] == "1.1.3"   # generated example tracks the current spec version
+    assert EXAMPLE["schema_version"] == "1.1.5"   # generated example tracks the current spec version
     assert vs.validate(EXAMPLE) == []
 
 

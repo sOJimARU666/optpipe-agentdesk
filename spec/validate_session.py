@@ -1,4 +1,4 @@
-"""Validate a session record (schema v1.0.0, v1.1.0, v1.1.1, v1.1.2 or v1.1.3): JSON Schema (draft 2020-12) + x-invariants INV-01..16.
+"""Validate a session record (schema v1.0.0, v1.1.0, v1.1.1, v1.1.2, v1.1.3, v1.1.4 or v1.1.5): JSON Schema (draft 2020-12) + x-invariants INV-01..16.
 Usage: python validate_session.py session.example.json [more.json ...]
 
 Exit codes (fail-closed contract, see AGENTS.md / CHANGELOG 1.1.3):
@@ -9,7 +9,9 @@ Consumers must treat ANY non-zero exit, and a missing or unimportable validate_s
 
 1.1.3 records get the stricter checks (INV-03/04 tightening, INV-05 flag acknowledgement + specific error ids,
 INV-06 approval status/ticket/terms checks, INV-16 overall-verdict consistency);
-1.0.0-1.1.2 records validate exactly as before (same error strings)."""
+1.0.0-1.1.2 records validate exactly as before (same error strings).
+1.1.4 adds no invariant: a 1.1.4 record gets exactly the 1.1.3 checks, and 1.1.3 records validate exactly as before.
+1.1.5 adds no invariant either (its rulings are watcher-only): a 1.1.5 record gets exactly the 1.1.3 / 1.1.4 checks."""
 from __future__ import annotations
 
 import hashlib
@@ -100,10 +102,10 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
             if is_field(o) and o["status"] in ("ok", "stale") and o["source_id"] in src:
                 if datetime.fromisoformat(o["as_of"]) > datetime.fromisoformat(src[o["source_id"]]["fetched_at"]):
                     errs.append(f"INV-09 {p} as_of after source fetch")
-    v11 = sess["schema_version"] in ("1.1.0", "1.1.1", "1.1.2", "1.1.3")   # v1.1 shape
-    v111 = sess["schema_version"] in ("1.1.1", "1.1.2", "1.1.3")          # stricter 1.1.1 checks (INV-13 credit, INV-14), kept in 1.1.2/1.1.3
-    v112 = sess["schema_version"] in ("1.1.2", "1.1.3")                   # 1.1.2 checks (INV-15 stop/target operators), kept in 1.1.3
-    v113 = sess["schema_version"] == "1.1.3"                              # 1.1.3 checks (INV-03/04/05/06 tightening, INV-16)
+    v11 = sess["schema_version"] in ("1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5")   # v1.1 shape
+    v111 = sess["schema_version"] in ("1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5")   # stricter 1.1.1 checks (INV-13 credit, INV-14), kept in 1.1.2+
+    v112 = sess["schema_version"] in ("1.1.2", "1.1.3", "1.1.4", "1.1.5") # 1.1.2 checks (INV-15 stop/target operators), kept in 1.1.3+
+    v113 = sess["schema_version"] in ("1.1.3", "1.1.4", "1.1.5")          # 1.1.3 checks (INV-03/04/05/06 tightening, INV-16), kept in 1.1.4 / 1.1.5 (no new invariants)
     # INV-10 run phase vs NY clock (v1.1 'closed')
     for r in sess["runs"]:
         closed = CAL.is_closed(datetime.fromisoformat(r["started"]["ny"]))

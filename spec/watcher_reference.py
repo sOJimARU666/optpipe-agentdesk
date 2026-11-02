@@ -1,4 +1,8 @@
-"""Reference evaluator for watcher_rules.yaml (alert-only Watcher, spec v1.1; target_from_session added in spec 1.1.3).
+"""Reference evaluator for watcher_rules.yaml (alert-only Watcher, spec v1.1; target_from_session added in spec 1.1.3;
+spec 1.1.4: a revoked approval makes the ticket target 'rejected', see APPROVAL_STATUS_TARGET;
+spec 1.1.5: a review failing INV-16 (stored overall != recomputed) is VETO for the watcher; executed / closed ideas keep
+their status; a revoked approval rejects every pre-execution ticket; a real approval needs an approved_pending / approved
+idea; see TARGET_PRECEDENCE).
 
 Purpose: prove the watcher rules are unambiguous. Not production code.
 poll(inp, state) is a pure function: it returns the alerts to SEND for this poll, the new
@@ -305,7 +309,46 @@ def poll(inp: dict, state: dict | None = None, wr: dict | None = None, cal: rr.C
     return sent_alerts, state, nxt
 
 
-# ------------------------------------------------- session -> ticket target (spec 1.1.3, FIX-SEC-001)
+# ------------------------------------------------- session -> ticket target (spec 1.1.3, FIX-SEC-001; 1.1.4/1.1.5 rulings)
+# Approval status -> ticket target (spec 1.1.4 ruling; mirrors watcher_rules.yaml scope.approval_status). 'real' = watched
+# as approved_pending with approved=True (only if the approval also passes real_approval: inside its window, clean INV-05
+# and INV-16); an active approval that fails those checks is hypothetical. 'revoked' is fail closed: Eugene withdrew the
+# approval, so the ticket is a rejected shadow, never a watched what-if (spec 1.1.5: for every pre-execution idea status;
+# an executed / closed idea keeps its status).
+APPROVAL_STATUS_TARGET = {
+    "active": "real",               # approved_pending, approved=True (else hypothetical if outside window / INV-05/16 fails)
+    "revoked": "rejected",          # spec 1.1.4: shadow only (was hypothetical in 1.1.3); 1.1.5: any pre-execution idea
+    "expired": "hypothetical",      # approved_pending, approved=False
+    "consumed": "hypothetical",     # approved_pending, approved=False (an entered trade is watched as its paper position)
+    "none": "hypothetical",         # missing: no approval for the ticket
+}
+# Full precedence of target_from_session (spec 1.1.5; mirrors watcher_rules.yaml scope.target_precedence). First match wins.
+TARGET_PRECEDENCE = (
+    "vetoed",            # 1. latest review blocked (VETO recorded/derived, no results, or INV-16 inconsistent), any approval
+                         #    of the ticket on a blocked review, or idea 'vetoed'
+    "terminal",          # 2. idea 'executed' / 'closed' keeps its status (a revoked approval does not relabel it; the
+                         #    trade is watched by the position rules)
+    "rejected",          # 3. pre-execution idea (any other status, or no idea): idea 'rejected', or any 'revoked' approval
+                         #    of the ticket and no real approval
+    "approved_pending",  # 4a. idea approved_pending / approved / none: real approval -> approved; else hypothetical
+    "idea_status",       # 4b. any other non-approved idea status (proposed, simulated, ...) -> passed through, not watched
+)
+TERMINAL_IDEA_STATUSES = ("executed", "closed")
+APPROVED_IDEA_STATUSES = ("approved_pending", "approved")   # the only idea statuses that admit a real approval (step 5)
+
+
+def review_blocked(rv: dict | None) -> bool:
+    """The watcher treats a review as VETO (blocked) when validate_session.review_is_veto (recorded VETO, derived VETO
+    from the rule results, or no results) OR when it fails INV-16 (validate_session.overall_errors: stored verdict /
+    blocking ids / flag ids differ from risk_reference.overall(results)), e.g. 'tampered_pass': a stored PASS over a
+    VETO, a hard UNKNOWN or a FLAG. Spec 1.1.5 ruling (fail closed, matches optpipe effective_verdict). Applied to every
+    record the watcher reads, whatever its schema_version (the validator gates INV-16 as a record error to 1.1.3+; the
+    watcher must still never act on a tampered older record). None (no review) is not blocked."""
+    import validate_session as vs  # local import: the validator loads the schema at import time
+
+    return rv is not None and (vs.review_is_veto(rv) or bool(vs.overall_errors(rv)))
+
+
 # APPROVAL STATE IS READ ONLY FROM approvals[].status. There is no 'decision' field in the schema (approval objects have
 # additionalProperties: false, so a record carrying 'decision' is schema-invalid); never read, trust or fall back to it.
 def real_approval(sess: dict, ticket_id: str, now: str | None = None) -> dict | None:
@@ -313,11 +356,18 @@ def real_approval(sess: dict, ticket_id: str, now: str | None = None) -> dict | 
 
     The canonical approval field is approvals[].status (there is no 'decision' field). An approval counts only if
     status == 'active', it is for this ticket, it is not expired at `now` (approved_at <= now < expires_at; any time
-    when now is None), and it passes the 1.1.3 approval checks (validate_session.approval_errors: not a VETO review,
-    same ticket, legs/qty/limit equal the ticket, every flag acknowledged). 'expired', 'revoked', 'consumed' or no
-    approval -> None."""
-    import validate_session as vs  # local import: the validator loads the schema at import time
+    when now is None), it passes the 1.1.3 approval checks (validate_session.approval_errors: not a VETO review,
+    same ticket, legs/qty/limit equal the ticket, every flag acknowledged) and (spec 1.1.5) its review passes INV-16
+    (validate_session.overall_errors: the stored overall verdict / ids equal the recomputed ones). 'expired', 'revoked',
+    'consumed' or no approval -> None (target_from_session then maps a revoked approval to 'rejected', the rest to
+    hypothetical; an approval on an INV-16-inconsistent review makes the ticket 'vetoed').
+    Spec 1.1.5 (step 5 of the precedence): the ticket's idea must be approved_pending or approved; an active approval on
+    an idea that is proposed, simulated, executed, closed, ... or on a ticket with no idea is NEVER a real approval."""
+    import validate_session as vs
 
+    idea = next((i for i in sess.get("idea_log", []) if i.get("ticket_id") == ticket_id), None)
+    if idea is None or idea.get("current_status") not in APPROVED_IDEA_STATUSES:
+        return None
     tk = next((t for t in sess.get("tickets", []) if t["ticket_id"] == ticket_id), None)
     rvs = {r["review_id"]: r for r in sess.get("risk_reviews", [])}
     t = ts(now) if now else None
@@ -327,42 +377,52 @@ def real_approval(sess: dict, ticket_id: str, now: str | None = None) -> dict | 
         if t is not None and not (ts(a["approved_at"]["ny"]) <= t < ts(a["expires_at"]["ny"])):
             continue
         rv = rvs.get(a.get("review_id"))
-        if rv is None or tk is None or vs.approval_errors(a, rv, tk):
+        if rv is None or tk is None or vs.approval_errors(a, rv, tk) or vs.overall_errors(rv):
             continue
         return a
     return None
 
 
 def target_from_session(sess: dict, ticket_id: str, now: str | None = None) -> dict:
-    """Watcher target for a ticket, derived from a session record (scope in watcher_rules.yaml).
+    """Watcher target for a ticket, derived from a session record (scope in watcher_rules.yaml / watcher_rules.md).
 
-    Order matters (VETO first, so an approval can never un-veto a ticket):
-      1. the latest risk review of the ticket is VETO (recorded verdict or what its rule results give), or any approval of
-         the ticket points at a VETO review, or the idea is 'vetoed'  -> status 'vetoed'   (shadow only)
-      2. idea 'rejected'                                               -> status 'rejected' (shadow only)
-      3. idea 'approved_pending' / 'approved' / no idea               -> status 'approved_pending' (watched pre-entry);
-         approved = a real approval exists (real_approval), hypothetical = not approved
-      4. any other idea status (proposed, simulated, executed, closed) -> that status (not watched as a ticket;
-         an entered trade is watched as its paper position)."""
+    Precedence (TARGET_PRECEDENCE, spec 1.1.5; first match wins):
+      1. VETO first: the latest risk review of the ticket (by evaluated_at) is blocked (review_blocked: recorded VETO,
+         derived VETO, no rule results, or INV-16 inconsistent, e.g. tampered_pass), or any approval of the ticket
+         points at a blocked review, or the idea is 'vetoed'                          -> 'vetoed' (shadow only)
+      2. Terminal lifecycle: the idea is 'executed' or 'closed'                       -> that status (not watched as a
+         ticket; the trade is watched by the position rules). A revoked approval does not relabel it.
+      3. Pre-execution idea (any other status, or no idea): the idea is 'rejected', or any approval of the ticket is
+         'revoked' and there is no real approval (5)                                  -> 'rejected' (shadow only)
+      4. a. idea 'approved_pending' / 'approved' / no idea: real approval (5)         -> 'approved_pending', approved
+            otherwise (expired / consumed / active but not real / none)               -> 'approved_pending', hypothetical
+         b. any other non-approved idea status (proposed, simulated, ...)             -> that status (not watched)
+      5. A real approval (real_approval) needs the idea approved_pending / approved AND status 'active', inside its
+         window, INV-05 clean and INV-16 clean. An active approval on a proposed / simulated idea (or no idea) is
+         never real."""
     reviews = sorted((r for r in sess.get("risk_reviews", []) if r["ticket_id"] == ticket_id),
                      key=lambda r: ts(r["evaluated_at"]["ny"]))
     rv_by_id = {r["review_id"]: r for r in sess.get("risk_reviews", [])}
     idea = next((i for i in sess.get("idea_log", []) if i.get("ticket_id") == ticket_id), None)
     istatus = idea["current_status"] if idea else None
-
-    import validate_session as vs
-
-    def veto(rv):  # recorded VETO, derived VETO, or no rule results (fail closed)
-        return rv is not None and vs.review_is_veto(rv)
+    mine = [a for a in sess.get("approvals", []) if a.get("ticket_id") == ticket_id]
 
     base = {"kind": "ticket", "id": ticket_id, "ticket_id": ticket_id}
-    if (reviews and veto(reviews[-1])) or istatus == "vetoed" or any(
-            veto(rv_by_id.get(a.get("review_id"))) for a in sess.get("approvals", []) if a.get("ticket_id") == ticket_id):
-        return {**base, "status": "vetoed", "approved": False, "hypothetical": True, "approval_id": None}
-    if istatus == "rejected":
-        return {**base, "status": "rejected", "approved": False, "hypothetical": True, "approval_id": None}
-    if istatus in (None, "approved_pending", "approved"):
-        a = real_approval(sess, ticket_id, now)
+    shadow = {"approved": False, "hypothetical": True, "approval_id": None}
+    # 1. VETO first (INV-16-inconsistent reviews count as VETO, spec 1.1.5)
+    if (reviews and review_blocked(reviews[-1])) or istatus == "vetoed" or any(
+            review_blocked(rv_by_id.get(a.get("review_id"))) for a in mine):
+        return {**base, "status": "vetoed", **shadow}
+    # 2. terminal lifecycle keeps its status (positions are watched by the position rules)
+    if istatus in TERMINAL_IDEA_STATUSES:
+        return {**base, "status": istatus, **shadow}
+    # 3. pre-execution: idea rejected, or a revoked approval with no real approval
+    a = real_approval(sess, ticket_id, now)
+    if istatus == "rejected" or (a is None and any(x.get("status") == "revoked" for x in mine)):
+        return {**base, "status": "rejected", **shadow}
+    # 4a. watched ticket: real or hypothetical
+    if istatus in (None, *APPROVED_IDEA_STATUSES):
         return {**base, "status": "approved_pending", "approved": a is not None, "hypothetical": a is None,
                 "approval_id": a["approval_id"] if a else None}
-    return {**base, "status": istatus, "approved": False, "hypothetical": True, "approval_id": None}
+    # 4b. any other non-approved idea status passes through (never really approved)
+    return {**base, "status": istatus, **shadow}

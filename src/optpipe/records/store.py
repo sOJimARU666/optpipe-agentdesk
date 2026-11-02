@@ -1,6 +1,6 @@
 """Persistence. Owner: Doodle (schema) / Poodle (code). Writes only to the local output directory.
 
-  session-<date>.json          canonical record, schema 1.1.3 (Doodle's spec 1.1.3) <- validate_session.py
+  session-<date>.json          canonical record, schema 1.1.5 (Doodle's spec 1.1.5) <- validate_session.py
                                per-run premarket_scans[]/global_snapshots[] + the singular v1 objects,
                                phase "closed", raw tick fields, trace_ref {path, sha256} -> trace (INV-11)
   session-<date>.trace.json    hand-off trace; session_ref = {path, sha256, sha256_covers, schema_version}.

@@ -49,7 +49,7 @@ def hypothetical(rec: dict) -> dict:
             x["result"] = "PASS"
         rv["overall"].update(verdict="PASS", blocking_rule_ids=[], flag_rule_ids=[])
     for i in r["idea_log"]:
-        i["current_status"] = "proposed"
+        i["current_status"] = "approved_pending"     # watched scope (spec watcher_reference step 3; 'proposed' is not watched)
     return r
 
 
