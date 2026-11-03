@@ -199,7 +199,8 @@ def test_field_usable_is_fail_closed():
 
 def test_constants_follow_the_pinned_spec():
     rules = yaml.safe_load((SPEC / "market_data_rules.yaml").read_text())
-    assert md.QUOTE_LIMIT == timedelta(minutes=rules["staleness"]["staleness_limit_minutes"]) == timedelta(minutes=20)
+    assert load(FIX / "valid" / DATE).quote_limit == timedelta(minutes=rules["staleness"]["staleness_limit_minutes"])
+    assert not hasattr(md, "QUOTE_LIMIT")   # read from the pinned spec at load time, not hard-coded
     assert md.QUOTE_LEAVES == set(rules["staleness"]["quote_fields"])
     assert "clock_skew_seconds" not in str(rules) and md.DEFAULT_SKEW_SECONDS == 0   # spec sets no skew: 0
 
@@ -292,8 +293,10 @@ def test_cli_needs_an_aware_clock(monkeypatch, capsys):
     assert rc == 2 and "MD-19-TZ" in err
 
 
-def test_default_data_dir(monkeypatch):
+def test_data_root_comes_only_from_the_flag_or_env(monkeypatch):
     monkeypatch.delenv(md.ENV_DATA_DIR, raising=False)
-    assert md.default_data_dir() == ROOT / "../trading/market-data"
+    assert md.data_root_from_env() is None and not hasattr(md, "DEFAULT_DATA_DIR")
+    monkeypatch.setenv(md.ENV_DATA_DIR, "")
+    assert md.data_root_from_env() is None
     monkeypatch.setenv(md.ENV_DATA_DIR, "somewhere")
-    assert md.default_data_dir() == Path("somewhere")
+    assert md.data_root_from_env() == Path("somewhere")

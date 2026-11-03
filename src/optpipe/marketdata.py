@@ -23,30 +23,37 @@ PROPOSED in trading/proposals/R7-acceptance-proposal.md (MD-16..MD-20; proposal 
   MD-19-FUTURE-PACK  pack_built_at later than the injected clock `now` + skew: the WHOLE pack fails
   MD-19-FUTURE     any as_of / sources[].as_of later than now + skew
   MD-19-TZ         a naive `now` (every pack time must already carry an offset: MD-04-TIME-NAIVE)
-  MD-20-CONFLICT   an earnings_date that contradicts a CONFIRMED earnings entry in catalysts.json, or two earnings
-                   entries (CONFIRMED / UNCONFIRMED) for one ticker on different dates within 30 days: the pack fails
-                   closed. A disagreement with an UNCONFIRMED entry only is a NO IDEA reason for that ticker.
+  MD-20-CONFLICT   an earnings_date that is not the next CONFIRMED earnings date in catalysts.json, an earnings_time
+                   that contradicts the matching earnings entry's event_time session, or two earnings entries
+                   (CONFIRMED / UNCONFIRMED) for one ticker on different dates within 30 days: the pack fails closed.
+                   A disagreement with an UNCONFIRMED entry only, or an earnings_time catalysts.json cannot check
+                   (no event_time), is a NO IDEA reason for that ticker.
   MD-20-CRITICAL / -NO-IDEA / -SCOPE  no_idea_reasons(): critical UNKNOWN, stale, future or conflicting inputs, a
                    pack that is not ok, or data that is not MARKET (EXAMPLE / TEST) mean NO IDEA.
+Every MD-16..MD-21 id in a returned error carries "(proposed)", and MD-00-SPEC / MD-00-ROOT carry "(app)" (label_ids).
 Not covered here (deferred): MD-18 provenance binding (builder / ingest record), MD-19 per-feed freshness (macro,
-history), a 2027 calendar, the MD-21 replay harness, and the consumers (discovery / research / watcher: PR B).
+history), R07 catalyst coverage and R08 macro catalysts (PR B), a 2027 calendar, the MD-21 replay harness, and the
+consumers (discovery / research / watcher: PR B).
+Root: there is no default data root. load_date(root, date) / load_pack(date_dir, root=...) require one; None is
+MD-00-ROOT (exit 2) and nothing is opened.
 The path to the date dir is opened one component at a time from "/" with O_NOFOLLOW (no symlinked ancestor, no
 check-then-open race on the ancestors), the date dir is opened relative to the root's fd, every file relative to the
 date dir's fd, once, and the sha256 is computed over the exact bytes that are then parsed.
 
 Clock skew: spec 1.1.8 market_data_rules.yaml defines none, so DEFAULT_SKEW_SECONDS = 0 (fail closed). The proposal's
 60 s (MD-19-SKEW, = R01's future tolerance) is an open question (Q-4) and is NOT adopted here.
-Staleness: MD-05 (20 min vs pack_built_at, spec) is enforced by the pinned validator. At decision time
-no_idea_reasons() applies the same 20-minute limit against the injected `now`; R01's 15 minutes stays with the risk
-officer and is not changed.
+Staleness: MD-05 (staleness_limit_minutes vs pack_built_at, 20 in spec 1.1.8) is enforced by the pinned validator. At
+decision time no_idea_reasons() applies the same limit, read from the pinned spec at load time (PackResult.quote_limit),
+against the injected `now`; R01's 15 minutes stays with the risk officer and is not changed.
 
 API
-  load_pack(date_dir, *, root=None, now=None, skew_seconds=0, spec=None) -> PackResult   # never raises
+  load_pack(date_dir, *, root, now=None, skew_seconds=0, spec=None) -> PackResult   # never raises; root required
   load_date(root, date, **kw) -> PackResult
   PackResult(ok, date, index, snapshots, summary_md, catalysts, errors) and .exit_code() (0 valid / 1 rule errors /
       2 unreadable, crash or spec not pinned)
   field_usable(field) -> bool; usable_value(field)
   no_idea_reasons(result, ticker, *, now, allow_labels=("MARKET",)) -> list[str]   # [] = the inputs are usable
+  data_root_from_env() -> Optional[Path]; label_ids(errors); error_id(error)
 """
 from __future__ import annotations
 
@@ -63,14 +70,18 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Optional
 
-ENV_DATA_DIR = "OPTPIPE_MARKET_DATA_DIR"
-DEFAULT_DATA_DIR = "../trading/market-data"      # Oodle's folder next to this repo; relative to the repo root
+ENV_DATA_DIR = "OPTPIPE_MARKET_DATA_DIR"        # there is NO default root: --data-dir or this env var (PR #22 review)
 VALIDATOR_FILE = "validate_market_snapshot.py"
 MAX_ENTRIES = 520                                # proposed MD-16-ENTRIES (500 tickers + 4 pack files + slack)
 MAX_PACK_BYTES = 64 * 1024 * 1024                # proposed MD-16-TOTAL
 DEFAULT_SKEW_SECONDS = 0                         # spec 1.1.8 sets no market-data skew: fail closed
 MAX_SAFE_INT = 2 ** 53
-FATAL_IDS = frozenset({"MD-01-DIR", "MD-01-UNREADABLE", "MD-03-JSON", "MD-00-CRASH", "MD-00-SPEC"})
+FATAL_IDS = frozenset({"MD-01-DIR", "MD-01-UNREADABLE", "MD-03-JSON", "MD-00-CRASH", "MD-00-SPEC", "MD-00-ROOT"})
+# ids that are NOT spec 1.1.8 ids are labelled in every error string the module returns, so a later spec that adopts
+# or renumbers them cannot be confused with these: MD-16..MD-21 are Doodle's R7 PROPOSAL, MD-00-SPEC / MD-00-ROOT are
+# this app's own (MD-00-CRASH and MD-01..MD-15 are spec ids and stay as they are).
+PROPOSED = re.compile(r"MD-(1[6-9]|2[01])-[A-Z0-9-]+")
+APP_IDS = frozenset({"MD-00-SPEC", "MD-00-ROOT"})
 LINE = re.compile(r"([0-9a-f]{64})  (.+)")       # used with fullmatch only
 CTRL = re.compile(r"[\x00-\x1f\x7f\x85\u2028\u2029]")
 _FLAGS = getattr(os, "O_CLOEXEC", 0)
@@ -86,6 +97,7 @@ class PackResult:
     summary_md: Optional[str] = None
     catalysts: Optional[dict] = None
     errors: list = dc_field(default_factory=list)
+    quote_limit: Optional[timedelta] = None   # spec market_data_rules.yaml staleness.staleness_limit_minutes
 
     def exit_code(self) -> int:
         return exit_code(self.errors)
@@ -100,6 +112,25 @@ def exit_code(errors: list[str]) -> int:
     if not errors:
         return 0
     return 2 if any(e.split(" ", 1)[0] in FATAL_IDS for e in errors) else 1
+
+
+def label_ids(errors: list[str]) -> list[str]:
+    """'MD-16-DUPKEY x' -> 'MD-16-DUPKEY (proposed) x'; 'MD-00-ROOT x' -> 'MD-00-ROOT (app) x' (in place; idempotent)"""
+    for i, e in enumerate(errors):
+        head, _, rest = e.partition(" ")
+        if rest.startswith(("(proposed)", "(app)")):
+            continue
+        tag = "(proposed)" if PROPOSED.fullmatch(head) else "(app)" if head in APP_IDS else None
+        if tag:
+            errors[i] = f"{head} {tag} {rest}" if rest else f"{head} {tag}"
+    return errors
+
+
+def error_id(e: str) -> str:
+    """the id of an error string, with its (proposed) / (app) label if it has one"""
+    head, _, rest = e.partition(" ")
+    tag = rest.split(" ", 1)[0]
+    return f"{head} {tag}" if tag in ("(proposed)", "(app)") else head
 
 
 def field_usable(f) -> bool:
@@ -304,32 +335,43 @@ def _foreign(st) -> bool:
 
 
 # --------------------------------------------------------------------------- loader
-def default_data_dir() -> Path:
-    """the market-data root: $OPTPIPE_MARKET_DATA_DIR, else ../trading/market-data next to the repo"""
+def data_root_from_env() -> Optional[Path]:
+    """$OPTPIPE_MARKET_DATA_DIR if set and non-empty, else None. There is deliberately NO fallback (no live folder by
+    default): a caller that has neither --data-dir nor the env var gets MD-00-ROOT and nothing is opened."""
     env = os.environ.get(ENV_DATA_DIR)
-    if env:
-        return Path(env)
-    from .config import repo_path
-    return repo_path(DEFAULT_DATA_DIR)
+    return Path(env) if env else None
 
 
 def load_date(root, date: str, **kw) -> PackResult:
+    """the confined entry point: <root>/<date>, where date must fullmatch YYYY-MM-DD (MD-17-ROOT)"""
+    if root is None or str(root) == "":
+        return _no_root(date)
     return load_pack(Path(root) / str(date), root=root, **kw)
 
 
-def load_pack(date_dir, *, root=None, now: Optional[datetime] = None, skew_seconds: float = DEFAULT_SKEW_SECONDS,
+def _no_root(date) -> PackResult:
+    return PackResult(date=None if date is None else str(date), errors=label_ids([
+        f"MD-00-ROOT no market-data root given (pass --data-dir or set ${ENV_DATA_DIR}); nothing was opened"]))
+
+
+def load_pack(date_dir, *, root, now: Optional[datetime] = None, skew_seconds: float = DEFAULT_SKEW_SECONDS,
               spec=None) -> PackResult:
-    """load + verify + validate one date dir. Never raises: any exception is MD-00-CRASH (fail closed)."""
+    """load + verify + validate one date dir under `root` (REQUIRED: MD-17-ROOT always applies; None is MD-00-ROOT,
+    exit 2, nothing opened). Never raises: any exception is MD-00-CRASH (fail closed)."""
+    if root is None or str(root) == "":
+        return _no_root(Path(str(date_dir)).name)
     try:
         if now is None:
             now = datetime.now(timezone.utc)
-        return _load(Path(date_dir), Path(root) if root is not None else None, now, skew_seconds, spec)
+        res = _load(Path(date_dir), Path(root), now, skew_seconds, spec)
     except Exception as ex:  # noqa: BLE001 - fail closed, never a pass
-        return PackResult(date=Path(str(date_dir)).name,
-                          errors=[f"MD-00-CRASH {Path(str(date_dir)).name}: loader raised {type(ex).__name__}: {ex}"])
+        res = PackResult(date=Path(str(date_dir)).name,
+                         errors=[f"MD-00-CRASH {Path(str(date_dir)).name}: loader raised {type(ex).__name__}: {ex}"])
+    label_ids(res.errors)
+    return res
 
 
-def _load(date_dir: Path, root: Optional[Path], now: datetime, skew: float, spec) -> PackResult:
+def _load(date_dir: Path, root: Path, now: datetime, skew: float, spec) -> PackResult:
     errors: list[str] = []
     res = PackResult(date=date_dir.name, errors=errors)
     if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
@@ -340,8 +382,16 @@ def _load(date_dir: Path, root: Optional[Path], now: datetime, skew: float, spec
     except SpecUnavailable as ex:
         errors.append(f"MD-00-SPEC {date_dir.name}: market-data validator unavailable: {ex}")
         return res
+    try:
+        mins = vms.RULES["staleness"]["staleness_limit_minutes"]
+        if isinstance(mins, bool) or not isinstance(mins, int) or mins <= 0:
+            raise ValueError(repr(mins))
+        res.quote_limit = timedelta(minutes=mins)
+    except (KeyError, TypeError, ValueError) as ex:
+        errors.append(f"MD-00-SPEC {date_dir.name}: staleness.staleness_limit_minutes unusable in the spec: {ex}")
+        return res
     absdir = os.path.abspath(date_dir)
-    absroot = os.path.abspath(root) if root is not None else os.path.dirname(absdir)
+    absroot = os.path.abspath(root)
     name = os.path.basename(absdir)
     if os.path.dirname(absdir) != absroot:
         errors.append(f"MD-17-ROOT {date_dir.name}: the date dir is not a direct child of the data root")
@@ -632,7 +682,7 @@ def _load_fd(vms, dfd: int, dir_name: str, res: PackResult, now: datetime, skew:
     if not index["tickers"]:
         errors.append(f"MD-16-EMPTY {INDEX}: zero tickers (an empty pack is not 'valid but empty')")
     errors.extend(_future_errors(vms, index, docs, catalysts, now, skew))
-    errors.extend(_conflict_errors(docs, catalysts))
+    errors.extend(_conflict_errors(docs, catalysts, dir_name))
     res.index, res.catalysts, res.summary_md = index, catalysts, summary
     res.snapshots = {d["ticker"]: d for d in docs.values()}
 
@@ -691,7 +741,7 @@ def _future_errors(vms, index, docs, catalysts, now: datetime, skew: timedelta) 
     built = _aware(index.get("pack_built_at") or "")
     if built is not None and built > limit:
         out.append(f"MD-19-FUTURE-PACK index.json: pack_built_at {index['pack_built_at']} is after the clock "
-                   f"{now.isoformat()} + {int(skew.total_seconds())} s (the whole pack fails)")
+                   f"{now.isoformat()} + {skew.total_seconds():g} s (the whole pack fails)")
     files = [("index.json", index)] + sorted(docs.items()) + ([("catalysts.json", catalysts)] if catalysts else [])
     n = 0
     for fname, doc in files:
@@ -701,11 +751,20 @@ def _future_errors(vms, index, docs, catalysts, now: datetime, skew: timedelta) 
                 n += 1
                 if n <= 20:
                     out.append(f"MD-19-FUTURE {fname} {w[2:]}: {s} is after the clock {now.isoformat()}")
+    if n > 20:
+        out.append(f"MD-19-FUTURE pack: ... and {n - 20} more as_of after the clock (first 20 listed)")
     return out
 
 
-def _conflict_errors(docs, catalysts) -> list[str]:
-    """MD-20-CONFLICT: earnings_date vs CONFIRMED earnings catalysts (catalysts.json, 1.1.8 packs)"""
+def _conflict_errors(docs, catalysts, pack_date: str) -> list[str]:
+    """MD-20-CONFLICT (pack-fatal), proposal (a) and (b), 1.1.8 packs with catalysts.json:
+    (b) two earnings entries for one ticker, CONFIRMED or UNCONFIRMED, on different dates within 30 days
+        (two CONFIRMED quarters 87 days apart are NOT a conflict);
+    (a) a ticker file's earnings_date that is not the next CONFIRMED earnings date (the earliest one on or after the
+        pack date), or an earnings_time (BMO / AMC) that contradicts the NY session of the matching earnings
+        entry's event_time (before 09:30 = BMO, from 16:00 = AMC, in between = neither).
+    A ticker file that disagrees only with UNCONFIRMED entries, or an earnings_time that catalysts.json cannot check
+    (no event_time), is a per-ticker NO IDEA reason in no_idea_reasons(), not a pack failure."""
     if not isinstance(catalysts, dict):
         return []
     confirmed = _earnings_dates(catalysts, ("CONFIRMED",))
@@ -714,17 +773,46 @@ def _conflict_errors(docs, catalysts) -> list[str]:
     for t, dates in sorted(dated.items()):
         ds = sorted(dates)
         close = [(a, b) for a, b in zip(ds, ds[1:]) if _days(a, b) is not None and _days(a, b) <= 30]
-        if close or (len(confirmed.get(t, ())) > 1):
-            out.append(f"MD-20-CONFLICT catalysts.json {t}: earnings entries on different dates {ds} "
-                       "(CONFIRMED/UNCONFIRMED within 30 days)")
+        if close:
+            out.append(f"MD-20-CONFLICT catalysts.json {t}: earnings entries on different dates within 30 days "
+                       f"{[list(p) for p in close]} (CONFIRMED / UNCONFIRMED)")
     for fname, d in sorted(docs.items()):
-        ed = d.get("earnings_date") if isinstance(d, dict) else None
-        t = d.get("ticker") if isinstance(d, dict) else None
-        if isinstance(ed, dict) and ed.get("value") is not None and t in confirmed \
-                and {ed["value"]} != confirmed[t]:
+        if not isinstance(d, dict):
+            continue
+        t, ed, et = d.get("ticker"), d.get("earnings_date"), d.get("earnings_time")
+        nxt = _next_date(confirmed.get(t, ()), pack_date)
+        if isinstance(ed, dict) and ed.get("value") is not None and nxt is not None and ed["value"] != nxt:
             out.append(f"MD-20-CONFLICT {fname} earnings_date: {ed['value']} ({ed.get('status')}) contradicts the "
-                       f"CONFIRMED catalysts.json earnings {sorted(confirmed[t])}")
+                       f"next CONFIRMED catalysts.json earnings {nxt} (all CONFIRMED: {sorted(confirmed[t])})")
+        if isinstance(ed, dict) and isinstance(et, dict) and et.get("value") in ("BMO", "AMC"):
+            for c in _earnings_entries(catalysts, t, ed.get("value")):
+                sess = _session(c.get("event_time"))
+                if sess is not None and sess != et["value"]:
+                    out.append(f"MD-20-CONFLICT {fname} earnings_time: {et['value']} ({et.get('status')}) contradicts "
+                               f"the {c.get('status')} catalysts.json earnings event_time {c['event_time']} ({sess})")
     return out
+
+
+def _next_date(dates, pack_date: str) -> Optional[str]:
+    ahead = sorted(x for x in dates if isinstance(x, str) and x >= str(pack_date))
+    return ahead[0] if ahead else None
+
+
+def _earnings_entries(catalysts, ticker, event_date) -> list[dict]:
+    return [c for c in (catalysts or {}).get("catalysts") or []
+            if isinstance(c, dict) and c.get("catalyst_type") == "earnings" and c.get("ticker") == ticker
+            and c.get("status") in ("CONFIRMED", "UNCONFIRMED") and c.get("event_date") == event_date]
+
+
+def _session(event_time) -> Optional[str]:
+    """NY session of an earnings event_time: BMO before 09:30, AMC from 16:00, DURING in between, None if absent"""
+    t = _aware(event_time) if isinstance(event_time, str) else None
+    if t is None:
+        return None
+    from zoneinfo import ZoneInfo
+    ny = t.astimezone(ZoneInfo("America/New_York"))
+    hm = (ny.hour, ny.minute)
+    return "BMO" if hm < (9, 30) else "AMC" if hm >= (16, 0) else "DURING"
 
 
 def _earnings_dates(catalysts, statuses) -> dict[str, set]:
@@ -744,14 +832,13 @@ def _days(a: str, b: str) -> Optional[int]:
 
 
 # --------------------------------------------------------------------------- decision time (MD-20)
-QUOTE_LIMIT = timedelta(minutes=20)   # = market_data_rules.yaml staleness_limit_minutes (checked in the tests)
-IDEA_TOP_FIELDS = ("last_price", "earnings_date")
-CONTRACT_CRITICAL = ("bid", "ask", "open_interest")
+IDEA_TOP_FIELDS = ("last_price", "earnings_date")             # pinned exactly by a test: widen / narrow deliberately
+CONTRACT_CRITICAL = ("bid", "ask", "open_interest", "spread_pct_of_mid")   # R01 / R02 / R03 / R05
 QUOTE_LEAVES = frozenset({"last_price", "iv", "iv_rank", "implied_move", "open_interest", "volume", "bid", "ask",
                           "spread", "spread_pct_of_mid"})
 
 
-def _field_reason(path: str, leaf: str, f, now: datetime, skew: timedelta) -> Optional[str]:
+def _field_reason(path: str, leaf: str, f, now: datetime, skew: timedelta, limit: timedelta) -> Optional[str]:
     if not isinstance(f, dict):
         return f"MD-20-CRITICAL {path}: missing (UNKNOWN)"
     if not field_usable(f):
@@ -761,39 +848,53 @@ def _field_reason(path: str, leaf: str, f, now: datetime, skew: timedelta) -> Op
         return f"MD-19-TZ {path}: as_of missing, naive or unparsable"
     if t > now + skew:
         return f"MD-19-FUTURE {path}: as_of {f['as_of']} is after the clock"
-    if leaf in QUOTE_LEAVES and now - t > QUOTE_LIMIT:
-        return f"MD-19-STALE-quote {path}: {now - t} old at decision time (> 20 min; R01's 15 min is separate)"
+    if leaf in QUOTE_LEAVES and now - t > limit:
+        return (f"MD-19-STALE-quote {path}: {now - t} old at decision time (> {limit}, the spec's "
+                "staleness_limit_minutes; R01's 15 min is separate)")
     return None
 
 
 def no_idea_reasons(res: PackResult, ticker: str, *, now: datetime, skew_seconds: float = DEFAULT_SKEW_SECONDS,
                     allow_labels: tuple = ("MARKET",)) -> list[str]:
     """[] only if every critical idea input for `ticker` is usable at `now`; otherwise the reasons: NO IDEA.
-    This never makes a candidate: R01..R13 still decide in the session record. Fail closed on anything odd."""
+    This never makes a candidate: R01..R13 still decide in the session record. Fail closed on anything odd.
+
+    Checked here: IDEA_TOP_FIELDS (last_price, earnings_date) OK, fresh and not future; earnings_date vs UNCONFIRMED
+    catalysts; earnings_time (if BMO / AMC) corroborated by a matching catalysts.json earnings event_time; at least
+    one contract with every CONTRACT_CRITICAL field usable. A caller (PR B) MUST then use only such a contract: one
+    usable contract does not make the ticker's other contracts usable.
+    NOT checked here (deferred to PR B, where the consumer and its hold window exist): R07 catalyst coverage to the
+    hold-window end and R08 macro catalysts plus coverage. No consumer reads a pack yet, so nothing relies on them."""
     try:
         if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
-            return ["MD-19-TZ now: naive clock (NO IDEA)"]
-        if not res.ok or not isinstance(res.index, dict):
-            first = res.errors[0].split(" ", 1)[0] if res.errors else "not loaded"
-            return [f"MD-20-NO-IDEA {ticker}: the pack is not ok ({first})"]
+            return label_ids(["MD-19-TZ now: naive clock (NO IDEA)"])
+        if not res.ok or not isinstance(res.index, dict) or not isinstance(res.quote_limit, timedelta):
+            first = error_id(res.errors[0]) if res.errors else "not loaded"
+            return label_ids([f"MD-20-NO-IDEA {ticker}: the pack is not ok ({first})"])
         label = res.index.get("data_label")
         if label not in allow_labels:
-            return [f"MD-20-SCOPE {ticker}: data_label {label} is not market data for a real idea"]
+            return label_ids([f"MD-20-SCOPE {ticker}: data_label {label} is not market data for a real idea"])
         d = res.snapshots.get(ticker)
         if not isinstance(d, dict):
-            return [f"MD-20-NO-IDEA {ticker}: not in the pack"]
-        skew = timedelta(seconds=skew_seconds)
-        out = [r for k in IDEA_TOP_FIELDS if (r := _field_reason(f"{ticker}.{k}", k, d.get(k), now, skew))]
-        ed = d.get("earnings_date")
+            return label_ids([f"MD-20-NO-IDEA {ticker}: not in the pack"])
+        skew, limit = timedelta(seconds=skew_seconds), res.quote_limit
+        out = [r for k in IDEA_TOP_FIELDS if (r := _field_reason(f"{ticker}.{k}", k, d.get(k), now, skew, limit))]
+        ed, et = d.get("earnings_date"), d.get("earnings_time")
         other = _earnings_dates(res.catalysts, ("UNCONFIRMED",)).get(ticker, set())
         if isinstance(ed, dict) and ed.get("value") is not None and other and {ed["value"]} != other:
             out.append(f"MD-20-CONFLICT {ticker}.earnings_date: {ed['value']} disagrees with UNCONFIRMED catalysts "
                        f"{sorted(other)}")
+        if isinstance(et, dict) and et.get("value") in ("BMO", "AMC"):
+            entries = _earnings_entries(res.catalysts, ticker, ed.get("value") if isinstance(ed, dict) else None)
+            if not any(_session(c.get("event_time")) == et["value"] for c in entries):
+                out.append(f"MD-20-CONFLICT {ticker}.earnings_time: {et['value']} is not corroborated by a "
+                           "catalysts.json earnings event_time for the same date (cannot be checked: NO IDEA)")
         contracts = (d.get("option_liquidity") or {}).get("contracts") or []
-        if not any(isinstance(c, dict) and not any(_field_reason("c", k, c.get(k), now, skew) for k in CONTRACT_CRITICAL)
+        if not any(isinstance(c, dict)
+                   and not any(_field_reason("c", k, c.get(k), now, skew, limit) for k in CONTRACT_CRITICAL)
                    for c in contracts):
             out.append(f"MD-20-CRITICAL {ticker}.option_liquidity: no contract with usable, fresh "
                        f"{'/'.join(CONTRACT_CRITICAL)}")
-        return out
+        return label_ids(out)
     except Exception as ex:  # noqa: BLE001 - fail closed
         return [f"MD-00-CRASH {ticker}: no_idea_reasons raised {type(ex).__name__} (NO IDEA)"]

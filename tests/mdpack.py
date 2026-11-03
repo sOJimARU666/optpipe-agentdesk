@@ -77,6 +77,7 @@ def load(d: Path, **kw):
     from optpipe import marketdata as md
     kw.setdefault("now", NOW)
     kw.setdefault("spec", SPEC)
+    kw.setdefault("root", Path(d).parent)
     return md.load_pack(d, **kw)
 
 

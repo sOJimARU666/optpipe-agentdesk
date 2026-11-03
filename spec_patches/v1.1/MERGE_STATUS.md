@@ -13,3 +13,11 @@ The proposal below is diffed against the frozen v1.0.0 files; this table tracks 
 | 6 | integer open_interest | `$defs/OptionContract/properties/open_interest` | merged as proposed |
 | 8 | limit_price raw_amount / tick_size / rounding | `$defs/LimitPrice/properties/raw_amount` | merged with Doodle's changes (his version is canonical) |
 | 9 | Condition raw_value / tick_size / rounding | `$defs/Condition/properties/raw_value` | merged with Doodle's changes (his version is canonical) |
+
+## Record version vs rule labels (spec 1.1.8 pinned)
+
+Session records are still written as schema_version `1.1.6` (`records/compat.py`, `V11`), while they carry the 1.1.8
+labels `risk_ruleset_version` 1.1.8 (`risk_rules.yaml` ruleset_version) and `watcher_rules_version` 1.1.8
+(`watcher_rules.yaml` watcher_version). Spec 1.1.7 and 1.1.8 are label-only for the rules (no rule or case change),
+and the 1.1.8 schema accepts 1.1.6 records, so this is consistent. The record bump to 1.1.8 is deferred to
+FEAT-OODLE-01 PR B, where discovery, research and the watcher start reading market-data packs.

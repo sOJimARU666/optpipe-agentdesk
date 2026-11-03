@@ -323,7 +323,7 @@ def test_md20_two_earnings_dates_within_30_days_fail_closed(tmp_path):
 
 
 def _fresh_contract(doc, minute="08:55"):
-    for k in ("bid", "ask", "open_interest"):
+    for k in md.CONTRACT_CRITICAL:
         f = doc["option_liquidity"]["contracts"][0][k]
         f.update(status="OK", as_of=f"2026-10-20T{minute}:00-04:00")
 
@@ -331,9 +331,15 @@ def _fresh_contract(doc, minute="08:55"):
 def test_md20_no_idea_pass_twin(tmp_path):
     d = copy_pack(tmp_path)
     edit_json(d, "JPM.json", _fresh_contract)
+    edit_json(d, "catalysts.json", _jpm_event_time)
     r = load(d)
     assert r.ok, r.errors
     assert md.no_idea_reasons(r, "JPM", now=NOW, allow_labels=("EXAMPLE",)) == []
+
+
+def _jpm_event_time(doc, t="2026-10-21T07:00:00-04:00"):
+    """give the JPM CONFIRMED earnings entry a structured event_time (07:00 NY = BMO, as the snapshot says)"""
+    next(c for c in doc["catalysts"] if c["ticker"] == "JPM" and c["catalyst_type"] == "earnings")["event_time"] = t
 
 
 def test_md20_example_data_is_never_a_real_idea():
@@ -342,7 +348,7 @@ def test_md20_example_data_is_never_a_real_idea():
 
 
 @pytest.mark.parametrize("ticker,want", [
-    ("JPM", {"MD-20-CRITICAL"}),          # every contract STALE
+    ("JPM", {"MD-20-CRITICAL", "MD-20-CONFLICT"}),   # every contract STALE; BMO has no catalyst event_time
     ("WDC", {"MD-20-CRITICAL"}),          # earnings_date UNCONFIRMED, no contracts
     ("XMPLA", {"MD-20-CRITICAL"}),        # earnings_date UNKNOWN
     ("XMPLB", {"MD-20-CRITICAL"}),
@@ -413,7 +419,7 @@ import sys, json
 sys.path.insert(0, "tests")
 from mdpack import FIX, DATE, NOW, SPEC
 from optpipe import marketdata as md
-out = {c.name: md.load_pack(c / DATE, now=NOW, spec=SPEC).errors for c in sorted(FIX.iterdir()) if c.is_dir()}
+out = {c.name: md.load_pack(c / DATE, root=c, now=NOW, spec=SPEC).errors for c in sorted(FIX.iterdir()) if c.is_dir()}
 print(json.dumps(out, sort_keys=True))
 """
 

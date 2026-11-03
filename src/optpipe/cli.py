@@ -15,8 +15,9 @@ from __future__ import annotations
 from .scenario import tag_for_record
 
 import argparse
+import re
 import sys
-from datetime import datetime, timezone
+from datetime import date as _date, datetime, timezone
 from pathlib import Path
 
 from .config import REPO_ROOT, load_settings
@@ -161,7 +162,19 @@ def market_data(a, settings) -> int:
             print("--now needs a UTC offset (MD-19-TZ)", file=sys.stderr); return 2
     else:
         now = datetime.now(timezone.utc)
-    root = Path(a.data_dir) if a.data_dir else md.default_data_dir()
+    root = Path(a.data_dir) if a.data_dir else md.data_root_from_env()
+    if root is None:   # no live folder by default: nothing is opened (PR #22 review)
+        res = md.load_date(None, a.date)
+        for e in res.errors:
+            print(e, file=sys.stderr)
+        return 2
+    if a.date is not None:
+        if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", a.date):
+            print(f"--date {a.date!r} is not YYYY-MM-DD", file=sys.stderr); return 2
+        try:
+            _date.fromisoformat(a.date)
+        except ValueError:
+            print(f"--date {a.date!r} is not a real calendar date", file=sys.stderr); return 2
     date = a.date or now.astimezone(ZoneInfo("America/New_York")).date().isoformat()
     res = md.load_date(root, date, now=now, spec=discover(settings.spec_path))
     shown = display_path(root / date)
@@ -176,7 +189,7 @@ def market_data(a, settings) -> int:
           f"data_label {res.index.get('data_label')}, {len(res.snapshots)} ticker(s), checked at {now.isoformat()})")
     for t in sorted(res.snapshots):
         why = md.no_idea_reasons(res, t, now=now)
-        print(f"  {t:8} {'inputs usable' if not why else 'NO IDEA: ' + why[0].split(' ', 1)[0]}"
+        print(f"  {t:8} {'inputs usable' if not why else 'NO IDEA: ' + md.error_id(why[0])}"
               + (f" (+{len(why) - 1} more)" if len(why) > 1 else ""))
     return 0
 
@@ -211,8 +224,8 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--live", action="store_true", help="EXPERIMENTAL: real clock + read-only Nasdaq GETs while open")
     w.add_argument("--engine", default="spec", help="rule engine name (pluggable; default: spec)")
     m = sub.add_parser("market-data", help="verify one of Oodle's market-data packs (fail closed; file I/O only)")
-    m.add_argument("--data-dir", help="market-data root holding YYYY-MM-DD dirs "
-                                      "(default: $OPTPIPE_MARKET_DATA_DIR, else ../trading/market-data)")
+    m.add_argument("--data-dir", help="market-data root holding YYYY-MM-DD dirs (else $OPTPIPE_MARKET_DATA_DIR; "
+                                      "there is no default: with neither, exit 2 and nothing is opened)")
     m.add_argument("--date", help="pack date YYYY-MM-DD (default: today in New York)")
     m.add_argument("--now", help="the clock, ISO with offset (default: the real clock); used for MD-19 checks")
     a = ap.parse_args(argv)
