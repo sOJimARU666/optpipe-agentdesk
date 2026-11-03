@@ -165,6 +165,27 @@ or webhooks). It also never modifies the session record; `watch.json` references
   4 wakes, 1 quote GET at 15:55 ET, and 4 `SHADOW_EOD` alerts at 16:00 ET (22:00 Berlin, CEST). The unit tests
   cover the watched paths (W01–W07) with synthetic approved tickets on the same tape.
 
+## Market-data packs (FEAT-OODLE-01 PR A): fail-closed loader, nothing consumes it yet
+
+`optpipe.marketdata` loads one of Oodle's dated market-data packs (`<root>/YYYY-MM-DD/`: `pack.sha256`, `index.json`,
+`summary.md`, `catalysts.json`, `<TICKER>.json`) with spec 1.1.8's rules (MD-01..MD-15, delegated to the pinned
+`spec/validate_market_snapshot.py`) plus app-side hardening tagged with the ids PROPOSED in Doodle's R7 proposal
+(MD-16..MD-20: non-finite numbers, duplicate keys, control characters, entry / byte bounds, empty packs, hard links,
+writable or foreign-owned files, replacement races, an injected clock with future and tz checks, earnings conflicts,
+and `no_idea_reasons()` for critical UNKNOWN / stale / conflicting inputs). Pure file I/O: no network, read-only,
+paper only. Any doubt fails closed (exit 0 valid, 1 rule errors, 2 unreadable / crash / spec not pinned).
+
+```bash
+.venv/bin/optpipe market-data --data-dir spec/fixtures/market_data/valid --date 2026-10-20 --now 2026-10-20T09:05:00-04:00
+OPTPIPE_MARKET_DATA_DIR=<root> .venv/bin/optpipe market-data        # default root ../trading/market-data, date = NY today
+```
+
+The spec sets no market-data clock skew, so the loader allows none (`skew_seconds=0`, injectable). The spec's
+20-minute limit is `pack_built_at - as_of` per quote field (inclusive); `no_idea_reasons()` also applies it against
+the clock at decision time. EXAMPLE / TEST packs always give NO IDEA (MD-20-SCOPE) unless a caller opts in.
+R01's 15 minutes stays with the Risk Officer. Discovery, research and the
+watcher switch to packs in PR B; `--live` is unchanged.
+
 ## Sources: macro calendars, risk-free rate, IV
 
 | Source | URL | Used for |
@@ -263,9 +284,10 @@ These gaps are **known and not fixed**:
 |---|---|---|---|
 | `agent.py` | Generic `Agent[In, Out]` stage base (typed in/out, summaries for the trace) | Moodle | Poodle |
 | `orchestrator.py` | Runs the 5 stages, assembles/merges the session record (multi-run), validates v1 + v1.1, writes the trace | Moodle | Poodle |
-| `cli.py`, `__main__.py` | `optpipe run / validate / show / spec-check / serve` | Moodle | Poodle |
+| `cli.py`, `__main__.py` | `optpipe run / validate / show / spec-check / serve / watch / market-data` | Moodle | Poodle |
 | `config.py`, `config/settings.yaml` | Settings: mode (paper_only only), sources, IV, watchlist/sectors/broker/trade-style placeholders, overrides | Moodle (shape) / Eugene (values) | Poodle |
 | `spec.py` | Locates and loads Doodle's spec read-only | Moodle | Poodle |
+| `marketdata.py` | Fail-closed loader for Oodle's market-data packs (file I/O only; `optpipe market-data`) | Doodle (rules) / Moodle | Poodle |
 | `models/schema_v1.py`, `models/schema_v1_1.py` | Generated from `session.schema.json` / `spec_patches/v1.1/session.schema.json` | Doodle (schema) | generated |
 | `models/contracts.py`, `models/common.py` | Stage I/O contracts, manual inputs, `HYPOTHETICAL_LABEL` | Moodle | Poodle |
 | `models/session.py` | Hand-off trace models | Moodle | Poodle |
