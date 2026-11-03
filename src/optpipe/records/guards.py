@@ -24,14 +24,25 @@ from typing import Any, Iterable
 BLOCKING, FLAGGING = "blocking", "flag"
 
 
-def classify(result: dict) -> str | None:
-    """blocking | flag | None for one rule result (risk_reference.overall / risk.engine.overall table)."""
-    res, sev = result.get("result"), result.get("severity")
-    if res == "VETO" or (res == "UNKNOWN" and sev == "hard"):
+def classify(result: Any) -> str | None:
+    """blocking | flag | None for one rule result (risk_reference.overall / risk.engine.overall table).
+
+    Fail closed (SOL-ACCEPT-001 G3): only `PASS` is None and only `FLAG` / `UNKNOWN`+`soft` flag. Everything else
+    blocks: `VETO`, `UNKNOWN`+`hard`, `UNKNOWN` with no / any other severity, an unknown result string ("veto",
+    "BLOCK", None, "", ...) and a result entry that is not an object. A schema-valid result classifies exactly as
+    the reference does; only malformed ones differ, and those can never read as PASS."""
+    if not isinstance(result, dict):
         return BLOCKING
+    res, sev = result.get("result"), result.get("severity")
+    if res == "PASS":
+        return None
     if res == "FLAG" or (res == "UNKNOWN" and sev == "soft"):
         return FLAGGING
-    return None
+    return BLOCKING
+
+
+def _rule_id(r: Any) -> Any:
+    return r.get("rule_id") if isinstance(r, dict) else None
 
 
 def derive_overall(results: Iterable[dict]) -> dict[str, Any]:
@@ -40,8 +51,8 @@ def derive_overall(results: Iterable[dict]) -> dict[str, Any]:
     results = list(results or [])
     if not results:
         return {"verdict": "UNKNOWN", "blocking_rule_ids": [], "flag_rule_ids": []}
-    blocking = [r.get("rule_id") for r in results if classify(r) == BLOCKING]
-    flags = [r.get("rule_id") for r in results if classify(r) == FLAGGING]
+    blocking = [_rule_id(r) for r in results if classify(r) == BLOCKING]
+    flags = [_rule_id(r) for r in results if classify(r) == FLAGGING]
     return {"verdict": "VETO" if blocking else ("FLAG" if flags else "PASS"),
             "blocking_rule_ids": blocking, "flag_rule_ids": flags}
 
