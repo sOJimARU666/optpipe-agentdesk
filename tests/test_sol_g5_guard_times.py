@@ -104,3 +104,21 @@ def test_validate_cli_guard_crash_exit_2(tmp_path, positioned, capsys, monkeypat
     rc, out, err = _validate(tmp_path, positioned, capsys)
     assert rc == 2, f"guard crash gave exit {rc}:\n{out}{err}"
     assert "GUARD-CRASHED" in err and "OK" not in out
+
+
+@pytest.mark.parametrize("where", ["approved_at", "expires_at", "filled_at"])
+@pytest.mark.parametrize("how", ["naive", "invalid"])
+def test_time_error_ids_match_pinned_spec_1_1_6(tmp_path, positioned, capsys, spec, where, how):
+    """Aligned with spec 1.1.6 (G5): a naive / unparsable time in a 1.1.6 record gets the spec's
+    INV-05/INV-06-TIME-NAIVE / -INVALID id from optpipe validate (exit 1, no traceback), and the pinned validator
+    names the same id."""
+    rec = copy.deepcopy(positioned); rec["schema_version"] = "1.1.6"
+    tgt = rec["paper_positions"][0]["fills"][0] if where == "filled_at" else rec["approvals"][0]
+    tgt[where] = _naive(tgt[where]) if how == "naive" else {"ny": "not-a-time", "berlin": "not-a-time"}
+    inv = ("INV-06" if where == "filled_at" else "INV-05") + ("-TIME-NAIVE" if how == "naive" else "-TIME-INVALID")
+    rc, out, err = _validate(tmp_path, rec, capsys)
+    assert rc == 1 and "Traceback" not in err and inv in out + err, out + err
+    from optpipe.orchestrator import load_validator
+    mod, e = load_validator(spec)
+    assert mod is not None, e
+    assert inv in {x.split(" ", 1)[0] for x in mod.validate(copy.deepcopy(rec))}
