@@ -345,9 +345,12 @@ def test_dashboard_latest_review_uses_the_watcher_rule(example, ref):
 
 
 def test_precedence_constants_are_the_reference(spec, ref):
-    """optpipe's step-2 / step-5 idea sets are the pinned reference's (spec 1.1.5 TARGET_PRECEDENCE)."""
+    """optpipe's step-2 / step-5 idea sets are the pinned reference's, and the reference's TARGET_PRECEDENCE is the
+    pinned spec's own `scope.target_precedence` (spec/watcher_rules.yaml), not a list copied into this test."""
     import optpipe.watcher.runtime as rt
     wr = ref[0]
-    assert wr.TARGET_PRECEDENCE == ("vetoed", "terminal", "rejected", "approved_pending", "idea_status")
+    yaml_precedence = spec.watcher_rules()["scope"]["target_precedence"]
+    assert isinstance(yaml_precedence, list) and yaml_precedence          # the key exists and is non-empty
+    assert tuple(wr.TARGET_PRECEDENCE) == tuple(yaml_precedence)
     assert rt.TERMINAL_IDEA_STATUSES == wr.TERMINAL_IDEA_STATUSES
     assert rt.APPROVED_IDEA_STATUSES == wr.APPROVED_IDEA_STATUSES
