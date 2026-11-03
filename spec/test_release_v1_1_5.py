@@ -37,9 +37,10 @@ CHANGED_VS_1_1_4 = {"SCOPE-i": "approved_pending", "SCOPE-j": "approved_pending"
 # ------------------------------------------------------------------ 1.1.5 = 1.1.4 checks
 def test_schema_version_1_1_5_listed_and_example_is_1_1_5():
     enum = json.loads((SPEC / "session.schema.json").read_text())["properties"]["schema_version"]["enum"]
-    assert enum[-2:] == ["1.1.4", "1.1.5"]
-    assert fx.example()["schema_version"] == "1.1.5" and vs.validate(fx.example()) == []
-    assert (SPEC / "VERSION").read_text().strip() == "1.1.5"
+    assert enum[-3:-1] == ["1.1.4", "1.1.5"]               # spec 1.1.6 appended 1.1.6
+    ex = fx.example(); ex["schema_version"] = "1.1.5"     # the example tracks the current version (1.1.6 since 1.1.6)
+    assert vs.validate(ex) == []
+    assert (BACKUP_114.parent / "_v1_1_5_backup" / "VERSION").read_text().strip() == "1.1.5"
 
 
 def test_1_1_5_has_exactly_the_1_1_4_checks():
@@ -130,7 +131,8 @@ def test_the_48_frozen_cases_are_unchanged_and_keep_their_outcomes():
 
 def test_only_scope_and_version_changed_in_watcher_rules_yaml():
     old, cur = _frozen_yaml(), twr.WR
-    assert set(old) == set(cur)
+    assert set(cur) - set(old) <= {"target_precedence", "real_approval"}   # spec 1.1.6 added the explicit precedence
+    assert set(old) <= set(cur)
     for k in old:
         if k not in ("watcher_version", "scope", "tests"):
             assert old[k] == cur[k], k
