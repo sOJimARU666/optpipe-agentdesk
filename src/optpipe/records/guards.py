@@ -223,13 +223,21 @@ def approval_errors(a: dict, rv: dict | None, tk: dict | None = None) -> list[st
     if tk is not None and _terms_differ(a, tk):
         out.append(f"INV-05-TERMS {aid} legs/qty/limit differ from ticket {tk.get('ticket_id')}")
     t0, t1 = _ts(a.get("approved_at")), _ts(a.get("expires_at"))
-    if t0 is None or t1 is None or t1 <= t0:
+    # A naive / non-TsPair time is reported once, as INV-05-TIME-NAIVE / -INVALID just below; it is not also called an
+    # INV-05-EXPIRY "not after" (a misleading co-error: the order is unknown, not wrong). Missing stays INV-05-EXPIRY.
+    if (t0 is None or t1 is None or t1 <= t0) and not _approval_time_errors(a):
         out.append(f"INV-05-EXPIRY {aid} expires_at {_ny(a.get('expires_at'))} is not after approved_at "
                    f"{_ny(a.get('approved_at'))}")
-    out += _time_errors("INV-05", aid, (("approved_at", a.get("approved_at")), ("expires_at", a.get("expires_at"))))
+    out += _approval_time_errors(a)
     if a.get("status") != "active" and a.get("status_changed_at") is not None:
         out += _time_errors("INV-05", aid, (("status_changed_at", a.get("status_changed_at")),))
     return out
+
+
+def _approval_time_errors(a: dict) -> list[str]:
+    """INV-05-TIME-NAIVE / -INVALID for an approval's approved_at / expires_at ([] when both are usable or missing)."""
+    return _time_errors("INV-05", a.get("approval_id", "?"),
+                        (("approved_at", a.get("approved_at")), ("expires_at", a.get("expires_at"))))
 
 
 def approval_active_at(ap: dict, when: datetime) -> bool:
@@ -284,6 +292,11 @@ def position_errors(p: dict, ap: dict | None, tk: dict | None = None, rv: dict |
     if rv is not None and review_is_veto(rv):
         out.append(f"INV-06-VETO {pid} approval {aid} approves VETO review {rv.get('review_id')}")
     t0, t1 = _ts(ap.get("approved_at")), _ts(ap.get("expires_at"))
+    bad_window = _approval_time_errors(ap)
+    if bad_window:
+        # The approval's own window is naive / not a TsPair: no fill can be placed in it. Fail closed with the same
+        # INV-05-TIME string approval_errors gives (check_record dedupes it), not a misleading INV-06-BEFORE/-EXPIRED.
+        return out + bad_window
     for f in opens:
         ft = _ts(f.get("filled_at"))
         if open_win:        # spec 1.1.6 wording, so merge() dedupes it against the validator's string
@@ -345,7 +358,7 @@ def _check_record(rec: dict) -> list[str]:
     # INV-17-REUSE for EVERY schema_version (#17 review): relabelling a record 1.1.5 must not let one approval open
     # two positions. Only the INV-06 window stays version-dependent (1.1.3-1.1.5 keep their frozen closed window).
     errs += reuse_errors(pos)
-    return errs
+    return list(dict.fromkeys(errs))     # exact duplicates only (an approval time error is shared with its positions)
 
 
 def check_record(rec: Any) -> list[str]:
