@@ -23,7 +23,19 @@ jobs:
       - name: Pinned spec intact (manifest sha matches the pin, no file edited, nothing extra)
         run: python scripts/sync_spec.py --check --dest "$OPTIONS_SPEC_DIR"
       - name: Install
-        run: pip install -e '.[dev]'
+        run: |
+          pip install -e '.[dev]'
+          pip install pyyaml jsonschema pytest       # Doodle's spec tests' deps: installed here, before the guard is on
+      # From here on every step runs under the runtime network guard (SOL-ACCEPT-001 G9 follow-up): tests/netguard's
+      # sitecustomize.py installs it in every Python process when OPTPIPE_NETGUARD=1. $GITHUB_ENV applies to the
+      # LATER steps only, so checkout, setup-python, the first pin check and Install are unguarded. tests/netguard
+      # goes first (its sitecustomize chains to any other one); an existing PYTHONPATH is kept after it.
+      - name: Network guard on for every later step
+        run: |
+          echo "PYTHONPATH=$GITHUB_WORKSPACE/tests/netguard${PYTHONPATH:+:$PYTHONPATH}" >> "$GITHUB_ENV"
+          echo "OPTPIPE_NETGUARD=1" >> "$GITHUB_ENV"
+      - name: Network guard blocks a test connection (socket, urllib GET, requests GET to 127.0.0.1:9)
+        run: python tests/netguard/ci_check_blocked.py   # exit 0 only if every attempt raises NetworkBlocked
       - name: Paper-only scan (structural - no broker, no order path, GET-only HTTP and dashboard)
         run: python -m pytest tests/test_paper_only.py -p no:cacheprovider
       - name: Generated models match the schemas
@@ -35,7 +47,7 @@ jobs:
       - name: Doodle's spec tests
         working-directory: ${{ env.OPTIONS_SPEC_DIR }}
         run: |
-          pip install pyyaml jsonschema pytest
+          # deps installed in Install (pip is not run under the network guard)
           # spec 1.1.6 is hermetic (fixtures vendored under spec/fixtures/): no sibling checkout or link needed
           python -m pytest -p no:cacheprovider       # 689 passed on spec 1.1.6
       - name: CLI fixture run validates (schema 1.1.6 with Doodle's validator, INV-01..17)
