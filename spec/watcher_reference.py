@@ -3,6 +3,10 @@ spec 1.1.4: a revoked approval makes the ticket target 'rejected', see APPROVAL_
 spec 1.1.5: a review failing INV-16 (stored overall != recomputed) is VETO for the watcher; executed / closed ideas keep
 their status; a revoked approval rejects every pre-execution ticket; a real approval needs an approved_pending / approved
 idea; see TARGET_PRECEDENCE).
+spec 1.1.6 (SOL-ACCEPT-001 G3/G4/G5): an approval is real only while approved_at < now < expires_at (open window, same
+as INV-06 at filled_at; instants compared whatever the UTC offset); a naive / unparsable `now`, approval time or review
+evaluated_at never crashes: it fails closed and the target carries an `errors` list with the INV id; review verdicts use
+the fail-closed risk_reference.overall (an unrecognised result string, or UNKNOWN without severity, is VETO).
 
 Purpose: prove the watcher rules are unambiguous. Not production code.
 poll(inp, state) is a pure function: it returns the alerts to SEND for this poll, the new
@@ -351,18 +355,54 @@ def review_blocked(rv: dict | None) -> bool:
 
 # APPROVAL STATE IS READ ONLY FROM approvals[].status. There is no 'decision' field in the schema (approval objects have
 # additionalProperties: false, so a record carrying 'decision' is schema-invalid); never read, trust or fall back to it.
-def real_approval(sess: dict, ticket_id: str, now: str | None = None) -> dict | None:
+def _when(v, what: str, errors: list | None, inv: str = "INV-06"):
+    """aware datetime from an ISO string (or an aware datetime), else None plus an error appended to `errors`
+    (spec 1.1.6, G5: naive -> '<inv>-TIME-NAIVE', unparsable / wrong type -> '<inv>-TIME-INVALID'). Never raises."""
+    dt = v if isinstance(v, datetime) else None
+    if dt is None and isinstance(v, str):
+        try:
+            dt = datetime.fromisoformat(v)
+        except ValueError:
+            dt = None
+    if dt is not None and dt.tzinfo is not None and dt.utcoffset() is not None:
+        return dt
+    if errors is not None:
+        if dt is not None:
+            errors.append(f"{inv}-TIME-NAIVE {what} {v!r} has no UTC offset (naive times are forbidden; fail closed)")
+        else:
+            errors.append(f"{inv}-TIME-INVALID {what} {v!r} is not an ISO 8601 time with a UTC offset (fail closed)")
+    return None
+
+
+def _pair(a: dict, key: str):
+    v = a.get(key)
+    return v.get("ny") if isinstance(v, dict) else v
+
+
+def in_window(a: dict, t: datetime, errors: list | None = None) -> bool:
+    """Spec 1.1.6 (G4): an approval is valid at instant t only while approved_at < t < expires_at (open window; the
+    same rule as INV-06 at filled_at). Naive / unparsable approval times -> False (fail closed) + an INV-06 error."""
+    aid = a.get("approval_id")
+    t0 = _when(_pair(a, "approved_at"), f"approval {aid} approved_at.ny", errors)
+    t1 = _when(_pair(a, "expires_at"), f"approval {aid} expires_at.ny", errors)
+    return t0 is not None and t1 is not None and t0 < t < t1
+
+
+def real_approval(sess: dict, ticket_id: str, now: str | None = None, errors: list | None = None) -> dict | None:
     """The approval that makes `ticket_id` really approved, or None.
 
     The canonical approval field is approvals[].status (there is no 'decision' field). An approval counts only if
-    status == 'active', it is for this ticket, it is not expired at `now` (approved_at <= now < expires_at; any time
-    when now is None), it passes the 1.1.3 approval checks (validate_session.approval_errors: not a VETO review,
-    same ticket, legs/qty/limit equal the ticket, every flag acknowledged) and (spec 1.1.5) its review passes INV-16
-    (validate_session.overall_errors: the stored overall verdict / ids equal the recomputed ones). 'expired', 'revoked',
-    'consumed' or no approval -> None (target_from_session then maps a revoked approval to 'rejected', the rest to
-    hypothetical; an approval on an INV-16-inconsistent review makes the ticket 'vetoed').
+    status == 'active', it is for this ticket, it is inside its window at `now` (spec 1.1.6: approved_at < now <
+    expires_at, open, instants compared; any time when now is None), it passes the 1.1.3 approval checks
+    (validate_session.approval_errors: not a VETO review, same ticket, legs/qty/limit equal the ticket, every flag
+    acknowledged) and (spec 1.1.5) its review passes INV-16 (validate_session.overall_errors: the stored overall
+    verdict / ids equal the recomputed ones, 1.1.6: fail-closed recompute). 'expired', 'revoked', 'consumed' or no
+    approval -> None (target_from_session then maps a revoked approval to 'rejected', the rest to hypothetical; an
+    approval on an INV-16-inconsistent review makes the ticket 'vetoed').
     Spec 1.1.5 (step 5 of the precedence): the ticket's idea must be approved_pending or approved; an active approval on
-    an idea that is proposed, simulated, executed, closed, ... or on a ticket with no idea is NEVER a real approval."""
+    an idea that is proposed, simulated, executed, closed, ... or on a ticket with no idea is NEVER a real approval.
+    Spec 1.1.6 (G5): a naive / unparsable `now` or approval time never raises: no approval is real (fail closed) and
+    the INV-06-TIME-NAIVE / -INVALID message is appended to `errors` when given."""
     import validate_session as vs
 
     idea = next((i for i in sess.get("idea_log", []) if i.get("ticket_id") == ticket_id), None)
@@ -370,11 +410,15 @@ def real_approval(sess: dict, ticket_id: str, now: str | None = None) -> dict | 
         return None
     tk = next((t for t in sess.get("tickets", []) if t["ticket_id"] == ticket_id), None)
     rvs = {r["review_id"]: r for r in sess.get("risk_reviews", [])}
-    t = ts(now) if now else None
+    t = None
+    if now is not None:
+        t = _when(now, "now", errors)
+        if t is None:
+            return None
     for a in sess.get("approvals", []):
         if a.get("ticket_id") != ticket_id or a.get("status") != "active":
             continue
-        if t is not None and not (ts(a["approved_at"]["ny"]) <= t < ts(a["expires_at"]["ny"])):
+        if t is not None and not in_window(a, t, errors):
             continue
         rv = rvs.get(a.get("review_id"))
         if rv is None or tk is None or vs.approval_errors(a, rv, tk) or vs.overall_errors(rv):
@@ -399,9 +443,18 @@ def target_from_session(sess: dict, ticket_id: str, now: str | None = None) -> d
          b. any other non-approved idea status (proposed, simulated, ...)             -> that status (not watched)
       5. A real approval (real_approval) needs the idea approved_pending / approved AND status 'active', inside its
          window, INV-05 clean and INV-16 clean. An active approval on a proposed / simulated idea (or no idea) is
-         never real."""
-    reviews = sorted((r for r in sess.get("risk_reviews", []) if r["ticket_id"] == ticket_id),
-                     key=lambda r: ts(r["evaluated_at"]["ny"]))
+         never real.
+
+    Spec 1.1.6: the returned dict gains an `errors` list (INV-06-TIME-NAIVE / -INVALID for `now` or approval times,
+    INV-02-TIME-NAIVE / -INVALID for a review's evaluated_at) only when a time could not be used; otherwise the output
+    is exactly the 1.1.5 shape. A review whose evaluated_at is unusable cannot be ordered, so the ticket is 'vetoed'
+    (fail closed); an unusable `now` or approval time means no real approval."""
+    errors: list[str] = []
+    mine_rv = [r for r in sess.get("risk_reviews", []) if r["ticket_id"] == ticket_id]
+    when = {id(r): _when(_pair(r, "evaluated_at"), f"review {r.get('review_id')} evaluated_at.ny", errors, "INV-02")
+            for r in mine_rv}
+    unordered = any(v is None for v in when.values())
+    reviews = [] if unordered else sorted(mine_rv, key=lambda r: when[id(r)])
     rv_by_id = {r["review_id"]: r for r in sess.get("risk_reviews", [])}
     idea = next((i for i in sess.get("idea_log", []) if i.get("ticket_id") == ticket_id), None)
     istatus = idea["current_status"] if idea else None
@@ -409,20 +462,23 @@ def target_from_session(sess: dict, ticket_id: str, now: str | None = None) -> d
 
     base = {"kind": "ticket", "id": ticket_id, "ticket_id": ticket_id}
     shadow = {"approved": False, "hypothetical": True, "approval_id": None}
-    # 1. VETO first (INV-16-inconsistent reviews count as VETO, spec 1.1.5)
-    if (reviews and review_blocked(reviews[-1])) or istatus == "vetoed" or any(
+
+    def out(d: dict) -> dict:
+        return {**d, "errors": errors} if errors else d
+    # 1. VETO first (INV-16-inconsistent reviews count as VETO, spec 1.1.5; an unorderable review, spec 1.1.6)
+    if unordered or (reviews and review_blocked(reviews[-1])) or istatus == "vetoed" or any(
             review_blocked(rv_by_id.get(a.get("review_id"))) for a in mine):
-        return {**base, "status": "vetoed", **shadow}
+        return out({**base, "status": "vetoed", **shadow})
     # 2. terminal lifecycle keeps its status (positions are watched by the position rules)
     if istatus in TERMINAL_IDEA_STATUSES:
-        return {**base, "status": istatus, **shadow}
+        return out({**base, "status": istatus, **shadow})
     # 3. pre-execution: idea rejected, or a revoked approval with no real approval
-    a = real_approval(sess, ticket_id, now)
+    a = real_approval(sess, ticket_id, now, errors)
     if istatus == "rejected" or (a is None and any(x.get("status") == "revoked" for x in mine)):
-        return {**base, "status": "rejected", **shadow}
+        return out({**base, "status": "rejected", **shadow})
     # 4a. watched ticket: real or hypothetical
     if istatus in (None, *APPROVED_IDEA_STATUSES):
-        return {**base, "status": "approved_pending", "approved": a is not None, "hypothetical": a is None,
-                "approval_id": a["approval_id"] if a else None}
+        return out({**base, "status": "approved_pending", "approved": a is not None, "hypothetical": a is None,
+                    "approval_id": a["approval_id"] if a else None})
     # 4b. any other non-approved idea status passes through (never really approved)
-    return {**base, "status": istatus, **shadow}
+    return out({**base, "status": istatus, **shadow})
