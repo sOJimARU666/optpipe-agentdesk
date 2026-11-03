@@ -238,6 +238,25 @@ Tests marked `live` (`tests/test_watch_live.py`: one real `watch --live --once` 
 and never run in CI**; live mode is untested in CI. Run them by hand with `pytest -m live` or `OPTPIPE_LIVE_TESTS=1 pytest`.
 `tests/test_repo_hygiene.py` fails on absolute box paths, tokens/keys, or non-placeholder email addresses in tracked files.
 
+### Network guard (tests and CI): known residuals
+
+The runtime network guard (`tests/netguard/`, SOL-ACCEPT-001 G9) is on for the whole pytest run and every Python
+subprocess it starts. In CI it is also on for every step after Install: that step writes `PYTHONPATH=tests/netguard`
+(any existing PYTHONPATH stays after it) and `OPTPIPE_NETGUARD=1` to `$GITHUB_ENV`. A separate step,
+`python tests/netguard/ci_check_blocked.py`, fails the job unless a socket connect, a urllib GET and a requests GET
+to 127.0.0.1:9 are all blocked by the guard. `tests/test_ci_netguard.py` covers this.
+
+These gaps are **known and not fixed**:
+- Raw `_socket` (for example `_socket.socket().connect`) gets past the runtime guard, which patches `socket`, not
+  `_socket`. The static scanner flags `import _socket` in src/ and scripts/.
+- A Python subprocess started with `python -I`, `-S` or `-E` does not load `sitecustomize` from PYTHONPATH, so the
+  guard is not installed in it. The scanner does not flag `-I`/`-E <script>`.
+- The static scanner (`tests/test_paper_only.py`) misses four import spellings:
+  - `getattr(__import__('builtins'), '__import__')`;
+  - an import function assigned to a variable (`f = importlib.import_module; f(...)`);
+  - `importlib.util` spec loading (`find_spec(...).loader`);
+  - `ctypes`.
+
 ## Modules
 
 | Module | What | Design owner | Code |

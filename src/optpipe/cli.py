@@ -20,7 +20,7 @@ from pathlib import Path
 from .config import REPO_ROOT, load_settings
 from .records import paths, read_session, read_session_for_append, read_trace, render_markdown, write_session
 from .records.fields import BERLIN, NY
-from .records.guards import effective_verdict, merge
+from .records.guards import merge, review_view
 
 DEFAULT_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "2026-10-13"
 
@@ -36,10 +36,11 @@ def summary(rec: dict, trace) -> str:
     reviews = {r["ticket_id"]: r for r in rec["risk_reviews"] if r["run_id"] == run["run_id"]}
     for tk in rec["tickets"]:
         r = reviews.get(tk["ticket_id"])
-        o = r["overall"] if r else None
+        o = review_view(r) if r else None       # verdict + ids recomputed from the rule results (SOL-ACCEPT-001 G2)
         why = (" <- " + ", ".join(o["blocking_rule_ids"])) if o and o["blocking_rule_ids"] else ""
         flags = (" flags " + ", ".join(o["flag_rule_ids"])) if o and o["flag_rule_ids"] else ""
-        lines.append(f"  {effective_verdict(r) if o else '-':5} {tk['ticket_id']:30} qty {tk['quantity']} "
+        why += " [INV-16 tampered: stored " + str(o["stored_verdict"]) + "]" if o and o["tampered"] else ""
+        lines.append(f"  {o['verdict'] if o else '-':5} {tk['ticket_id']:30} qty {tk['quantity']} "
                      f"limit {tk['limit_price']['amount']} {tk['limit_price']['price_type']} "
                      f"max loss ${tk['max_loss']['amount_usd']}{why}{flags}")
     lines.append(f"recommendation: {rt.recommendation}")
@@ -91,10 +92,18 @@ def watch(a, settings) -> int:
     sess = Path(a.session) if a.session else Path(a.out) / f"session-{day}.json"
     if not sess.exists():
         print(f"session file not found: {sess}", file=sys.stderr); return 2
-    rec = json.loads(sess.read_text())
     # Fail closed (FIX-SEC-001 P0-4): never watch a record Doodle's validator (or the optpipe guards) rejects.
-    from .orchestrator import validate_file
-    verrs = validate_file(settings, sess)              # Doodle's validator + records/guards.check_record, merged
+    # The file is read and parsed ONCE: the object validated is the object watched, and the watch document's
+    # session sha256 is of those same bytes (SOL-ACCEPT-001 G7, no re-read between validate and watch).
+    import hashlib
+    from .orchestrator import validate_record
+    try:
+        raw = sess.read_bytes()
+        rec = json.loads(raw)
+    except (OSError, ValueError) as e:
+        print(f"optpipe watch: refusing to watch {sess.name}: unreadable ({type(e).__name__}: {e})", file=sys.stderr)
+        return 2
+    verrs = validate_record(settings, rec, sess.parent)  # Doodle's validator + records/guards.check_record, merged
     if verrs:
         print(f"optpipe watch: refusing to watch {sess.name}: the session record does not validate "
               f"({len(verrs)} error(s))\n  " + "\n  ".join(verrs), file=sys.stderr)
@@ -110,7 +119,8 @@ def watch(a, settings) -> int:
     s0 = clock.now()
     until = (datetime.fromisoformat(a.until) if a.until else
              datetime.combine(s0.astimezone(NY).date(), datetime.min.time(), NY).replace(hour=17))
-    wt = Watcher(rec, rules, cal, src, get_engine(a.engine), session_path=sess, now=s0)
+    wt = Watcher(rec, rules, cal, src, get_engine(a.engine), session_path=sess, now=s0,
+                 session_sha256=hashlib.sha256(raw).hexdigest())
     doc = wt.run(clock, until, once=a.once)
     res = write_watch(doc, sess, Path(a.out))
     sm = doc["summary"]
@@ -176,6 +186,14 @@ def main(argv: list[str] | None = None) -> int:
         _, notes = load_ruleset(sp)
         for n in notes:
             print(f"note               {n}")
+        # SOL-ACCEPT-001 G8: a spec folder that is not the pinned release, or has no usable validator, is a FAIL.
+        from .orchestrator import load_validator
+        _, verr = load_validator(sp)
+        if verr:
+            print(f"spec_pin           FAIL\n{verr}", file=sys.stderr)
+            return 2
+        from .spec_pin import EXPECTED_VERSION
+        print(f"spec_pin           OK (pinned release {EXPECTED_VERSION}, every MANIFEST.sha256 file verified)")
         return 0
     if a.cmd == "watch":
         return watch(a, settings)
@@ -187,7 +205,7 @@ def main(argv: list[str] | None = None) -> int:
         # 2 = unreadable input, missing/broken validator or a validator crash. Any non-zero is FAIL.
         import json
         from .orchestrator import ValidatorCrashed, load_validator, run_validator
-        from .records.guards import check_record
+        from .records.guards import check_record, guard_crashed
         mod, err = load_validator(discover(settings.spec_path))
         if mod is None:
             print(err, file=sys.stderr); return 2
@@ -200,6 +218,8 @@ def main(argv: list[str] | None = None) -> int:
         except ValidatorCrashed as e:
             print(str(e), file=sys.stderr); return 2
         errs = merge(errs, check_record(rec) if isinstance(rec, dict) else [])
+        if guard_crashed(errs):                # a guard crash is like a validator crash: exit 2 (SOL-ACCEPT-001 G5)
+            print("\n".join(errs), file=sys.stderr); return 2
         from .records.store import verify_session_ref
         tp = Path(str(a.file).replace(".json", ".trace.json"))
         if tp.exists():
@@ -234,9 +254,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"wrote {w.json}  sha256 {w.json_sha256}  (schema {rec['schema_version']}, trace_ref -> {w.trace.name})\n"
           f"wrote {w.trace}  sha256 {w.trace_sha256}\nwrote {w.md}")
     if ferrs is not None:                      # always a list now; a missing validator is an error in it
-        print(f"validate_session {w.json.name}: " + (f"OK as {rec['schema_version']} (schema + invariants INV-01..{ {'1.1.5': '16', '1.1.4': '16', '1.1.3': '16', '1.1.2': '15', '1.1.1': '14'}.get(rec['schema_version'], '13') })" if not ferrs
+        print(f"validate_session {w.json.name}: " + (f"OK as {rec['schema_version']} (schema + invariants INV-01..{ {'1.1.6': '17', '1.1.5': '16', '1.1.4': '16', '1.1.3': '16', '1.1.2': '15', '1.1.1': '14'}.get(rec['schema_version'], '13') })" if not ferrs
                                                      else f"{len(ferrs)} error(s)\n  " + "\n  ".join(ferrs[:20])))
     v = trace.runs[-1].validation
+    from .records.guards import guard_crashed
+    if guard_crashed(ferrs or []):
+        return 2
     return 1 if (v.get("errors") or ferrs) else 0
 
 

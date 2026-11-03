@@ -7,6 +7,7 @@ from datetime import datetime
 from typing import Any, Optional
 
 from ..models.session import SessionTrace
+from .guards import review_view
 
 
 def _v(f: Any) -> str:
@@ -96,8 +97,11 @@ def render_markdown(rec: dict, trace: Optional[SessionTrace] = None) -> str:
 
     a("\n## Risk Officer reviews")
     for r in rec["risk_reviews"]:
-        o = r["overall"]
+        o = review_view(r)          # verdict and ids recomputed from the rule results (SOL-ACCEPT-001 G2)
         a(f"### `{r['review_id']}` -> **{o['verdict']}** (run `{r['run_id']}`, {_t(r['evaluated_at'])})")
+        if o["tampered"]:
+            a(f"- **INV-16 tampered**: the stored overall says {o['stored_verdict']}; the verdict above is recomputed "
+              f"from the rule results: " + "; ".join(o["errors"]))
         a(f"- blocking: {', '.join(o['blocking_rule_ids']) or '-'}; flags: {', '.join(o['flag_rule_ids']) or '-'}; "
           f"approval required: {o['approval_required']}")
         a("\n| rule | sev | result | measured | threshold | reason |\n|---|---|---|---|---|---|")

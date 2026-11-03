@@ -10,7 +10,7 @@ from datetime import datetime
 from typing import Any
 
 from ..records.fields import tspair
-from .guards import effective_verdict, review_errors
+from .guards import review_errors, review_view
 
 
 def apply_reviews(idea_log: list[dict], reviews: list[dict], at: datetime) -> tuple[list[dict], str]:
@@ -22,14 +22,14 @@ def apply_reviews(idea_log: list[dict], reviews: list[dict], at: datetime) -> tu
     for idea in idea_log:
         tid = idea.get("ticket_id")
         for r in by_ticket.get(tid or "", []):
-            o = r["overall"]
-            if effective_verdict(r) == "VETO":       # stored overall must equal its rule results (FIX-SEC-001, INV-16)
+            o, v = r["overall"], review_view(r)     # ids recomputed from the rule results (SOL-ACCEPT-001 G2)
+            if v["verdict"] == "VETO":       # stored overall must equal its rule results (FIX-SEC-001, INV-16)
                 bad = review_errors(r)
-                st, why = "vetoed", ("; ".join(bad) if bad else (o.get("summary") or ", ".join(o["blocking_rule_ids"])))
+                st, why = "vetoed", ("; ".join(bad) if bad else (o.get("summary") or ", ".join(v["blocking_rule_ids"])))
             else:
                 st = "approved_pending"
-                why = f"{o['verdict']}: not vetoed; needs Eugene's contract-level approval" + (
-                    f" (acknowledge flags {', '.join(o['flag_rule_ids'])})" if o["flag_rule_ids"] else "")
+                why = f"{v['verdict']}: not vetoed; needs Eugene's contract-level approval" + (
+                    f" (acknowledge flags {', '.join(v['flag_rule_ids'])})" if v["flag_rule_ids"] else "")
                 open_ids.append(tid)
             idea["history"].append({"status": st, "at": when, "actor": "risk_officer", "reason": why[:500],
                                     "ref_ids": [r["review_id"]]})

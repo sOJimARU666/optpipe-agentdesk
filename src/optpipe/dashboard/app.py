@@ -17,7 +17,7 @@ from fastapi.templating import Jinja2Templates
 
 from ..scenario import tag_for_record
 from .data import OutDir, Session, berlin, clock, compact, fval, ftitle, pair
-from ..records.guards import effective_verdict, reviews_by_time
+from ..records.guards import effective_verdict, review_view, reviews_by_time
 
 HERE = Path(__file__).parent
 PAGES = ("today", "tickets", "timeline", "history")
@@ -28,7 +28,7 @@ _RAW_OK = (".json", ".md", ".sha256")
 def _templates(export: bool) -> Jinja2Templates:
     t = Jinja2Templates(directory=str(HERE / "templates"))
     t.env.filters.update(berlin=berlin, clock=clock, pair=pair, fval=fval, ftitle=ftitle, compact=compact)
-    t.env.globals.update(export=export, PAGES=PAGES)
+    t.env.globals.update(export=export, PAGES=PAGES, rview=review_view)   # recomputed verdict/ids (SOL-ACCEPT-001 G1)
     return t
 
 

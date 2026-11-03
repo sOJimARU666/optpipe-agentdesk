@@ -9,11 +9,11 @@ watcher_rules.yaml) and writes <session>.watch.json plus a .sha256 sidecar.
                   vetoed=True: no intraday alerts, one end-of-day summary.
       - rejected: SHADOW target.
       - approved: an approval (spec schema: there is no `decision` field) with status `active`, valid at the
-                  watch start (approved_at <= now < expires_at), whose flags are all acknowledged and whose
+                  watch start (approved_at < now < expires_at, spec 1.1.6), whose flags are all acknowledged and whose
                   review's rule results do not veto (records/guards.py, FIX-SEC-001). Watched as approved_pending.
                   Any other approval (revoked / expired / consumed / out of window / unacknowledged flags) is
                   NOT honoured. Without a real approval, ANY `revoked` approval of the ticket makes it a
-                  rejected shadow (spec 1.1.4/1.1.5); otherwise the ticket stays HYPOTHETICAL.
+                  rejected shadow (spec 1.1.4-1.1.6); otherwise the ticket stays HYPOTHETICAL.
       - neither:  HYPOTHETICAL (no approval recorded). Watched as approved_pending and flagged
                   hypothetical=True, which is a paper what-if.
       - idea executed / closed: keeps that status and is NOT watched as a ticket (no quotes, no alerts, no shadow
@@ -44,7 +44,7 @@ from typing import Any, Callable, Optional, Protocol
 
 import yaml
 
-from ..records.guards import effective_verdict, latest_review, review_errors
+from ..records.guards import effective_verdict, latest_review, position_errors, review_errors
 from ..risk.engine import Calendar
 from . import engine as spec_engine
 from .engine import BERLIN, NY, SHADOW, mark_of
@@ -79,7 +79,7 @@ def pair(dt: datetime) -> dict:
 
 
 def _ny(v) -> str:
-    return v["ny"] if isinstance(v, dict) else str(v)
+    return v.get("ny") if isinstance(v, dict) else str(v)
 
 
 # ------------------------------------------------------------------ pluggable rule engines
@@ -258,7 +258,7 @@ class Target:
 def _latest_review(rec: dict, tid: str) -> Optional[dict]:
     """The ticket's latest review by `evaluated_at`, stable tie-break = last listed (spec/watcher_reference.py
     target_from_session, watcher_rules.md 'VETO comes first'). Never by list position alone (FIX-SEC-001 R1)."""
-    return latest_review(r for r in rec.get("risk_reviews") or [] if r.get("ticket_id") == tid)
+    return latest_review(r for r in _dicts(rec.get("risk_reviews")) if r.get("ticket_id") == tid)
 
 
 def _veto_reasons(rec: dict, tid: str, rv: Optional[dict], istat: Optional[str]) -> list[str]:
@@ -272,53 +272,102 @@ def _veto_reasons(rec: dict, tid: str, rv: Optional[dict], istat: Optional[str])
     if rv is not None and effective_verdict(rv) == "VETO":
         out.append("; ".join(review_errors(rv)) or ", ".join(rv.get("overall", {}).get("blocking_rule_ids") or [])
                    or f"latest review {rv.get('review_id')} is VETO")
-    reviews = {r.get("review_id"): r for r in rec.get("risk_reviews") or []}
-    for a in rec.get("approvals") or []:
+    reviews = {r.get("review_id"): r for r in _dicts(rec.get("risk_reviews"))}
+    for a in _dicts(rec.get("approvals")):
         arv = reviews.get(a.get("review_id"))
         if a.get("ticket_id") == tid and arv is not None and arv is not rv and effective_verdict(arv) == "VETO":
             out.append(f"approval {a.get('approval_id')} points at VETO review {arv.get('review_id')}")
-    for r in rec.get("risk_reviews") or []:
-        if r.get("ticket_id") == tid and r is not rv and _when(r.get("evaluated_at")) is None and effective_verdict(r) == "VETO":
-            out.append(f"undated VETO review {r.get('review_id')}")
+    for r in _dicts(rec.get("risk_reviews")):
+        if r.get("ticket_id") == tid and _when(r.get("evaluated_at")) is None:
+            # spec 1.1.6 (G5): a review whose evaluated_at is missing / naive / unparsable cannot be ordered, so the
+            # ticket's latest review is unknown: vetoed (fail closed), whatever that review's verdict
+            out.append(f"INV-02-TIME-{_time_problem(r.get('evaluated_at'))} review {r.get('review_id')} evaluated_at "
+                       f"{_ny(r.get('evaluated_at'))!r} is not usable: reviews cannot be ordered (fail closed)")
     if istat == "vetoed":
         out.append("idea_log vetoed")
     return out
 
 
 def _when(v) -> Optional[datetime]:
+    """The aware instant of a TsPair / ISO string / datetime, else None. A naive time (no UTC offset) is None too: it
+    can never be compared with an aware one, so it fails closed instead of crashing (spec 1.1.6, SOL-ACCEPT-001 G4/G5)."""
+    if isinstance(v, datetime):
+        dt = v
+    else:
+        try:
+            dt = datetime.fromisoformat(_ny(v)) if v else None
+        except (TypeError, ValueError):
+            return None
+    return dt if dt is not None and dt.tzinfo is not None and dt.utcoffset() is not None else None
+
+
+def _time_problem(v) -> str:
+    """'NAIVE' or 'INVALID' for an unusable time (message id suffix, spec 1.1.6 G5)."""
     try:
-        return datetime.fromisoformat(_ny(v)) if v else None
+        dt = v if isinstance(v, datetime) else datetime.fromisoformat(_ny(v))
+        return "NAIVE" if dt.tzinfo is None or dt.utcoffset() is None else "INVALID"
     except (TypeError, ValueError):
-        return None
+        return "INVALID"
+
+
+def _dicts(v) -> list[dict]:
+    """The object entries of a record section (a non-array section, or a non-object entry, is never used)."""
+    return [x for x in v if isinstance(x, dict)] if isinstance(v, list) else []
+
+
+def _guarded(fn, *args) -> list[str]:
+    """A records/guards check that can never crash the watcher: an exception is an error (fail closed)."""
+    try:
+        return list(fn(*args))
+    except Exception as e:                       # noqa: BLE001 - any guard bug must block, not crash
+        return [f"GUARD-CRASHED {getattr(fn, '__name__', 'guard')} raised {type(e).__name__}: {e} (fail closed)"]
+
+
+def position_blockers(rec: dict, p: dict) -> list[str]:
+    """Why an `open` paper position must NOT be watched as open: [] when it stands. Its approval must resolve
+    (INV-04) and records/guards position_errors (INV-06) must be clean (SOL-ACCEPT-001 G7)."""
+    approvals = {a.get("approval_id"): a for a in _dicts(rec.get("approvals"))}
+    ap = approvals.get(p.get("approval_id")) if isinstance(p.get("approval_id"), str) else None
+    if ap is None:
+        return [f"INV-04 position {p.get('position_id')!r}: approval {p.get('approval_id')!r} not in the record"]
+    tickets = {t.get("ticket_id"): t for t in _dicts(rec.get("tickets"))}
+    reviews = {r.get("review_id"): r for r in _dicts(rec.get("risk_reviews"))}
+    return _guarded(position_errors, p, ap, tickets.get(p.get("ticket_id")), reviews.get(ap.get("review_id")))
 
 
 def approval_blockers(rec: dict, appr: dict, now: datetime) -> list[str]:
     """Why an approval must NOT be honoured at `now`: [] when it stands. Status must be `active`, `now` must be
-    inside [approved_at, expires_at), and records/guards review_errors + approval_errors (INV-16 tampered overall,
+    strictly inside (approved_at, expires_at) (spec 1.1.6 open window, instants, for every record version), and records/guards review_errors + approval_errors (INV-16 tampered overall,
     INV-05 unacknowledged flags / VETO review / foreign ticket / terms) must be clean. Reads `status`, never a `decision` field (not in Doodle's approval schema)."""
     from ..records.guards import approval_errors, review_errors
+    if not isinstance(appr, dict):
+        return ["approval is not an object"]
     aid = appr.get("approval_id")
     st = appr.get("status")
     if st != "active":
         return [f"approval {aid} status {st!r}, not active"]
+    if _when(now) is None:      # spec 1.1.6 G5: a naive / unusable `now` means no real approval (fail closed)
+        return [f"INV-06-TIME-{_time_problem(now)} now {now!r} has no usable UTC offset: approval {aid} not honoured"]
     start, end = _when(appr.get("approved_at")), _when(appr.get("expires_at"))
     if start is None or end is None:
-        return [f"approval {aid} has no valid approved_at/expires_at"]
-    if not start <= now < end:
+        bad = [k for k, t in (("approved_at", start), ("expires_at", end)) if t is None]
+        return [f"INV-06-TIME-{_time_problem(appr.get(k))} approval {aid} {k} {_ny(appr.get(k))!r} is not usable "
+                "(naive / unparsable / missing): not honoured (fail closed)" for k in bad]
+    if not start < now < end:   # spec 1.1.6 G4: open window approved_at < now < expires_at (instants), every version
         return [f"approval {aid} not valid at {now.astimezone(NY):%Y-%m-%d %H:%M} NY "
                 f"(window {start.astimezone(NY):%Y-%m-%d %H:%M} to {end.astimezone(NY):%H:%M} NY)"]
-    reviews = {r.get("review_id"): r for r in rec.get("risk_reviews") or []}
+    reviews = {r.get("review_id"): r for r in _dicts(rec.get("risk_reviews"))}
     rv = reviews.get(appr.get("review_id"))
     if rv is None:
         return [f"approval {aid} references unknown review {appr.get('review_id')!r}"]
-    tk = next((t for t in rec.get("tickets") or [] if t.get("ticket_id") == appr.get("ticket_id")), None)
-    return [*review_errors(rv), *approval_errors(appr, rv, tk)]
+    tk = next((t for t in _dicts(rec.get("tickets")) if t.get("ticket_id") == appr.get("ticket_id")), None)
+    return [*_guarded(review_errors, rv), *_guarded(approval_errors, appr, rv, tk)]
 
 
 def _pick_approval(rec: dict, tid: str, now: datetime) -> tuple[Optional[dict], list[str]]:
     """(approval, blockers) for a ticket: the last approval that stands at `now`, else the most relevant
     one that does not (last active, else last recorded) with its blockers. (None, []) when there is none."""
-    mine = [a for a in rec.get("approvals") or [] if a.get("ticket_id") == tid]
+    mine = [a for a in _dicts(rec.get("approvals")) if a.get("ticket_id") == tid]
     checked = [(a, approval_blockers(rec, a, now)) for a in mine]
     good = [(a, b) for a, b in checked if not b]
     if good:
@@ -342,22 +391,24 @@ def targets_from_session(rec: dict, now: datetime) -> list[Target]:
       4. idea `approved_pending` / `approved` / no idea -> `approved_pending`: really approved with a real approval,
          else HYPOTHETICAL (a watched paper what-if). Any other idea status (proposed, simulated, ...) keeps that
          status and is not watched.
-      5. a REAL approval needs the idea `approved_pending` / `approved` AND status `active`, approved_at <= now <
-         expires_at, INV-05 and INV-16 clean. An active approval of a proposed / simulated idea never counts, and a
+      5. a REAL approval needs the idea `approved_pending` / `approved` AND status `active`, approved_at < now <
+         expires_at (spec 1.1.6 open window, instants), INV-05 and INV-16 clean. An active approval of a proposed / simulated idea never counts, and a
          ticket with NO idea plus an active approval is HYPOTHETICAL, never really approved (spec 1.1.5 ruling)."""
     if not isinstance(now, datetime):
         raise TypeError("targets_from_session: `now` must be a datetime (the watch start)")
-    ideas = {i.get("ticket_id"): i for i in rec.get("idea_log") or []}
+    ideas = {i.get("ticket_id"): i for i in _dicts(rec.get("idea_log")) if isinstance(i.get("ticket_id"), str)}
     out = []
-    for tk in rec.get("tickets") or []:
-        tid = tk["ticket_id"]
+    for tk in _dicts(rec.get("tickets")):          # a non-object entry is never a ticket (G7: never raise)
+        tid = tk.get("ticket_id")
+        if not isinstance(tid, str):
+            continue                                # no usable id: cannot be watched (the CLI gate refuses it)
         idea = ideas.get(tid) or {}
         rv = _latest_review(rec, tid)
         verdict = effective_verdict(rv) if rv else None      # a tampered/empty review is VETO (INV-16, FIX-SEC-001)
         istat = idea.get("current_status")                   # None = no idea (reference: istatus None)
         appr, blockers = _pick_approval(rec, tid, now)
         real = appr is not None and not blockers and istat in APPROVED_IDEA_STATUSES      # step 5
-        revoked = [a.get("approval_id") for a in rec.get("approvals") or []
+        revoked = [a.get("approval_id") for a in _dicts(rec.get("approvals"))
                    if a.get("ticket_id") == tid and a.get("status") == "revoked"]
         vetoes = _veto_reasons(rec, tid, rv, istat)
         if vetoes:
@@ -392,10 +443,15 @@ def targets_from_session(rec: dict, now: datetime) -> list[Target]:
             out.append(Target(tid, "ticket", tid, "approved_pending", istat, False, True, tk,
                               f"HYPOTHETICAL (record status {istat!r}, verdict {verdict or 'none'}, {why}): "
                               "watched as a paper what-if"))
-    tickets = {t["ticket_id"]: t for t in rec.get("tickets") or []}
-    for p in rec.get("paper_positions") or []:
+    tickets = {t["ticket_id"]: t for t in _dicts(rec.get("tickets")) if isinstance(t.get("ticket_id"), str)}
+    for p in _dicts(rec.get("paper_positions")):
         if p.get("status") == "open" and p.get("ticket_id") in tickets:
             pid = p.get("position_id") or f"pos-{p['ticket_id']}"
+            bad = position_blockers(rec, p)          # never watch an open position the INV-06 guards reject (G7)
+            if bad:
+                out.append(Target(pid, "position", p["ticket_id"], "invalid", "open", False, False, tickets[p["ticket_id"]],
+                                  "open PAPER position NOT watched (fails INV-04/INV-06: " + "; ".join(bad) + ")"))
+                continue
             out.append(Target(pid, "position", p["ticket_id"], "open", "open", False, False, tickets[p["ticket_id"]],
                               "open PAPER position"))
     return out
@@ -507,13 +563,14 @@ def _rel(p) -> str:
 class Watcher:
     def __init__(self, rec: dict, rules: dict, cal: Calendar, source: QuoteSource,
                  engine: Optional[RuleEngine] = None, session_path: Optional[Path] = None, *,
-                 now: datetime):
+                 now: datetime, session_sha256: Optional[str] = None):
         """`now` = the watch start (the clock's first reading): approvals are judged valid or not at that time.
         Required, keyword-only (FIX-SEC-001 N7): no wall-clock fallback."""
         spec_engine.check_rules(rules)
         self.rec, self.rules, self.cal, self.source = rec, rules, cal, source
         self.engine = engine or SpecEngine()
         self.session_path = session_path
+        self.session_sha256 = session_sha256      # sha256 of the exact bytes `rec` was parsed from (watch CLI, G7)
         self.targets = targets_from_session(rec, now)
         self.events, _, self.exdivs = session_events(rec)
         self.alerts: list[dict] = []
@@ -642,8 +699,8 @@ class Watcher:
                  "close": pair(self.cal.close_dt(d)) if self.cal.is_trading_day(d) else None} for d in days]
 
     def document(self, start: datetime, until: datetime, clock) -> dict:
-        sha = None
-        if self.session_path and Path(self.session_path).exists():
+        sha = self.session_sha256
+        if sha is None and self.session_path and Path(self.session_path).exists():
             sha = hashlib.sha256(Path(self.session_path).read_bytes()).hexdigest()
         tag = next((n for n in (self.rec.get("session") or {}).get("notes") or []
                     if isinstance(n, str) and n.startswith("FICTIONAL DEMO")), None)

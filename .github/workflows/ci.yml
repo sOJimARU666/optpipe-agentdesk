@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 env:
-  # spec/ is the pinned copy of Doodle's spec (scripts/sync_spec.py: VERSION 1.1.5 + MANIFEST sha256 ecc73140..., 30 files).
+  # spec/ is the pinned copy of Doodle's spec (scripts/sync_spec.py: VERSION 1.1.6 + MANIFEST sha256 6b4c51ce..., 31 files).
   # Doodle owns it; changes go through Doodle in ../trading/spec and a re-sync, never an edit here.
   OPTIONS_SPEC_DIR: ${{ github.workspace }}/spec
   PYTHONDONTWRITEBYTECODE: "1"
@@ -23,7 +23,19 @@ jobs:
       - name: Pinned spec intact (manifest sha matches the pin, no file edited, nothing extra)
         run: python scripts/sync_spec.py --check --dest "$OPTIONS_SPEC_DIR"
       - name: Install
-        run: pip install -e '.[dev]'
+        run: |
+          pip install -e '.[dev]'
+          pip install pyyaml jsonschema pytest       # Doodle's spec tests' deps: installed here, before the guard is on
+      # From here on every step runs under the runtime network guard (SOL-ACCEPT-001 G9 follow-up): tests/netguard's
+      # sitecustomize.py installs it in every Python process when OPTPIPE_NETGUARD=1. $GITHUB_ENV applies to the
+      # LATER steps only, so checkout, setup-python, the first pin check and Install are unguarded. tests/netguard
+      # goes first (its sitecustomize chains to any other one); an existing PYTHONPATH is kept after it.
+      - name: Network guard on for every later step
+        run: |
+          echo "PYTHONPATH=$GITHUB_WORKSPACE/tests/netguard${PYTHONPATH:+:$PYTHONPATH}" >> "$GITHUB_ENV"
+          echo "OPTPIPE_NETGUARD=1" >> "$GITHUB_ENV"
+      - name: Network guard blocks a test connection (socket, urllib GET, requests GET to 127.0.0.1:9)
+        run: python tests/netguard/ci_check_blocked.py   # exit 0 only if every attempt raises NetworkBlocked
       - name: Paper-only scan (structural - no broker, no order path, GET-only HTTP and dashboard)
         run: python -m pytest tests/test_paper_only.py -p no:cacheprovider
       - name: Generated models match the schemas
@@ -35,10 +47,10 @@ jobs:
       - name: Doodle's spec tests
         working-directory: ${{ env.OPTIONS_SPEC_DIR }}
         run: |
-          pip install pyyaml jsonschema pytest
-          # spec 1.1.5 is hermetic (fixtures vendored under spec/fixtures/): no sibling checkout or link needed
-          python -m pytest -p no:cacheprovider       # 605 passed on spec 1.1.5
-      - name: CLI fixture run validates (schema 1.1.5 with Doodle's validator, INV-01..16)
+          # deps installed in Install (pip is not run under the network guard)
+          # spec 1.1.6 is hermetic (fixtures vendored under spec/fixtures/): no sibling checkout or link needed
+          python -m pytest -p no:cacheprovider       # 689 passed on spec 1.1.6
+      - name: CLI fixture run validates (schema 1.1.6 with Doodle's validator, INV-01..17)
         run: |
           optpipe run --out "$RUNNER_TEMP/out"
           optpipe validate "$RUNNER_TEMP/out/session-2026-10-13.json"

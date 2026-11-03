@@ -48,8 +48,10 @@ def ts(s: str) -> datetime:
 
 def combine(results) -> str:
     """Worst result by precedence PASS < FLAG < UNKNOWN < VETO. Spec 1.1.3: no results -> UNKNOWN (fail closed;
-    was PASS), so a per-leg rule evaluated over zero legs can never pass silently."""
-    results = list(results)
+    was PASS), so a per-leg rule evaluated over zero legs can never pass silently.
+    Spec 1.1.6 (G3, fail closed): a result string outside PASS/FLAG/UNKNOWN/VETO (wrong case, empty, None, ...) counts
+    as VETO; it never raises and never passes."""
+    results = [r if r in PREC else "VETO" for r in results]
     return max(results, key=PREC.__getitem__) if results else "UNKNOWN"
 
 
@@ -536,7 +538,44 @@ RULE_FUNCS = {"R01_QUOTE_FRESHNESS": r01, "R02_BID_ASK_WIDTH": r02, "R03_OPEN_IN
               "R12_DEFINED_RISK_STRUCTURE": r12, "R13_HOLD_PERIOD": r13}
 
 
+RESULTS = frozenset(PREC)          # the four recognised rule results (exact, upper case)
+SEVERITIES = frozenset({"hard", "soft"})
+
+
+def classify(r) -> str:
+    """Spec 1.1.6 (G3, fail closed): 'blocking' | 'flag' | 'pass' for one rule result.
+    VETO, an unrecognised result (anything not exactly PASS/FLAG/UNKNOWN/VETO: wrong case, empty, None, a non-string)
+    and UNKNOWN with severity hard OR a missing / unrecognised severity are blocking; FLAG and soft UNKNOWN are
+    flags; only an exact PASS passes. A non-object entry is blocking. Never raises."""
+    if not isinstance(r, dict):
+        return "blocking"
+    res_, sev = r.get("result"), r.get("severity")
+    if not isinstance(res_, str) or res_ not in RESULTS or res_ == "VETO":
+        return "blocking"
+    if res_ == "UNKNOWN":
+        return "flag" if sev == "soft" else "blocking"      # hard, missing or unrecognised severity -> hard
+    return "flag" if res_ == "FLAG" else "pass"
+
+
+def _rid(r):
+    return r.get("rule_id") if isinstance(r, dict) else None
+
+
 def overall(results) -> dict:
+    """Aggregate verdict of a review's rule results: VETO if any result is blocking (classify), else FLAG if any is a
+    flag, else PASS. Spec 1.1.6: fail closed on unrecognised results / severities (see classify); identical to
+    overall_v115 for every schema-valid result list (the schema enums admit only recognised values)."""
+    results = list(results)
+    blocking = [_rid(r) for r in results if classify(r) == "blocking"]
+    flags = [_rid(r) for r in results if classify(r) == "flag"]
+    verdict = "VETO" if blocking else ("FLAG" if flags else "PASS")
+    return {"verdict": verdict, "blocking_rule_ids": blocking, "flag_rule_ids": flags, "approval_required": True}
+
+
+def overall_v115(results) -> dict:
+    """The frozen spec 1.0.0-1.1.5 aggregate, kept verbatim so validate_session checks pre-1.1.6 records exactly as
+    before (INV-16 / INV-05 / INV-06). Fails OPEN on an unrecognised result string (ignored, i.e. PASS-equivalent)
+    and raises KeyError on a missing severity / result: do not use it for new decisions."""
     blocking = [r["rule_id"] for r in results if r["result"] == "VETO" or (r["result"] == "UNKNOWN" and r["severity"] == "hard")]
     flags = [r["rule_id"] for r in results if r["result"] == "FLAG" or (r["result"] == "UNKNOWN" and r["severity"] == "soft")]
     verdict = "VETO" if blocking else ("FLAG" if flags else "PASS")

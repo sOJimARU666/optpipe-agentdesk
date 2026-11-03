@@ -4,7 +4,7 @@
 <p class="mute small">Each ticket shows the Risk Officer verdict of the latest run and every rule with its reason. Earlier runs' reviews load on demand.</p>
 {% for x in tickets %}{% set t = x.t %}{% set lv = x.latest %}
 <div class="card" id="{{ t.ticket_id }}">
-  <h2 style="margin-top:0">{% if lv %}<span class="badge {{ lv.overall.verdict }}">{{ lv.overall.verdict }}</span>{% endif %}
+  <h2 style="margin-top:0">{% if lv %}{% set lvv = rview(lv).verdict %}<span class="badge {{ lvv }}">{{ lvv }}</span>{% endif %}
     {{ t.underlying }} · {{ t.strategy|replace('_',' ') }} <span class="mono small mute">{{ t.ticket_id }}</span></h2>
   <p class="small">{{ t.label }} · {{ t.direction }} · {{ t.thesis }}</p>
   <div class="grid g2">
@@ -32,10 +32,10 @@
 
   <h3>Risk Officer</h3>
   {% if x.reviews|length > 1 %}<div class="small">Reviews by run:
-    {% for rv in x.reviews %}{% if export %}<a class="pill" href="#rv-{{ rv.review_id }}">{{ rv.run_id }} · {{ rv.overall.verdict }}</a>{% else %}<a class="pill {{ 'on' if rv is sameas lv }}" href="#rv-{{ rv.review_id }}"
-      hx-get="/s/{{ s.date }}/review/{{ rv.review_id }}" hx-target="#rvslot-{{ t.ticket_id }}" hx-swap="innerHTML">{{ rv.run_id }} · {{ rv.overall.verdict }}</a>{% endif %}{% endfor %}</div>{% endif %}
+    {% for rv in x.reviews %}{% if export %}<a class="pill" href="#rv-{{ rv.review_id }}">{{ rv.run_id }} · {{ rview(rv).verdict }}</a>{% else %}<a class="pill {{ 'on' if rv is sameas lv }}" href="#rv-{{ rv.review_id }}"
+      hx-get="/s/{{ s.date }}/review/{{ rv.review_id }}" hx-target="#rvslot-{{ t.ticket_id }}" hx-swap="innerHTML">{{ rv.run_id }} · {{ rview(rv).verdict }}</a>{% endif %}{% endfor %}</div>{% endif %}
   <div id="rvslot-{{ t.ticket_id }}">{% if lv %}{% with rv=lv %}{% include "_review.html" %}{% endwith %}{% else %}<p class="mute">Not reviewed.</p>{% endif %}</div>
-  {% if export %}{% for rv in x.reviews if rv is not sameas lv %}<details><summary>earlier review · {{ rv.run_id }} · {{ rv.overall.verdict }}</summary>{% include "_review.html" %}</details>{% endfor %}{% endif %}
+  {% if export %}{% for rv in x.reviews if rv is not sameas lv %}<details><summary>earlier review · {{ rv.run_id }} · {{ rview(rv).verdict }}</summary>{% include "_review.html" %}</details>{% endfor %}{% endif %}
 </div>
 {% else %}<div class="card mute">No tickets in this session.</div>{% endfor %}
 {% endblock %}

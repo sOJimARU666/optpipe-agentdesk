@@ -29,6 +29,7 @@ class Integrity:
     session_ref_ok: Optional[bool] = None     # trace.session_ref.sha256 matches the record content (minus trace_ref)
     watch_sidecar_ok: Optional[bool] = None   # <session>.watch.json.sha256 matches the watch file
     watch_session_ok: Optional[bool] = None   # watch.session.sha256 matches session-<date>.json
+    guard_errors: list[str] = field(default_factory=list)   # records/guards.check_record on the record (SOL-ACCEPT-001 G1)
     problems: list[str] = field(default_factory=list)
 
     @property
@@ -64,6 +65,18 @@ class Session:
         return next((i for i in items if i.get("run_id") == run_id), None)
 
 
+def guard_errors(rec: Any) -> list[str]:
+    """optpipe's record guards (INV-05/06/16) on a record the dashboard is about to show. Never raises: a guard
+    crash is itself an error (fail closed), so the page still renders and says the record is not trustworthy."""
+    from ..records.guards import check_record
+    if not isinstance(rec, dict):
+        return [f"GUARD-CRASHED record is a {type(rec).__name__}, not an object (fail closed)"]
+    try:
+        return list(check_record(rec))
+    except Exception as e:  # noqa: BLE001 - display path: report, never crash
+        return [f"GUARD-CRASHED check_record raised {type(e).__name__}: {e} (fail closed)"]
+
+
 class OutDir:
     def __init__(self, root: Path | str):
         self.root = Path(root)
@@ -90,6 +103,8 @@ class OutDir:
         else:
             rec, origin = from_v1(json.loads(jp.read_text())), "v1 (upgraded for display)"
         integ, trace = Integrity(), None
+        integ.guard_errors = guard_errors(rec)
+        integ.problems += [f"guard: {e}" for e in integ.guard_errors]
         if tp.exists():
             tb = tp.read_bytes()
             trace = json.loads(tb)

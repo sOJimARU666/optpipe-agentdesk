@@ -46,7 +46,7 @@ from .risk.engine import Calendar
 from .risk.ruleset import Ruleset, load_ruleset
 from .spec import SpecFiles, discover
 
-SCHEMA_VERSION = "1.1.5"   # Doodle's spec 1.1.5 (pinned 2026-11-02, FIX-SEC-001 PR #6: same checks as 1.1.3/1.1.4 = INV-03..06 tightening + INV-16 on top of 1.1.2 INV-15): written as-is; compat.to_v1 only for v1 readers
+SCHEMA_VERSION = "1.1.6"   # Doodle's spec 1.1.6 (pinned 2026-11-03, SOL-ACCEPT-001 G12: the 1.1.3 checks plus the open INV-06 fill window, INV-05/06-TIME-*, INV-17 and the fail-closed INV-16): written as-is; compat.to_v1 only for v1 readers
 MODE = "paper"   # the only mode the schema allows; there is no live mode anywhere in this package
 
 
@@ -85,7 +85,7 @@ def phase_for(t: datetime, cal: Calendar) -> str:
     closed    weekend / NYSE holiday, before 04:00, or at/after the regular close
               (16:00; 13:00 on early-close days)                      [Doodle's ruling, v1.1]
     premarket 04:00 .. open-1h | preopen open-1h .. open | open open .. open+15m | intraday .. close
-    Records are schema 1.1.5 (v1.1 shape), so "closed" is written as-is (Doodle's INV-10 checks it against the NY clock).
+    Records are schema 1.1.6 (v1.1 shape), so "closed" is written as-is (Doodle's INV-10 checks it against the NY clock).
     """
     n = t.astimezone(NY)
     if not cal.is_trading_day(n.date()):
@@ -366,7 +366,7 @@ class Orchestrator:
         rec["idea_log"], recommendation = apply_reviews(rec["idea_log"], reviews, as_of)
         rec["data_quality"] = {**quality_index(rec), "notes": [recommendation, *notes][:50]}
         SessionRecordSpec.model_validate(rec)
-        SessionRecordSpec.model_validate(rec)          # Doodle's schema 1.1.5
+        SessionRecordSpec.model_validate(rec)          # Doodle's schema 1.1.6
 
         validation = self.validate(rec)
         trace = RunTrace(run_id=run_id, as_of=as_of, data_mode=self.p.data_mode, steps=self.steps,
@@ -418,7 +418,7 @@ class Orchestrator:
         return rec
 
     def validate(self, rec: dict) -> dict:
-        """errors: the 1.1.5 record against Doodle's validator + schema (the INV-11 trace file check runs
+        """errors: the 1.1.6 record against Doodle's validator + schema (the INV-11 trace file check runs
         on the written file, see validate_file), plus optpipe's guards (records/guards.py). Fails closed: a
         missing, unimportable or crashing validator is an error, never an OK (FIX-SEC-001 P0-5)."""
         mod, err = load_validator(self.spec)
@@ -461,6 +461,10 @@ def load_validator(spec) -> tuple[Optional[Any], Optional[str]]:
     if spec is None or spec.path("session_validator") is None:
         return None, (f"{VALIDATOR_MISSING}: validate_session.py not found in spec dir {where}; "
                       "the record cannot be validated (fail closed)")
+    from .spec_pin import pin_error
+    perr = pin_error(getattr(spec, "root", None))       # SOL-ACCEPT-001 G8: only the pinned release is trusted
+    if perr:
+        return None, perr
     try:
         mod = spec.load_module("session_validator")
     except Exception as e:  # noqa: BLE001 - any import failure must fail closed
@@ -487,7 +491,6 @@ def validate_file(settings: Settings, path: Path) -> list[str]:
     plus optpipe's guards. Never None and never [] unless validated: a missing/broken/crashing validator or an
     unreadable file is returned as an error (fail closed, FIX-SEC-001 P0-5)."""
     import json
-    from .records.guards import check_record, merge
     mod, err = load_validator(discover(settings.spec_path))
     if mod is None:
         return [err]
@@ -496,8 +499,28 @@ def validate_file(settings: Settings, path: Path) -> list[str]:
         rec = json.loads(p.read_text())
     except (OSError, ValueError) as e:
         return [f"SPEC-RECORD-UNREADABLE: {p.name}: {type(e).__name__}: {e} (fail closed)"]
+    return _validate_loaded(mod, rec, p.resolve().parent)
+
+
+def validate_record(settings: Settings, rec: Any, base_dir: Path) -> list[str]:
+    """validate_file on an already-parsed record (the caller parsed the file once and keeps that object, so the
+    validated object IS the one it uses; SOL-ACCEPT-001 G7). base_dir = the record file's directory (INV-11)."""
+    mod, err = load_validator(discover(settings.spec_path))
+    if mod is None:
+        return [err]
+    return _validate_loaded(mod, rec, Path(base_dir).resolve())
+
+
+def _validate_loaded(mod, rec: Any, base_dir: Path) -> list[str]:
+    from .records.guards import check_record, merge
     try:
-        errs = run_validator(mod, copy.deepcopy(rec), base_dir=p.resolve().parent)
+        errs = run_validator(mod, copy.deepcopy(rec), base_dir=base_dir)
     except ValidatorCrashed as e:
         return [str(e)]
-    return merge(errs, check_record(rec) if isinstance(rec, dict) else [])
+    if not isinstance(rec, dict):
+        return merge(errs, ["SPEC-RECORD-TYPE: the session record is not a JSON object (fail closed)"])
+    try:
+        gerrs = check_record(rec)
+    except Exception as e:                    # noqa: BLE001 - a guard bug must block, never crash (fail closed)
+        gerrs = [f"GUARD-CRASHED check_record raised {type(e).__name__}: {e} (fail closed)"]
+    return merge(errs, gerrs)

@@ -17,11 +17,17 @@ from optpipe.spec import discover
 from conftest import FIXTURES, PINNED_SPEC
 
 VALIDATOR_MISSING, VALIDATOR_BROKEN = "SPEC-VALIDATOR-MISSING", "SPEC-VALIDATOR-IMPORT-FAILED"
+PIN_MISMATCH = "SPEC-PIN-MISMATCH"
+CODES = {"missing": VALIDATOR_MISSING, "broken": PIN_MISMATCH, "broken_pin_check_off": VALIDATOR_BROKEN}
 
 
-@pytest.fixture(params=["missing", "broken"])
+@pytest.fixture(params=list(CODES))
 def bad_spec(request, tmp_path, monkeypatch):
-    """A tmp copy of the pinned spec whose validator is missing or raises on import."""
+    """A tmp copy of the pinned spec whose validator is missing or raises on import.
+
+    SOL-ACCEPT-001 G8: a broken validator is an edited one, so the runtime pin check now refuses it first
+    (SPEC-PIN-MISMATCH). "broken_pin_check_off" switches the pin check off to keep covering the import-failure
+    path (SPEC-VALIDATOR-IMPORT-FAILED) behind it."""
     d = tmp_path / "spec"
     shutil.copytree(PINNED_SPEC, d, ignore=shutil.ignore_patterns("__pycache__"))
     if request.param == "missing":
@@ -30,8 +36,10 @@ def bad_spec(request, tmp_path, monkeypatch):
         (d / "validate_session.py").write_text('raise ImportError("simulated broken validator")\n')
     monkeypatch.setattr(sys, "path", list(sys.path))               # undo the spec loader's sys.path append
     monkeypatch.setenv("OPTIONS_SPEC_DIR", str(d))
-    return SimpleNamespace(dir=d, kind=request.param,
-                           code=VALIDATOR_MISSING if request.param == "missing" else VALIDATOR_BROKEN)
+    if request.param == "broken_pin_check_off":
+        import optpipe.spec_pin
+        monkeypatch.setattr(optpipe.spec_pin, "pin_error", lambda root: None)
+    return SimpleNamespace(dir=d, kind=request.param, code=CODES[request.param])
 
 
 def test_run_fails_when_validator_missing(bad_spec, tmp_path, capsys):

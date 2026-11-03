@@ -158,7 +158,7 @@ def test_review_blocked_reuses_validator_inv16():
 
 def test_inv16_veto_ignores_the_version_label():
     """the watcher fails closed on a tampered record of ANY schema_version (INV-16 is a 1.1.3+ record error only)."""
-    for v in ("1.0.0", "1.1.0", "1.1.2", "1.1.3", "1.1.4", "1.1.5"):
+    for v in ("1.0.0", "1.1.0", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6"):
         s = fx.approved_record(with_position=False); s["schema_version"] = v
         fx.tamper_review(next(r for r in s["risk_reviews"] if r["review_id"] == "rv-flag"), "pass_over_flag")
         assert wr.target_from_session(s, fx.TK, now=SESSION_NOW)["status"] == "vetoed", v

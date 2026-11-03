@@ -23,7 +23,7 @@ def test_session_ref_is_filled_and_verifies(pipeline_output):
     rec = json.loads(j.read_text())
     assert ref["sha256"] == session_content_sha256(rec) and len(ref["sha256"]) == 64
     assert ref["sha256_covers"] == SESSION_REF_COVERS and "minus top-level trace_ref" in SESSION_REF_COVERS
-    assert ref["schema_version"] == rec["schema_version"] == "1.1.5"
+    assert ref["schema_version"] == rec["schema_version"] == "1.1.6"
     ok, msg = verify_session_ref(j, json.loads(t.read_text()))
     assert ok is True, msg
 
