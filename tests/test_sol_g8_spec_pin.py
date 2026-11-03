@@ -130,3 +130,56 @@ def test_runtime_pin_matches_sync_spec_pin():
     sp.loader.exec_module(mod)
     assert (spec_pin.EXPECTED_VERSION, spec_pin.EXPECTED_MANIFEST_SHA256) == \
         (mod.EXPECTED_VERSION, mod.EXPECTED_MANIFEST_SHA256)
+
+
+SPEC_1_1_6 = ("1.1.6", "6b4c51ce10c71a885d8e009436fedd28d9cf6cb1feaa5a704b63d7241099a647")
+
+
+def test_runtime_pin_is_spec_1_1_6(tmp_path, monkeypatch, capsys):
+    """Negative (#12 review): after the 1.1.6 re-pin (#16) the runtime pin must be 1.1.6 / 6b4c51ce..., so the
+    pinned spec/ itself passes spec-check. A runtime still pinned to 1.1.5 / ecc73140 refuses the real spec
+    (SPEC-PIN-MISMATCH, exit 2)."""
+    from optpipe import spec_pin
+    assert (spec_pin.EXPECTED_VERSION, spec_pin.EXPECTED_MANIFEST_SHA256) == SPEC_1_1_6
+    assert spec_pin.pin_error(PINNED_SPEC) is None
+    _use(monkeypatch, tmp_path, "none")
+    capsys.readouterr()
+    rc = main(["spec-check"])
+    cap = capsys.readouterr()
+    assert rc == 0 and "SPEC-PIN-MISMATCH" not in cap.err and "pinned release 1.1.6" in cap.out, cap.out + cap.err
+
+
+def test_runtime_pin_is_read_from_sync_spec(tmp_path):
+    """Single source of truth: the runtime pin is parsed from scripts/sync_spec.py (never executed), so a copy of
+    sync_spec.py with other constants yields exactly those constants."""
+    from optpipe import spec_pin
+    src = (ROOT / "scripts" / "sync_spec.py").read_text()
+    alt = src.replace(SPEC_1_1_6[1], "a" * 64).replace(f'EXPECTED_VERSION = "{SPEC_1_1_6[0]}"',
+                                                        'EXPECTED_VERSION = "9.8.7"')
+    assert alt != src
+    (tmp_path / "sync_spec.py").write_text(alt)
+    assert spec_pin.load_pin(tmp_path / "sync_spec.py") == ("9.8.7", "a" * 64, None)
+    assert spec_pin.load_pin(ROOT / "scripts" / "sync_spec.py") == (*SPEC_1_1_6, None)
+
+
+@pytest.mark.parametrize("how", ["missing", "not_literal", "bad_sha"])
+def test_unreadable_pin_source_fails_closed(tmp_path, monkeypatch, capsys, how):
+    """Fail closed: if scripts/sync_spec.py is missing or its pin is not a plain literal of the right shape, there
+    is no runtime pin and even the untouched pinned spec is SPEC-PIN-MISMATCH (exit 2, no OK)."""
+    from optpipe import spec_pin
+    p = tmp_path / "sync_spec.py"
+    if how == "not_literal":
+        p.write_text('EXPECTED_VERSION = "1." + "1.6"\nEXPECTED_MANIFEST_SHA256 = "%s"\n' % SPEC_1_1_6[1])
+    elif how == "bad_sha":
+        p.write_text('EXPECTED_VERSION = "1.1.6"\nEXPECTED_MANIFEST_SHA256 = "xyz"\n')
+    v, sha, why = spec_pin.load_pin(p)
+    assert v is None and sha is None and why
+    monkeypatch.setattr(spec_pin, "EXPECTED_VERSION", v)
+    monkeypatch.setattr(spec_pin, "EXPECTED_MANIFEST_SHA256", sha)
+    monkeypatch.setattr(spec_pin, "PIN_SOURCE_ERROR", why)
+    assert spec_pin.pin_error(PINNED_SPEC).startswith("SPEC-PIN-MISMATCH")
+    _use(monkeypatch, tmp_path, "none")
+    capsys.readouterr()
+    rc = main(["spec-check"])
+    cap = capsys.readouterr()
+    assert rc == 2 and "SPEC-PIN-MISMATCH" in cap.err and " OK" not in cap.out, cap.out + cap.err
