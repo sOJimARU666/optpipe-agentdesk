@@ -45,6 +45,11 @@ PROC_CALLS = {"run", "call", "check_call", "check_output", "Popen", "getoutput",
               "execl", "execle", "execlp", "execlpe", "execv", "execve", "execvp", "execvpe",
               "spawnl", "spawnle", "spawnlp", "spawnlpe", "spawnv", "spawnve", "spawnvp", "spawnvpe", "posix_spawn",
               "posix_spawnp"}
+# SOL-ACCEPT-001 G10: indirection that hides a network module or a write method from the checks above.
+DYNAMIC_IMPORTERS = {"__import__", "import_module"}                # also tracked through aliases (import_module as im)
+CODE_EXEC = {"exec", "eval", "compile"}                            # bare builtins (re.compile is an attribute: allowed)
+INTROSPECTION = {"__dict__", "__getattribute__", "__builtins__"}
+METHOD_OVERRIDE = re.compile(r"x-(http-)?method(-override)?$", re.I)  # X-HTTP-Method-Override, X-HTTP-Method, X-Method-Override
 NET_TOOLS = r"(curl|wget|wget2|aria2c|httpie|nc|ncat|netcat|socat|telnet|ssh|scp|sftp|ftp|rsync)"
 NET_TOOL_ARGV = re.compile(rf"^(\S*[/\\])?{NET_TOOLS}(\.exe)?$", re.I)                       # one argv element
 NET_TOOL_CMD = re.compile(rf"(^|[\s;|&(`$'\"])(\S*[/\\])?{NET_TOOLS}(\.exe)?(?=$|[\s;|&)`'\"])", re.I)  # in a shell string
@@ -88,6 +93,28 @@ def _spawns_network_tool(n: ast.Call) -> bool:
     return False
 
 
+def _is_python(node) -> bool:
+    """sys.executable (any wrapper such as str(Path(sys.executable))) or a literal python interpreter name."""
+    if any(isinstance(x, ast.Attribute) and x.attr == "executable" for x in ast.walk(node)):
+        return True
+    return any(re.match(r"^(\S*[/\\])?(python|pypy)[\d.]*(\.exe)?$", v.strip(), re.I) for v in _strings(node))
+
+
+def _spawns_python_code(n: ast.Call) -> bool:
+    """subprocess.run([sys.executable, '-c', code]) and friends: an inline program this scanner cannot read.
+    `python -m <module>` is flagged too (e.g. `-m http.server`, `-m pip download`). Running a script FILE
+    from scripts/ is allowed, because that file is itself scanned."""
+    args = list(n.args) + [kw.value for kw in n.keywords if kw.arg in {"args", "cmd", "command"}]
+    for a in args:
+        if isinstance(a, (ast.List, ast.Tuple)) and a.elts and _is_python(a.elts[0]) \
+                and any(v.strip() in {"-c", "-m"} for v in _strings(a)):
+            return True
+        if not isinstance(a, (ast.List, ast.Tuple)) and any(re.search(r"(^|\s)(python|pypy)[\d.]*(\.exe)?\s+-[cm]\b", v, re.I)
+                                                            for v in _strings(a)):
+            return True
+    return False
+
+
 def scan_binds(tree: ast.AST, rel: str) -> list[str]:
     """Wildcard bind hosts: host=/bind=... keywords, x.bind((h, p)), --host defaults, HOST = '...' assignments."""
     out: list[str] = []
@@ -126,9 +153,20 @@ def scan_network(text: str, rel: str) -> list[str]:
     allowed = NET_ALLOWED.get(rel, {})
     out: list[str] = []
     aliases: dict[str, str] = {}                       # local name -> top-level network module
+    importers = set(DYNAMIC_IMPORTERS)                 # local names bound to import_module / __import__ (G10)
     for n in ast.walk(tree):
+        if isinstance(n, ast.ImportFrom) and (n.module or "").split(".")[0] in {"importlib", "builtins", "operator"}:
+            for a in n.names:
+                if a.name in DYNAMIC_IMPORTERS:
+                    importers.add(a.asname or a.name)
+                if (n.module or "").split(".")[0] == "builtins":
+                    out.append(f"{rel}:{n.lineno} imports {a.name} from builtins")
+                if a.name in {"methodcaller", "attrgetter"}:
+                    out.append(f"{rel}:{n.lineno} imports operator.{a.name} (dynamic method/attribute by name)")
         if isinstance(n, ast.Import):
             for a in n.names:
+                if a.name.split(".")[0] == "builtins":
+                    out.append(f"{rel}:{n.lineno} imports builtins")
                 top = a.name.split(".")[0]
                 if top in NET_MODULES:
                     aliases[(a.asname or a.name).split(".")[0]] = top
@@ -146,15 +184,30 @@ def scan_network(text: str, rel: str) -> list[str]:
             top = aliases[n.value.id]
             if n.attr not in allowed.get(top, set()):
                 out.append(f"{rel}:{n.lineno} uses {top}.{n.attr} (only {sorted(allowed.get(top, set()))} allowed)")
+        if isinstance(n, ast.Attribute) and n.attr in INTROSPECTION:
+            out.append(f"{rel}:{n.lineno} introspection .{n.attr} (hides names from this scanner)")
+        if isinstance(n, ast.Name) and n.id == "__builtins__":
+            out.append(f"{rel}:{n.lineno} uses __builtins__")
+        if isinstance(n, ast.Constant) and isinstance(n.value, str) and METHOD_OVERRIDE.match(n.value.strip()):
+            out.append(f"{rel}:{n.lineno} HTTP method-override header {n.value!r} (a GET that acts as a write)")
         if not isinstance(n, ast.Call):
             continue
         name = _callee(n.func)
         if name in WRITE_CALLS:
             out.append(f"{rel}:{n.lineno} write/connection call {name}()")
-        if name in {"__import__", "import_module"} and n.args:
-            mod = _const_strs(n.args[0])
+        if name in importers and (n.args or n.keywords):
+            mod = _const_strs(n.args[0]) if n.args else None
             if mod is None or mod[0].split(".")[0] in NET_MODULES:
-                out.append(f"{rel}:{n.lineno} dynamic import {ast.unparse(n.args[0])}")
+                arg = ast.unparse(n.args[0]) if n.args else "..."
+                out.append(f"{rel}:{n.lineno} dynamic import {arg}")
+        if isinstance(n.func, ast.Name) and n.func.id in CODE_EXEC:
+            out.append(f"{rel}:{n.lineno} {n.func.id}() runs code the scanner cannot see")
+        if name in {"methodcaller", "attrgetter"}:
+            out.append(f"{rel}:{n.lineno} operator.{name}() calls a method/attribute chosen by name")
+        if name == "vars" and n.args and isinstance(n.args[0], ast.Name) and n.args[0].id in aliases:
+            out.append(f"{rel}:{n.lineno} vars({n.args[0].id}) (reaches any attribute of a network module)")
+        if name in PROC_CALLS and _spawns_python_code(n):
+            out.append(f"{rel}:{n.lineno} {name}() runs Python code inline (-c / -m): {ast.unparse(n)[:80]}")
         if name == "getattr" and len(n.args) >= 2:
             attr = _const_strs(n.args[1])
             if attr is None or attr[0] in WRITE_CALLS:
@@ -254,6 +307,34 @@ SCANNER_CASES = {
     "decorator_on_any_receiver": ("src/optpipe/dashboard/app.py", "@api.post('/x')\ndef h(): ...\n"),
     "websocket_route": ("src/optpipe/dashboard/app.py", "@app.websocket('/ws')\nasync def h(ws): ...\n"),
     "script_dir": ("scripts/push.py", "import requests\nrequests.get(u)\n"),
+    # SOL-ACCEPT-001 G10: the 7 bypasses Moodle's probes found in the 021aed2 scanner (packet section 5).
+    "methodcaller_post": ("src/optpipe/x.py", "import operator\nf = operator.methodcaller('post', 'http://x')\nf(client)\n"),
+    "import_module_alias": ("src/optpipe/x.py", "from importlib import import_module as im\nm = im('soc' + 'ket')\n"),
+    "builtins_import": ("src/optpipe/x.py", "import builtins\nm = builtins.__dict__['__import__']('socket')\n"),
+    "exec_string": ("src/optpipe/x.py", "exec('import socket; socket.socket().connect((\"x\", 80))')\n"),
+    "vars_requests_in_fetchers": ("src/optpipe/providers/fetchers.py",
+                                  "import requests\nvars(requests)['po' + 'st']('http://x')\n"),
+    "requests_get_method_override": ("src/optpipe/providers/fetchers.py",
+                                     "import requests\nrequests.get('http://x', headers={'X-HTTP-Method-Override': 'POST'})\n"),
+    "subprocess_python_c": ("src/optpipe/x.py", "import subprocess, sys\nsubprocess.run([sys.executable, '-c', "
+                            "'import urllib.request as u; u.urlopen(u.Request(\"http://x\", data=b\"1\"))'])\n"),
+}
+# G10 variants of the same 7 holes (aliases / spellings the first fix could miss).
+SCANNER_CASES_G10_VARIANTS = {
+    "methodcaller_from_import": ("src/optpipe/x.py", "from operator import methodcaller as mc\nmc('put', u)(c)\n"),
+    "import_module_via_importlib_alias": ("src/optpipe/x.py", "import importlib as il\nm = il.import_module(name)\n"),
+    "builtins_dunder_name": ("src/optpipe/x.py", "imp = __builtins__['__import__']\n"),
+    "from_builtins_import": ("src/optpipe/x.py", "from builtins import __import__ as i\ni('socket')\n"),
+    "eval_string": ("src/optpipe/x.py", "eval(code)\n"),
+    "compile_then_exec": ("scripts/x.py", "c = compile(src, 'x', 'exec')\n"),
+    "requests_dunder_dict": ("src/optpipe/providers/fetchers.py", "import requests\nrequests.__dict__['post'](u)\n"),
+    "method_override_lowercase": ("src/optpipe/providers/fetchers.py",
+                                  "import requests\nH = {'x-http-method': 'DELETE'}\nrequests.get(u, headers=H)\n"),
+    "x_method_override": ("src/optpipe/x.py", "H = {'X-Method-Override': 'PUT'}\n"),
+    "subprocess_python_m": ("scripts/x.py", "import subprocess, sys\nsubprocess.run([sys.executable, '-m', 'http.server'])\n"),
+    "subprocess_python_c_string": ("scripts/x.py", "import subprocess\nsubprocess.run('python3 -c \"print(1)\"', shell=False)\n"),
+    "popen_python_path_c": ("scripts/x.py", "import subprocess, sys\nfrom pathlib import Path\n"
+                            "subprocess.Popen([str(Path(sys.executable)), '-c', code])\n"),
 }
 # FIX-SEC-001 follow-up (Moodle, #3): wildcard binds and process calls that run curl/wget. Each is missed by c3b98b9.
 BIND_CASES = {
@@ -292,6 +373,24 @@ PROC_CASES = {
 def test_scanner_catches(case):
     rel, text = SCANNER_CASES[case]
     assert scan_network(text, rel), f"{case} not caught"
+
+
+@pytest.mark.parametrize("case", list(SCANNER_CASES_G10_VARIANTS))
+def test_scanner_catches_g10_variants(case):
+    rel, text = SCANNER_CASES_G10_VARIANTS[case]
+    assert scan_network(text, rel), f"{case} not caught"
+
+
+@pytest.mark.parametrize("rel,text", [
+    ("src/optpipe/x.py", "import re\nP = re.compile(r'x')\n"),                       # re.compile is not compile()
+    ("scripts/x.py", "import subprocess, sys\nsubprocess.run([sys.executable, str(script), '--check'])\n"),  # a scanned file
+    ("src/optpipe/x.py", "from importlib import resources\nresources.files('optpipe')\n"),
+    ("src/optpipe/x.py", "import importlib\nm = importlib.import_module('optpipe.models')\n"),  # literal, non-network
+    ("src/optpipe/x.py", "H = {'Accept': 'text/html', 'User-Agent': 'optpipe'}\n"),
+])
+def test_scanner_g10_allows_ordinary_code(rel, text):
+    """Controls for G10: the new checks do not flag ordinary local code."""
+    assert scan_network(text, rel) == []
 
 
 @pytest.mark.parametrize("case", list(BIND_CASES))
