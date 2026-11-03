@@ -127,7 +127,9 @@ def test_hypothetical_rejected_approved_and_positions(rec):
     assert by[(r["tickets"][1]["ticket_id"], "ticket")].status == "rejected"
     appr = by[(r["tickets"][2]["ticket_id"], "ticket")]
     assert appr.status == "approved_pending" and not appr.hypothetical
-    assert by[("pos-1", "position")].status == "open"
+    # An `open` position with no approval_id (INV-04) is never watched as open (SOL-ACCEPT-001 G7); the valid-position
+    # case is tests/test_sol_g7_watch_targets.py::test_valid_position_is_watched_open.
+    assert by[("pos-1", "position")].status == "invalid" and not by[("pos-1", "position")].watched
 
 
 def test_one_vetoed_among_hypothetical_stays_vetoed(rec):
