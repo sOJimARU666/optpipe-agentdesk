@@ -46,7 +46,7 @@ from .risk.engine import Calendar
 from .risk.ruleset import Ruleset, load_ruleset
 from .spec import SpecFiles, discover
 
-SCHEMA_VERSION = "1.1.5"   # Doodle's spec 1.1.5 (pinned 2026-11-02, FIX-SEC-001 PR #6: same checks as 1.1.3/1.1.4 = INV-03..06 tightening + INV-16 on top of 1.1.2 INV-15): written as-is; compat.to_v1 only for v1 readers
+SCHEMA_VERSION = "1.1.6"   # Doodle's spec 1.1.6 (pinned 2026-11-03, SOL-ACCEPT-001 G12: the 1.1.3 checks plus the open INV-06 fill window, INV-05/06-TIME-*, INV-17 and the fail-closed INV-16): written as-is; compat.to_v1 only for v1 readers
 MODE = "paper"   # the only mode the schema allows; there is no live mode anywhere in this package
 
 
@@ -85,7 +85,7 @@ def phase_for(t: datetime, cal: Calendar) -> str:
     closed    weekend / NYSE holiday, before 04:00, or at/after the regular close
               (16:00; 13:00 on early-close days)                      [Doodle's ruling, v1.1]
     premarket 04:00 .. open-1h | preopen open-1h .. open | open open .. open+15m | intraday .. close
-    Records are schema 1.1.5 (v1.1 shape), so "closed" is written as-is (Doodle's INV-10 checks it against the NY clock).
+    Records are schema 1.1.6 (v1.1 shape), so "closed" is written as-is (Doodle's INV-10 checks it against the NY clock).
     """
     n = t.astimezone(NY)
     if not cal.is_trading_day(n.date()):
@@ -366,7 +366,7 @@ class Orchestrator:
         rec["idea_log"], recommendation = apply_reviews(rec["idea_log"], reviews, as_of)
         rec["data_quality"] = {**quality_index(rec), "notes": [recommendation, *notes][:50]}
         SessionRecordSpec.model_validate(rec)
-        SessionRecordSpec.model_validate(rec)          # Doodle's schema 1.1.5
+        SessionRecordSpec.model_validate(rec)          # Doodle's schema 1.1.6
 
         validation = self.validate(rec)
         trace = RunTrace(run_id=run_id, as_of=as_of, data_mode=self.p.data_mode, steps=self.steps,
@@ -418,7 +418,7 @@ class Orchestrator:
         return rec
 
     def validate(self, rec: dict) -> dict:
-        """errors: the 1.1.5 record against Doodle's validator + schema (the INV-11 trace file check runs
+        """errors: the 1.1.6 record against Doodle's validator + schema (the INV-11 trace file check runs
         on the written file, see validate_file), plus optpipe's guards (records/guards.py). Fails closed: a
         missing, unimportable or crashing validator is an error, never an OK (FIX-SEC-001 P0-5)."""
         mod, err = load_validator(self.spec)

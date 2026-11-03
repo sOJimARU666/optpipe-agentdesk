@@ -3,7 +3,7 @@
 # Tests: test_watcher_reference.py. Market hours/holidays come from risk_rules.yaml config.market_hours.
 # The watcher NEVER places, modifies or cancels orders (paper or live). Every alert says so.
 # All timestamps quoted; never let YAML auto-convert.
-watcher_version: "1.1.5"   # labels track spec VERSION from 1.1.3; 1.1.5: a review failing INV-16 is VETO for the watcher (an approval on it is never real), executed / closed ideas keep their status, a revoked approval rejects every pre-execution ticket, a real approval needs an approved_pending / approved idea, scope.target_precedence, SCOPE-h..r; 1.1.4: a revoked approval maps the ticket to rejected (shadow), scope.approval_status, SCOPE-e..g; 1.1.3: `detail` listed in alert_fields, approval state read only from approvals[].status (no `decision` field)
+watcher_version: "1.1.6"   # labels track spec VERSION from 1.1.3; 1.1.6: explicit top-level target_precedence (numbered steps of watcher_rules.md), a real approval only while approved_at < now < expires_at (open window, = INV-06 at filled_at), naive / unparsable times fail closed with an INV id (no crash), fail-closed rule aggregate (unrecognised result string or UNKNOWN without severity = VETO); 1.1.5: a review failing INV-16 is VETO for the watcher (an approval on it is never real), executed / closed ideas keep their status, a revoked approval rejects every pre-execution ticket, a real approval needs an approved_pending / approved idea, scope.target_precedence, SCOPE-h..r; 1.1.4: a revoked approval maps the ticket to rejected (shadow), scope.approval_status, SCOPE-e..g; 1.1.3: `detail` listed in alert_fields, approval state read only from approvals[].status (no `decision` field)
 
 config:
   alert_text: "alert only, no order"       # must appear in every alert message
@@ -32,7 +32,7 @@ scope:
   ignored: "closed positions, expired/cancelled tickets"
   # spec 1.1.4 ruling: approval status -> ticket target (watcher_reference.target_from_session / APPROVAL_STATUS_TARGET),
   # read ONLY from approvals[].status (there is no `decision` field). real = approved_pending with approved: true (only if
-  # inside approved_at <= now < expires_at, INV-05 clean and, spec 1.1.5, its review INV-16 clean; an active approval
+  # inside approved_at < now < expires_at (spec 1.1.6: open window; 1.1.3-1.1.5: approved_at <= now), INV-05 clean and, spec 1.1.5, its review INV-16 clean; an active approval
   # failing those is hypothetical, or vetoed when its review fails INV-16); hypothetical = approved_pending with
   # approved: false (a watched paper what-if); rejected = shadow only (no intraday alerts, SHADOW_EOD summary).
   # Applied inside target_precedence below (VETO first; revoked -> rejected unless a real approval exists).
@@ -59,6 +59,41 @@ scope:
   #   5 real approval: the idea is approved_pending or approved AND the approval is active, inside its window, INV-05
   #               clean and INV-16 clean. An active approval on a proposed / simulated idea (or with no idea) is never real.
   target_precedence: [vetoed, terminal, rejected, approved_pending, idea_status]
+
+# spec 1.1.6 (Poodle, SOL-ACCEPT-001): the precedence above as machine-readable data, one entry per numbered step of
+# watcher_rules.md "Approval state" (1, 2, 3, 4a, 4b), in order; first match wins. `id` is the scope.target_precedence
+# entry and watcher_reference.TARGET_PRECEDENCE[i]; `target` is the resulting target status (`idea_status` = the idea's
+# own status). Step 5 is not a target: it defines the real approval used by steps 3 and 4a (`real_approval` below).
+# Tests: test_release_v1_1_6.py (ids == scope list == TARGET_PRECEDENCE, md numbering, first-match behaviour).
+target_precedence:
+  - step: "1"
+    id: vetoed
+    target: vetoed
+    watched: false        # shadow only (SHADOW_EOD)
+    when: "the ticket's latest review by evaluated_at is blocked (recorded VETO, derived VETO, no results, INV-16 inconsistent; 1.1.6: unrecognised result or UNKNOWN without severity = VETO, an unusable evaluated_at = blocked), or any approval of the ticket points at a blocked review, or the idea is vetoed"
+  - step: "2"
+    id: terminal
+    target: idea_status
+    watched: false        # the trade is watched by the position rules
+    when: "the idea is executed or closed (TERMINAL_IDEA_STATUSES); a revoked approval does not relabel it"
+  - step: "3"
+    id: rejected
+    target: rejected
+    watched: false        # shadow only (SHADOW_EOD)
+    when: "pre-execution idea (any other status or no idea) and the idea is rejected, or any approval of the ticket is revoked and there is no real approval (step 5)"
+  - step: "4a"
+    id: approved_pending
+    target: approved_pending
+    watched: true         # approved: true with a real approval (step 5), else hypothetical
+    when: "the idea is approved_pending, approved or missing"
+  - step: "4b"
+    id: idea_status
+    target: idea_status
+    watched: false
+    when: "any other non-approved idea status (proposed, simulated, ...): kept, never really approved"
+real_approval:
+  step: "5"
+  when: "the idea is approved_pending or approved (APPROVED_IDEA_STATUSES) and an approval of the ticket has status active, approved_at < now < expires_at (instants, any UTC offset; spec 1.1.6 open window, the same rule as INV-06 at filled_at), passes INV-05 and its review passes INV-16; a naive or unparsable now / approval time means no real approval (fail closed, INV-06-TIME-NAIVE / -INVALID in the target's errors)"
 
 polling:
   rule: "Only while the NY regular session is open (America/New_York, 09:30-16:00, 13:00 early close, no weekends/NYSE holidays). Closed -> no poll (next_poll = null)."
