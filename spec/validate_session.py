@@ -1,4 +1,4 @@
-"""Validate a session record (schema v1.0.0, v1.1.0, v1.1.1, v1.1.2, v1.1.3, v1.1.4 or v1.1.5): JSON Schema (draft 2020-12) + x-invariants INV-01..16.
+"""Validate a session record (schema v1.0.0, v1.1.0, v1.1.1, v1.1.2, v1.1.3, v1.1.4, v1.1.5 or v1.1.6): JSON Schema (draft 2020-12) + x-invariants INV-01..17.
 Usage: python validate_session.py session.example.json [more.json ...]
 
 Exit codes (fail-closed contract, see AGENTS.md / CHANGELOG 1.1.3):
@@ -11,7 +11,15 @@ Consumers must treat ANY non-zero exit, and a missing or unimportable validate_s
 INV-06 approval status/ticket/terms checks, INV-16 overall-verdict consistency);
 1.0.0-1.1.2 records validate exactly as before (same error strings).
 1.1.4 adds no invariant: a 1.1.4 record gets exactly the 1.1.3 checks, and 1.1.3 records validate exactly as before.
-1.1.5 adds no invariant either (its rulings are watcher-only): a 1.1.5 record gets exactly the 1.1.3 / 1.1.4 checks."""
+1.1.5 adds no invariant either (its rulings are watcher-only): a 1.1.5 record gets exactly the 1.1.3 / 1.1.4 checks.
+1.1.6 records (only) additionally get (SOL-ACCEPT-001 G3/G4/G5/G6): INV-06 half-open -> open window
+approved_at < filled_at < expires_at (a fill exactly at expires_at is INV-06-EXPIRED, exactly at approved_at
+INV-06-BEFORE; instants compared, whatever the UTC offset), naive / unparsable approval and fill times reported as
+INV-05-TIME-NAIVE / INV-06-TIME-NAIVE (-INVALID) errors instead of crashing, INV-17-REUSE (one approval opens at
+most one paper position) and the fail-closed rule aggregate risk_reference.overall in INV-05 / INV-06 / INV-16 (an
+unrecognised result string or an UNKNOWN without severity hard/soft is blocking). 1.0.0-1.1.5 records validate exactly
+as before (same error strings; they keep risk_reference.overall_v115 and the closed window approved_at <= filled_at <=
+expires_at)."""
 from __future__ import annotations
 
 import hashlib
@@ -83,6 +91,8 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
     v = Draft202012Validator(SCHEMA, format_checker=FormatChecker())
     errs = [f"schema {'/'.join(map(str, e.absolute_path))}: {e.message[:200]}" for e in v.iter_errors(sess)]
     if errs:
+        if isinstance(sess, dict) and sess.get("schema_version") == "1.1.6":   # 1.1.6 (G5): naive times get an INV id too
+            errs.extend(naive_time_errors(sess))
         return errs
     src = {s["id"]: s for s in sess["sources"]}
     # INV-01 source refs, INV-02 tspairs, INV-09 as_of <= fetched_at
@@ -102,10 +112,11 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
             if is_field(o) and o["status"] in ("ok", "stale") and o["source_id"] in src:
                 if datetime.fromisoformat(o["as_of"]) > datetime.fromisoformat(src[o["source_id"]]["fetched_at"]):
                     errs.append(f"INV-09 {p} as_of after source fetch")
-    v11 = sess["schema_version"] in ("1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5")   # v1.1 shape
-    v111 = sess["schema_version"] in ("1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5")   # stricter 1.1.1 checks (INV-13 credit, INV-14), kept in 1.1.2+
-    v112 = sess["schema_version"] in ("1.1.2", "1.1.3", "1.1.4", "1.1.5") # 1.1.2 checks (INV-15 stop/target operators), kept in 1.1.3+
-    v113 = sess["schema_version"] in ("1.1.3", "1.1.4", "1.1.5")          # 1.1.3 checks (INV-03/04/05/06 tightening, INV-16), kept in 1.1.4 / 1.1.5 (no new invariants)
+    v11 = sess["schema_version"] in ("1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6")   # v1.1 shape
+    v111 = sess["schema_version"] in ("1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6")   # stricter 1.1.1 checks (INV-13 credit, INV-14), kept in 1.1.2+
+    v112 = sess["schema_version"] in ("1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6") # 1.1.2 checks (INV-15 stop/target operators), kept in 1.1.3+
+    v113 = sess["schema_version"] in ("1.1.3", "1.1.4", "1.1.5", "1.1.6")          # 1.1.3 checks (INV-03/04/05/06 tightening, INV-16), kept in 1.1.4+
+    v116 = sess["schema_version"] == "1.1.6"   # 1.1.6 checks (G3 fail-closed aggregate, G4 open INV-06 window, G5 naive times, G6 INV-17)
     # INV-10 run phase vs NY clock (v1.1 'closed')
     for r in sess["runs"]:
         closed = CAL.is_closed(datetime.fromisoformat(r["started"]["ny"]))
@@ -181,13 +192,13 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
     for r in sess["risk_reviews"]:
         ref(r["ticket_id"], tickets, "review.ticket_id"); ref(r["run_id"], runs, "review.run_id")
         if v113:  # INV-16 overall == aggregate of rule results
-            errs.extend(overall_errors(r))
+            errs.extend(overall_errors(r, v116=v116))
     # INV-05 approvals
     for a in sess["approvals"]:
         ref(a["ticket_id"], tickets, "approval.ticket_id"); ref(a["review_id"], reviews, "approval.review_id")
         rv, tk = rv_by_id.get(a["review_id"]), tk_by_id.get(a["ticket_id"])
         if v113:  # INV-05 specific ids + flag acknowledgement
-            errs.extend(approval_errors(a, rv, tk))
+            errs.extend(approval_errors(a, rv, tk, v116=v116))
             continue
         if rv and (rv["overall"]["verdict"] == "VETO" or rv["ticket_id"] != a["ticket_id"]):
             errs.append(f"INV-05 {a['approval_id']} approves a VETO/foreign review")
@@ -201,7 +212,7 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
         ref(p["ticket_id"], tickets, "position.ticket_id"); ref(p["approval_id"], approvals, "position.approval_id")
         ap = ap_by_id.get(p["approval_id"])
         if v113:  # INV-04 fill/leg_mark resolution + INV-06 (1.1.3)
-            errs.extend(position_errors(p, ap, tk_by_id.get(p["ticket_id"]), rv_by_id))
+            errs.extend(position_errors(p, ap, tk_by_id.get(p["ticket_id"]), rv_by_id, v116=v116))
             continue
         if ap:
             for f in p["fills"]:
@@ -214,6 +225,8 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
                 lim = ap["limit_price"]
                 if (lim["price_type"] == "debit" and net > lim["amount"] + 1e-9) or (lim["price_type"] == "credit" and -net < lim["amount"] - 1e-9):
                     errs.append(f"INV-06 {p['position_id']} entry net {net} violates limit")
+    if v116:  # INV-17 (1.1.6, G6): one approval opens at most one paper position
+        errs.extend(reuse_errors(sess["paper_positions"]))
     for w in sess["watcher_rules"]:
         ref(w["target"]["ticket_id"], tickets, "watch.ticket_id"); ref(w["target"].get("position_id"), positions, "watch.position_id")
     for al in sess["alerts"]:
@@ -318,16 +331,31 @@ def _inv03_v113(sess: dict) -> list[str]:
     return out
 
 
-def review_is_veto(rv: dict) -> bool:
+def _overall(results, v116: bool = True) -> dict:
+    """the rule aggregate a check uses: 1.1.6 fail-closed risk_reference.overall, or the frozen overall_v115 for
+    1.0.0-1.1.5 records (identical on every schema-valid result list; differs only on unrecognised values)"""
+    return rr.overall(results) if v116 else rr.overall_v115(results)
+
+
+def review_is_veto(rv: dict, v116: bool = True) -> bool:
     """recorded overall verdict VETO, or the verdict the rule results give (risk_reference.overall) is VETO,
-    or there are no rule results at all (fail closed: combine([]) is UNKNOWN)"""
-    return not rv["results"] or rv["overall"]["verdict"] == "VETO" or rr.overall(rv["results"])["verdict"] == "VETO"
+    or there are no rule results at all (fail closed: combine([]) is UNKNOWN).
+    1.1.6 (default; G3): also VETO when the results are not a list, the stored overall is missing or its verdict is not
+    exactly PASS or FLAG, and an unrecognised result / UNKNOWN without severity hard|soft is blocking. Never raises on
+    a review object. v116=False: the frozen 1.1.3-1.1.5 behaviour (validate_session uses it for older records)."""
+    if not v116:
+        return not rv["results"] or rv["overall"]["verdict"] == "VETO" or rr.overall_v115(rv["results"])["verdict"] == "VETO"
+    res_, ov = rv.get("results"), rv.get("overall")
+    if not isinstance(res_, list) or not res_ or not isinstance(ov, dict) or ov.get("verdict") not in ("PASS", "FLAG"):
+        return True
+    return rr.overall(res_)["verdict"] == "VETO"
 
 
-def overall_errors(rv: dict) -> list[str]:
+def overall_errors(rv: dict, v116: bool = True) -> list[str]:
     """INV-16 (1.1.3): overall must equal risk_reference.overall(results) (verdict exactly; id lists as sets).
-    No rule results at all is an error (fail closed, like risk_reference.combine([]) == 'UNKNOWN')."""
-    want, got, rid = rr.overall(rv["results"]), rv["overall"], rv["review_id"]
+    No rule results at all is an error (fail closed, like risk_reference.combine([]) == 'UNKNOWN').
+    1.1.6 (default): the recompute is the fail-closed risk_reference.overall (G3); v116=False: overall_v115."""
+    want, got, rid = _overall(rv["results"], v116), rv["overall"], rv["review_id"]
     if not rv["results"]:
         return [f"INV-16-EMPTY {rid} has no rule results; the aggregate is UNKNOWN (fail closed), no stored verdict is valid"]
     out = []
@@ -335,26 +363,96 @@ def overall_errors(rv: dict) -> list[str]:
         out.append(f"INV-16-VERDICT {rid} overall.verdict {got['verdict']} but rule results give {want['verdict']}")
     for key, code in (("blocking_rule_ids", "INV-16-BLOCKING"), ("flag_rule_ids", "INV-16-FLAGS")):
         if set(got[key]) != set(want[key]) or len(got[key]) != len(set(got[key])):
-            out.append(f"{code} {rid} overall.{key} {sorted(got[key])} but rule results give {sorted(want[key])}")
+            out.append(f"{code} {rid} overall.{key} {sorted(got[key], key=str)} but rule results give {sorted(want[key], key=str)}")
     return out
 
 
-def required_acks(rv: dict) -> set:
+def required_acks(rv: dict, v116: bool = True) -> set:
     """INV-05 (1.1.3) flag acknowledgement: flagged rule_ids of a review = FLAG or soft UNKNOWN results (risk_reference.overall) plus recorded flag_rule_ids."""
-    return set(rr.overall(rv["results"])["flag_rule_ids"]) | set(rv["overall"]["flag_rule_ids"])
+    return set(_overall(rv["results"], v116)["flag_rule_ids"]) | set(rv["overall"]["flag_rule_ids"])
 
 
-def approval_errors(a: dict, rv: dict | None, tk: dict | None) -> list[str]:
-    """INV-05 (1.1.3: specific ids + flag acknowledgement) for one approval. Unresolved refs are reported by INV-04."""
+# ------------------------------------------------------------------ 1.1.6 checks (SOL-ACCEPT-001 G4 / G5 / G6)
+def instant(pair) -> tuple[datetime | None, str | None]:
+    """(aware datetime of pair['ny'], None), or (None, 'naive' | 'invalid'). Never raises (G5).
+    Aware datetimes compare as instants, so the same instant written with -05:00, +01:00 or Z is equal."""
+    if not isinstance(pair, dict) or not isinstance(pair.get("ny"), str):
+        return None, "invalid"
+    try:
+        dt = datetime.fromisoformat(pair["ny"])
+    except ValueError:
+        return None, "invalid"
+    return (None, "naive") if dt.tzinfo is None or dt.utcoffset() is None else (dt, None)
+
+
+def _time_error(inv: str, who: str, field: str, pair, why: str, consequence: str) -> str:
+    val = pair.get("ny") if isinstance(pair, dict) else pair
+    if why == "naive":
+        return f"{inv}-TIME-NAIVE {who} {field}.ny {val!r} has no UTC offset (naive times are forbidden; {consequence})"
+    return f"{inv}-TIME-INVALID {who} {field} {val!r} is not an ISO 8601 time pair with a UTC offset ({consequence})"
+
+
+def naive_time_errors(sess: dict) -> list[str]:
+    """1.1.6 (G5): INV ids for naive / unparsable approval and fill times in a schema-INVALID 1.1.6 record (the schema
+    pattern already rejects them; this names the invariant so the error is not only a regex message). Both halves of
+    each TsPair are checked. Never raises."""
+    out = []
+    def scan(pair, inv, who, field, consequence):
+        if not isinstance(pair, dict):
+            if pair is not None:
+                out.append(_time_error(inv, who, field, pair, "invalid", consequence))
+            return
+        for half in ("ny", "berlin"):
+            v = pair.get(half)
+            try:
+                dt = datetime.fromisoformat(v) if isinstance(v, str) else None
+            except ValueError:
+                dt = None
+            if dt is None:
+                out.append(f"{inv}-TIME-INVALID {who} {field}.{half} {v!r} is not an ISO 8601 time with a UTC offset ({consequence})")
+            elif dt.tzinfo is None:
+                out.append(f"{inv}-TIME-NAIVE {who} {field}.{half} {v!r} has no UTC offset (naive times are forbidden; {consequence})")
+    aps = sess.get("approvals") if isinstance(sess.get("approvals"), list) else []
+    for i, a in enumerate(aps):
+        if isinstance(a, dict):
+            who = f"approvals/{i} ({a.get('approval_id')})"
+            for k in ("approved_at", "expires_at", "status_changed_at"):
+                if k in a:
+                    scan(a[k], "INV-05", who, k, "fail closed: the approval authorises nothing")
+    ps = sess.get("paper_positions") if isinstance(sess.get("paper_positions"), list) else []
+    for i, p in enumerate(ps):
+        fills = p.get("fills") if isinstance(p, dict) else None
+        for j, f in enumerate(fills if isinstance(fills, list) else []):
+            if isinstance(f, dict) and "filled_at" in f:
+                scan(f["filled_at"], "INV-06", f"paper_positions/{i}/fills/{j} ({f.get('fill_id')})", "filled_at",
+                     "fail closed: the fill is not authorised")
+    return out
+
+
+def reuse_errors(positions: list) -> list[str]:
+    """INV-17 (1.1.6, G6): one approval opens at most one paper position. Two or more positions (hence their opening
+    fills) referencing the same approval_id -> one INV-17-REUSE per approval, whatever the approval's status."""
+    by_ap: dict = {}
+    for p in positions:
+        by_ap.setdefault(p["approval_id"], []).append(p["position_id"])
+    return [f"INV-17-REUSE approval {aid} is referenced by {len(pids)} paper positions {pids}; one approval opens at most "
+            f"one position (the first is {pids[0]})" for aid, pids in by_ap.items() if len(pids) > 1]
+
+
+def approval_errors(a: dict, rv: dict | None, tk: dict | None, v116: bool = True) -> list[str]:
+    """INV-05 (1.1.3: specific ids + flag acknowledgement) for one approval. Unresolved refs are reported by INV-04.
+    1.1.6 (default): fail-closed aggregate (G3); a naive / unparsable approved_at or expires_at is INV-05-TIME-NAIVE /
+    -INVALID instead of a crash (G5). v116=False: the frozen 1.1.3-1.1.5 behaviour."""
     aid, out = a["approval_id"], []
     if rv is not None:
-        if review_is_veto(rv):
+        veto = review_is_veto(rv, v116)
+        if veto:
             out.append(f"INV-05-VETO {aid} approves review {rv['review_id']} whose verdict is VETO "
-                       f"(recorded {rv['overall']['verdict']}, rule results give {rr.overall(rv['results'])['verdict']})")
+                       f"(recorded {rv['overall']['verdict']}, rule results give {_overall(rv['results'], v116)['verdict']})")
         if rv["ticket_id"] != a["ticket_id"]:
             out.append(f"INV-05-FOREIGN {aid} is for ticket {a['ticket_id']} but review {rv['review_id']} is for {rv['ticket_id']}")
-        if not review_is_veto(rv):
-            need, got = required_acks(rv), a.get("acknowledged_flags", [])
+        if not veto:
+            need, got = required_acks(rv, v116), a.get("acknowledged_flags", [])
             if need - set(got):
                 out.append(f"INV-05-ACK-MISSING {aid} does not acknowledge flagged rule_id(s) {sorted(need - set(got))} of {rv['review_id']}")
             if set(got) - need:
@@ -363,7 +461,15 @@ def approval_errors(a: dict, rv: dict | None, tk: dict | None) -> list[str]:
                 out.append(f"INV-05-ACK-DUPLICATE {aid} acknowledged_flags lists {_dups(got)} more than once")
     if tk is not None and _terms_differ(a, tk):
         out.append(f"INV-05-TERMS {aid} legs/qty/limit differ from ticket {tk['ticket_id']}")
-    if _ny(a["expires_at"]) <= _ny(a["approved_at"]):
+    if not v116:
+        if _ny(a["expires_at"]) <= _ny(a["approved_at"]):
+            out.append(f"INV-05-EXPIRY {aid} expires_at {a['expires_at']['ny']} is not after approved_at {a['approved_at']['ny']}")
+        return out
+    (t0, w0), (t1, w1) = instant(a.get("approved_at")), instant(a.get("expires_at"))
+    for field, w in (("approved_at", w0), ("expires_at", w1)):
+        if w:
+            out.append(_time_error("INV-05", aid, field, a.get(field), w, "fail closed: the approval authorises nothing"))
+    if t0 is not None and t1 is not None and t1 <= t0:
         out.append(f"INV-05-EXPIRY {aid} expires_at {a['expires_at']['ny']} is not after approved_at {a['approved_at']['ny']}")
     return out
 
@@ -372,9 +478,14 @@ def _terms_differ(a: dict, tk: dict) -> bool:
     return a["legs"] != tk["legs"] or a["quantity"] != tk["quantity"] or a["limit_price"] != tk["limit_price"]
 
 
-def position_errors(p: dict, ap: dict | None, tk: dict | None, rv_by_id: dict) -> list[str]:
+def position_errors(p: dict, ap: dict | None, tk: dict | None, rv_by_id: dict, v116: bool = True) -> list[str]:
     """INV-04 fill / leg_mark resolution and INV-06 (1.1.3) for one paper position.
-    ap / tk are the position's approval and ticket (None when unresolved: INV-04 reports that)."""
+    ap / tk are the position's approval and ticket (None when unresolved: INV-04 reports that).
+    1.1.6 (default; G4/G5): every opening fill needs approved_at < filled_at < expires_at (open window, instants
+    compared: a fill exactly at expires_at is INV-06-EXPIRED, exactly at approved_at INV-06-BEFORE); a naive or
+    unparsable filled_at / approved_at / expires_at / status_changed_at is INV-06-TIME-NAIVE / -INVALID (fail closed:
+    those fills are not authorised), never a crash. v116=False (1.1.3-1.1.5 records): approved_at <= filled_at <=
+    expires_at, as frozen."""
     pid, out = p["position_id"], []
     legs = {l["leg_id"]: l for l in tk["legs"]} if tk else None
     if legs is not None:
@@ -392,29 +503,60 @@ def position_errors(p: dict, ap: dict | None, tk: dict | None, rv_by_id: dict) -
         return out
     aid = ap["approval_id"]
     opens = [f for f in p["fills"] if f["action"].endswith("_open")]
+    if v116:   # parse every time once; naive / unparsable -> an INV-06 error, and the comparisons using it are skipped
+        no_fill = "fail closed: no opening fill of this position is authorised"
+        ftimes = {}
+        for f in opens:
+            ft, w = instant(f.get("filled_at"))
+            if w:
+                out.append(_time_error("INV-06", f["fill_id"], "filled_at", f.get("filled_at"), w, "fail closed: the fill is not authorised"))
+            ftimes[f["fill_id"]] = ft
+        apt = {}
+        for k in ("approved_at", "expires_at") + (("status_changed_at",) if "status_changed_at" in ap else ()):
+            t, w = instant(ap.get(k))
+            if w:
+                out.append(_time_error("INV-06", f"{pid} approval {aid}", k, ap.get(k), w, no_fill))
+            apt[k] = t
     # active at every opening fill: status 'active', or revoked/expired/consumed with status_changed_at strictly AFTER
     # the fill (changed at or before the fill -> invalid; a non-active status with no status_changed_at -> invalid).
     # Closing fills reduce risk and are not gated by the entry approval (as for expires_at).
     if ap["status"] != "active":
         if "status_changed_at" not in ap:
             out.append(f"INV-06-STATUS-UNDATED {pid} approval {aid} status {ap['status']!r} without status_changed_at")
-        else:
+        elif not v116:
             out += [f"INV-06-STATUS {f['fill_id']} filled at {f['filled_at']['ny']} but approval {aid} became {ap['status']!r} at "
                     f"{ap['status_changed_at']['ny']}" for f in opens if _ny(ap["status_changed_at"]) <= _ny(f["filled_at"])]
+        elif apt["status_changed_at"] is not None:
+            out += [f"INV-06-STATUS {f['fill_id']} filled at {f['filled_at']['ny']} but approval {aid} became {ap['status']!r} at "
+                    f"{ap['status_changed_at']['ny']}" for f in opens
+                    if ftimes[f["fill_id"]] is not None and apt["status_changed_at"] <= ftimes[f["fill_id"]]]
     if p["ticket_id"] != ap["ticket_id"]:
         out.append(f"INV-06-TICKET {pid} is for ticket {p['ticket_id']} but approval {aid} is for {ap['ticket_id']}")
     if tk is not None and _terms_differ(ap, tk):
         out.append(f"INV-06-TERMS {pid} approval {aid} legs/qty/limit differ from ticket {tk['ticket_id']}")
     rv = rv_by_id.get(ap["review_id"])
-    if rv is not None and review_is_veto(rv):
+    if rv is not None and review_is_veto(rv, v116):
         out.append(f"INV-06-VETO {pid} approval {aid} approves VETO review {rv['review_id']}")
-    t0, t1 = _ny(ap["approved_at"]), _ny(ap["expires_at"])
-    for f in opens:
-        ft = _ny(f["filled_at"])
-        if ft < t0:
-            out.append(f"INV-06-BEFORE {f['fill_id']} filled at {f['filled_at']['ny']} before approval {aid} at {ap['approved_at']['ny']}")
-        elif ft > t1:
-            out.append(f"INV-06-EXPIRED {f['fill_id']} filled at {f['filled_at']['ny']} after approval {aid} expiry {ap['expires_at']['ny']}")
+    if not v116:
+        t0, t1 = _ny(ap["approved_at"]), _ny(ap["expires_at"])
+        for f in opens:
+            ft = _ny(f["filled_at"])
+            if ft < t0:
+                out.append(f"INV-06-BEFORE {f['fill_id']} filled at {f['filled_at']['ny']} before approval {aid} at {ap['approved_at']['ny']}")
+            elif ft > t1:
+                out.append(f"INV-06-EXPIRED {f['fill_id']} filled at {f['filled_at']['ny']} after approval {aid} expiry {ap['expires_at']['ny']}")
+    else:
+        t0, t1 = apt["approved_at"], apt["expires_at"]
+        for f in opens:
+            ft = ftimes[f["fill_id"]]
+            if ft is None:
+                continue
+            if t0 is not None and ft <= t0:
+                out.append(f"INV-06-BEFORE {f['fill_id']} filled at {f['filled_at']['ny']} not after approval {aid} at "
+                           f"{ap['approved_at']['ny']} (valid only while approved_at < filled_at < expires_at)")
+            elif t1 is not None and ft >= t1:
+                out.append(f"INV-06-EXPIRED {f['fill_id']} filled at {f['filled_at']['ny']} at or after approval {aid} expiry "
+                           f"{ap['expires_at']['ny']} (valid only while approved_at < filled_at < expires_at)")
     alegs = {l["leg_id"]: l for l in ap["legs"]}
     qty = {}
     for f in opens:
