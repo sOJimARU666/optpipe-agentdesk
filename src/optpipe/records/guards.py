@@ -10,6 +10,7 @@ Error strings use the spec's ids and wording, so for a 1.1.3+ record they equal 
   INV-16-VERDICT / -BLOCKING / -FLAGS / -EMPTY   stored overall != risk_reference.overall(results) (ids as sets)
   INV-05-VETO / -FOREIGN / -ACK-MISSING / -ACK-EXTRA / -ACK-DUPLICATE / -TERMS / -EXPIRY
   INV-06-STATUS / -STATUS-UNDATED / -TICKET / -TERMS / -VETO / -BEFORE / -EXPIRED
+  INV-17-REUSE (spec 1.1.6; not for 1.1.3-1.1.5 records)                 one approval opens at most one position
 
 Approval state comes only from `status` (no `decision` field). A non-active approval (revoked / expired /
 consumed) is valid at an opening fill only if `status_changed_at` is strictly AFTER the fill (changed <= fill is
@@ -229,8 +230,24 @@ def approval_active_at(ap: dict, when: datetime) -> bool:
     return changed is not None and when < changed
 
 
-def position_errors(p: dict, ap: dict | None, tk: dict | None = None, rv: dict | None = None) -> list[str]:
-    """INV-06 (spec 1.1.3 ids) for one paper position against its approval (status, ticket, terms, review, window)."""
+CLOSED_WINDOW_VERSIONS = frozenset({"1.1.3", "1.1.4", "1.1.5"})
+"""Record versions whose frozen INV-06 window is closed (approved_at <= filled_at <= expires_at). Every other record
+(1.1.6 and any version optpipe applies the guards to on its own) gets the spec 1.1.6 open window."""
+
+
+def open_window(rec: Any) -> bool:
+    """True when the spec 1.1.6 open INV-06 window applies to this record (SOL-ACCEPT-001 G4)."""
+    return not (isinstance(rec, dict) and rec.get("schema_version") in CLOSED_WINDOW_VERSIONS)
+
+
+def position_errors(p: dict, ap: dict | None, tk: dict | None = None, rv: dict | None = None,
+                    open_win: bool = True) -> list[str]:
+    """INV-06 (spec 1.1.3 ids) for one paper position against its approval (status, ticket, terms, review, window).
+
+    Window (SOL-ACCEPT-001 G4, spec 1.1.6): by default an opening fill is valid only while approved_at < filled_at <
+    expires_at (open at both ends, instants compared whatever the UTC offset): a fill exactly at approved_at is
+    INV-06-BEFORE, exactly at expires_at INV-06-EXPIRED. open_win=False is the frozen 1.1.3-1.1.5 closed window
+    (approved_at <= filled_at <= expires_at), used by check_record for records labelled 1.1.3, 1.1.4 or 1.1.5."""
     if ap is None:
         return []          # unresolved approval_id: the spec's INV-04 reports it
     pid, aid, out = p.get("position_id", "?"), ap.get("approval_id", "?"), []
@@ -258,13 +275,32 @@ def position_errors(p: dict, ap: dict | None, tk: dict | None = None, rv: dict |
     t0, t1 = _ts(ap.get("approved_at")), _ts(ap.get("expires_at"))
     for f in opens:
         ft = _ts(f.get("filled_at"))
-        if ft is None or t0 is None or ft < t0:
+        if open_win:        # spec 1.1.6 wording, so merge() dedupes it against the validator's string
+            if ft is None or t0 is None or ft <= t0:
+                out.append(f"INV-06-BEFORE {f.get('fill_id', '?')} filled at {_ny(f.get('filled_at'))} not after approval "
+                           f"{aid} at {_ny(ap.get('approved_at'))} (valid only while approved_at < filled_at < expires_at)")
+            elif t1 is None or ft >= t1:
+                out.append(f"INV-06-EXPIRED {f.get('fill_id', '?')} filled at {_ny(f.get('filled_at'))} at or after approval "
+                           f"{aid} expiry {_ny(ap.get('expires_at'))} (valid only while approved_at < filled_at < expires_at)")
+        elif ft is None or t0 is None or ft < t0:
             out.append(f"INV-06-BEFORE {f.get('fill_id', '?')} filled at {_ny(f.get('filled_at'))} before approval "
                        f"{aid} at {_ny(ap.get('approved_at'))}")
         elif t1 is None or ft > t1:
             out.append(f"INV-06-EXPIRED {f.get('fill_id', '?')} filled at {_ny(f.get('filled_at'))} after approval "
                        f"{aid} expiry {_ny(ap.get('expires_at'))}")
     return out
+
+
+def reuse_errors(positions: Iterable[dict]) -> list[str]:
+    """INV-17-REUSE (spec 1.1.6, SOL-ACCEPT-001 G6): one approval opens at most one paper position. Two or more
+    positions referencing the same approval_id -> one error per approval, whatever the approval's status (a consumed
+    approval cannot open a second position). Spec wording, so merge() dedupes it against the validator's string."""
+    by_ap: dict = {}
+    for p in positions:
+        if p.get("approval_id") is not None:
+            by_ap.setdefault(_key(p.get("approval_id")), []).append(p.get("position_id"))
+    return [f"INV-17-REUSE approval {aid} is referenced by {len(pids)} paper positions {pids}; one approval opens at most "
+            f"one position (the first is {pids[0]})" for aid, pids in by_ap.items() if len(pids) > 1]
 
 
 GUARD_CRASHED = "GUARD-CRASHED"
@@ -293,7 +329,11 @@ def _check_record(rec: dict) -> list[str]:
         errs += approval_errors(a, reviews.get(_key(a.get("review_id"))), tickets.get(_key(a.get("ticket_id"))))
     for p in pos:
         ap = approvals.get(_key(p.get("approval_id")))
-        errs += position_errors(p, ap, tickets.get(_key(p.get("ticket_id"))), reviews.get(_key((ap or {}).get("review_id"))))
+        errs += position_errors(p, ap, tickets.get(_key(p.get("ticket_id"))), reviews.get(_key((ap or {}).get("review_id"))),
+                                open_win=open_window(rec))
+    # INV-17-REUSE for EVERY schema_version (#17 review): relabelling a record 1.1.5 must not let one approval open
+    # two positions. Only the INV-06 window stays version-dependent (1.1.3-1.1.5 keep their frozen closed window).
+    errs += reuse_errors(pos)
     return errs
 
 

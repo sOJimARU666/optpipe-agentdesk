@@ -9,7 +9,7 @@ watcher_rules.yaml) and writes <session>.watch.json plus a .sha256 sidecar.
                   vetoed=True: no intraday alerts, one end-of-day summary.
       - rejected: SHADOW target.
       - approved: an approval (spec schema: there is no `decision` field) with status `active`, valid at the
-                  watch start (approved_at <= now < expires_at), whose flags are all acknowledged and whose
+                  watch start (approved_at < now < expires_at, spec 1.1.6), whose flags are all acknowledged and whose
                   review's rule results do not veto (records/guards.py, FIX-SEC-001). Watched as approved_pending.
                   Any other approval (revoked / expired / consumed / out of window / unacknowledged flags) is
                   NOT honoured. Without a real approval, ANY `revoked` approval of the ticket makes it a
@@ -79,7 +79,7 @@ def pair(dt: datetime) -> dict:
 
 
 def _ny(v) -> str:
-    return v["ny"] if isinstance(v, dict) else str(v)
+    return v.get("ny") if isinstance(v, dict) else str(v)
 
 
 # ------------------------------------------------------------------ pluggable rule engines
@@ -278,33 +278,55 @@ def _veto_reasons(rec: dict, tid: str, rv: Optional[dict], istat: Optional[str])
         if a.get("ticket_id") == tid and arv is not None and arv is not rv and effective_verdict(arv) == "VETO":
             out.append(f"approval {a.get('approval_id')} points at VETO review {arv.get('review_id')}")
     for r in rec.get("risk_reviews") or []:
-        if r.get("ticket_id") == tid and r is not rv and _when(r.get("evaluated_at")) is None and effective_verdict(r) == "VETO":
-            out.append(f"undated VETO review {r.get('review_id')}")
+        if r.get("ticket_id") == tid and _when(r.get("evaluated_at")) is None:
+            # spec 1.1.6 (G5): a review whose evaluated_at is missing / naive / unparsable cannot be ordered, so the
+            # ticket's latest review is unknown: vetoed (fail closed), whatever that review's verdict
+            out.append(f"INV-02-TIME-{_time_problem(r.get('evaluated_at'))} review {r.get('review_id')} evaluated_at "
+                       f"{_ny(r.get('evaluated_at'))!r} is not usable: reviews cannot be ordered (fail closed)")
     if istat == "vetoed":
         out.append("idea_log vetoed")
     return out
 
 
 def _when(v) -> Optional[datetime]:
+    """The aware instant of a TsPair / ISO string / datetime, else None. A naive time (no UTC offset) is None too: it
+    can never be compared with an aware one, so it fails closed instead of crashing (spec 1.1.6, SOL-ACCEPT-001 G4/G5)."""
+    if isinstance(v, datetime):
+        dt = v
+    else:
+        try:
+            dt = datetime.fromisoformat(_ny(v)) if v else None
+        except (TypeError, ValueError):
+            return None
+    return dt if dt is not None and dt.tzinfo is not None and dt.utcoffset() is not None else None
+
+
+def _time_problem(v) -> str:
+    """'NAIVE' or 'INVALID' for an unusable time (message id suffix, spec 1.1.6 G5)."""
     try:
-        return datetime.fromisoformat(_ny(v)) if v else None
+        dt = v if isinstance(v, datetime) else datetime.fromisoformat(_ny(v))
+        return "NAIVE" if dt.tzinfo is None or dt.utcoffset() is None else "INVALID"
     except (TypeError, ValueError):
-        return None
+        return "INVALID"
 
 
 def approval_blockers(rec: dict, appr: dict, now: datetime) -> list[str]:
     """Why an approval must NOT be honoured at `now`: [] when it stands. Status must be `active`, `now` must be
-    inside [approved_at, expires_at), and records/guards review_errors + approval_errors (INV-16 tampered overall,
+    strictly inside (approved_at, expires_at) (spec 1.1.6 open window, instants, for every record version), and records/guards review_errors + approval_errors (INV-16 tampered overall,
     INV-05 unacknowledged flags / VETO review / foreign ticket / terms) must be clean. Reads `status`, never a `decision` field (not in Doodle's approval schema)."""
     from ..records.guards import approval_errors, review_errors
     aid = appr.get("approval_id")
     st = appr.get("status")
     if st != "active":
         return [f"approval {aid} status {st!r}, not active"]
+    if _when(now) is None:      # spec 1.1.6 G5: a naive / unusable `now` means no real approval (fail closed)
+        return [f"INV-06-TIME-{_time_problem(now)} now {now!r} has no usable UTC offset: approval {aid} not honoured"]
     start, end = _when(appr.get("approved_at")), _when(appr.get("expires_at"))
     if start is None or end is None:
-        return [f"approval {aid} has no valid approved_at/expires_at"]
-    if not start <= now < end:
+        bad = [k for k, t in (("approved_at", start), ("expires_at", end)) if t is None]
+        return [f"INV-06-TIME-{_time_problem(appr.get(k))} approval {aid} {k} {_ny(appr.get(k))!r} is not usable "
+                "(naive / unparsable / missing): not honoured (fail closed)" for k in bad]
+    if not start < now < end:   # spec 1.1.6 G4: open window approved_at < now < expires_at (instants), every version
         return [f"approval {aid} not valid at {now.astimezone(NY):%Y-%m-%d %H:%M} NY "
                 f"(window {start.astimezone(NY):%Y-%m-%d %H:%M} to {end.astimezone(NY):%H:%M} NY)"]
     reviews = {r.get("review_id"): r for r in rec.get("risk_reviews") or []}
@@ -342,8 +364,8 @@ def targets_from_session(rec: dict, now: datetime) -> list[Target]:
       4. idea `approved_pending` / `approved` / no idea -> `approved_pending`: really approved with a real approval,
          else HYPOTHETICAL (a watched paper what-if). Any other idea status (proposed, simulated, ...) keeps that
          status and is not watched.
-      5. a REAL approval needs the idea `approved_pending` / `approved` AND status `active`, approved_at <= now <
-         expires_at, INV-05 and INV-16 clean. An active approval of a proposed / simulated idea never counts, and a
+      5. a REAL approval needs the idea `approved_pending` / `approved` AND status `active`, approved_at < now <
+         expires_at (spec 1.1.6 open window, instants), INV-05 and INV-16 clean. An active approval of a proposed / simulated idea never counts, and a
          ticket with NO idea plus an active approval is HYPOTHETICAL, never really approved (spec 1.1.5 ruling)."""
     if not isinstance(now, datetime):
         raise TypeError("targets_from_session: `now` must be a datetime (the watch start)")
