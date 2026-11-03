@@ -91,10 +91,18 @@ def watch(a, settings) -> int:
     sess = Path(a.session) if a.session else Path(a.out) / f"session-{day}.json"
     if not sess.exists():
         print(f"session file not found: {sess}", file=sys.stderr); return 2
-    rec = json.loads(sess.read_text())
     # Fail closed (FIX-SEC-001 P0-4): never watch a record Doodle's validator (or the optpipe guards) rejects.
-    from .orchestrator import validate_file
-    verrs = validate_file(settings, sess)              # Doodle's validator + records/guards.check_record, merged
+    # The file is read and parsed ONCE: the object validated is the object watched, and the watch document's
+    # session sha256 is of those same bytes (SOL-ACCEPT-001 G7, no re-read between validate and watch).
+    import hashlib
+    from .orchestrator import validate_record
+    try:
+        raw = sess.read_bytes()
+        rec = json.loads(raw)
+    except (OSError, ValueError) as e:
+        print(f"optpipe watch: refusing to watch {sess.name}: unreadable ({type(e).__name__}: {e})", file=sys.stderr)
+        return 2
+    verrs = validate_record(settings, rec, sess.parent)  # Doodle's validator + records/guards.check_record, merged
     if verrs:
         print(f"optpipe watch: refusing to watch {sess.name}: the session record does not validate "
               f"({len(verrs)} error(s))\n  " + "\n  ".join(verrs), file=sys.stderr)
@@ -110,7 +118,8 @@ def watch(a, settings) -> int:
     s0 = clock.now()
     until = (datetime.fromisoformat(a.until) if a.until else
              datetime.combine(s0.astimezone(NY).date(), datetime.min.time(), NY).replace(hour=17))
-    wt = Watcher(rec, rules, cal, src, get_engine(a.engine), session_path=sess, now=s0)
+    wt = Watcher(rec, rules, cal, src, get_engine(a.engine), session_path=sess, now=s0,
+                 session_sha256=hashlib.sha256(raw).hexdigest())
     doc = wt.run(clock, until, once=a.once)
     res = write_watch(doc, sess, Path(a.out))
     sm = doc["summary"]

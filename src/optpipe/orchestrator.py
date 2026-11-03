@@ -487,7 +487,6 @@ def validate_file(settings: Settings, path: Path) -> list[str]:
     plus optpipe's guards. Never None and never [] unless validated: a missing/broken/crashing validator or an
     unreadable file is returned as an error (fail closed, FIX-SEC-001 P0-5)."""
     import json
-    from .records.guards import check_record, merge
     mod, err = load_validator(discover(settings.spec_path))
     if mod is None:
         return [err]
@@ -496,8 +495,28 @@ def validate_file(settings: Settings, path: Path) -> list[str]:
         rec = json.loads(p.read_text())
     except (OSError, ValueError) as e:
         return [f"SPEC-RECORD-UNREADABLE: {p.name}: {type(e).__name__}: {e} (fail closed)"]
+    return _validate_loaded(mod, rec, p.resolve().parent)
+
+
+def validate_record(settings: Settings, rec: Any, base_dir: Path) -> list[str]:
+    """validate_file on an already-parsed record (the caller parsed the file once and keeps that object, so the
+    validated object IS the one it uses; SOL-ACCEPT-001 G7). base_dir = the record file's directory (INV-11)."""
+    mod, err = load_validator(discover(settings.spec_path))
+    if mod is None:
+        return [err]
+    return _validate_loaded(mod, rec, Path(base_dir).resolve())
+
+
+def _validate_loaded(mod, rec: Any, base_dir: Path) -> list[str]:
+    from .records.guards import check_record, merge
     try:
-        errs = run_validator(mod, copy.deepcopy(rec), base_dir=p.resolve().parent)
+        errs = run_validator(mod, copy.deepcopy(rec), base_dir=base_dir)
     except ValidatorCrashed as e:
         return [str(e)]
-    return merge(errs, check_record(rec) if isinstance(rec, dict) else [])
+    if not isinstance(rec, dict):
+        return merge(errs, ["SPEC-RECORD-TYPE: the session record is not a JSON object (fail closed)"])
+    try:
+        gerrs = check_record(rec)
+    except Exception as e:                    # noqa: BLE001 - a guard bug must block, never crash (fail closed)
+        gerrs = [f"GUARD-CRASHED check_record raised {type(e).__name__}: {e} (fail closed)"]
+    return merge(errs, gerrs)
