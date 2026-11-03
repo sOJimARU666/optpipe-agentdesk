@@ -1,0 +1,131 @@
+{
+  "schema_version": "1.1.8",
+  "kind": "catalyst_log",
+  "pack_id": "EXAMPLE-2026-10-20",
+  "pack_built_at": "2026-10-20T09:00:00-04:00",
+  "data_label": "EXAMPLE",
+  "date": "2026-10-20",
+  "catalysts": [
+    {
+      "ticker": "JPM",
+      "catalyst_type": "earnings",
+      "event_date": "2026-10-21",
+      "status": "CONFIRMED",
+      "sources": [
+        {
+          "source": "example_ir",
+          "url": "https://ir.example.com/events",
+          "as_of": "2026-10-20T08:30:00-04:00",
+          "origin": "issuer",
+          "origin_entity": "JPM"
+        },
+        {
+          "source": "example_wire",
+          "url": "https://www.example.org/wire/jpm-release",
+          "as_of": "2026-10-20T08:30:00-04:00",
+          "origin": "issuer",
+          "origin_entity": "JPM"
+        }
+      ],
+      "note": "EXAMPLE: BMO per both sources"
+    },
+    {
+      "ticker": "WDC",
+      "catalyst_type": "earnings",
+      "event_date": "2026-10-28",
+      "status": "UNCONFIRMED",
+      "sources": [
+        {
+          "source": "example_wire",
+          "url": "https://www.example.org/wire",
+          "as_of": "2026-10-20T08:30:00-04:00",
+          "origin": "news",
+          "origin_entity": "Example Wire"
+        }
+      ]
+    },
+    {
+      "ticker": null,
+      "catalyst_type": "fomc",
+      "event_date": "2026-10-28",
+      "event_time": "2026-10-28T14:00:00",
+      "status": "UNCONFIRMED",
+      "sources": [
+        {
+          "source": "example_calendar",
+          "url": "https://calendar.example.org/earnings",
+          "as_of": "2026-10-20T08:30:00-04:00",
+          "origin": "data_vendor",
+          "origin_entity": "Example Calendar Co"
+        }
+      ],
+      "note": "EXAMPLE: macro, one source"
+    },
+    {
+      "ticker": "XMPLA",
+      "catalyst_type": "other",
+      "event_date": null,
+      "status": "UNKNOWN",
+      "sources": [],
+      "note": "EXAMPLE: no catalyst source"
+    },
+    {
+      "ticker": "WDC",
+      "catalyst_type": "investor_day",
+      "event_date": null,
+      "status": "CONFIRMED",
+      "sources": [
+        {
+          "source": "example_wire",
+          "url": "https://www.example.org/wire",
+          "as_of": "2026-10-20T08:30:00-04:00",
+          "origin": "news",
+          "origin_entity": "Example Wire"
+        },
+        {
+          "source": "example_calendar",
+          "url": "https://calendar.example.org/earnings",
+          "as_of": "2026-10-20T08:30:00-04:00",
+          "origin": "data_vendor",
+          "origin_entity": "Example Calendar Co"
+        }
+      ]
+    }
+  ],
+  "ticker_context": [
+    {
+      "ticker": "JPM",
+      "sector": "Financials",
+      "prior_close": {
+        "value": 100.5,
+        "source": "example_quotes",
+        "as_of": "2026-10-19T16:00:00-04:00",
+        "as_of_basis": "last_trade",
+        "delayed": true,
+        "delay_minutes": 15,
+        "status": "OK",
+        "url": "https://quotes.example.com/q"
+      }
+    },
+    {
+      "ticker": "XMPLB",
+      "sector": "Technology",
+      "analyst_actions": [
+        {
+          "firm": "Example Securities",
+          "action": "initiate",
+          "from": null,
+          "to": "Buy",
+          "date": "2026-10-19",
+          "source": {
+            "source": "example_screener",
+            "url": "https://screener.example.org/x",
+            "as_of": "2026-10-20T08:30:00-04:00",
+            "origin": "broker",
+            "origin_entity": "Example Securities"
+          }
+        }
+      ]
+    }
+  ]
+}

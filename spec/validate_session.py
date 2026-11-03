@@ -1,4 +1,4 @@
-"""Validate a session record (schema v1.0.0, v1.1.0, v1.1.1, v1.1.2, v1.1.3, v1.1.4, v1.1.5 or v1.1.6): JSON Schema (draft 2020-12) + x-invariants INV-01..17.
+"""Validate a session record (schema v1.0.0, v1.1.0, v1.1.1, v1.1.2, v1.1.3, v1.1.4, v1.1.5, v1.1.6, v1.1.7 or v1.1.8): JSON Schema (draft 2020-12) + x-invariants INV-01..17.
 Usage: python validate_session.py session.example.json [more.json ...]
 
 Exit codes (fail-closed contract, see AGENTS.md / CHANGELOG 1.1.3):
@@ -12,7 +12,7 @@ INV-06 approval status/ticket/terms checks, INV-16 overall-verdict consistency);
 1.0.0-1.1.2 records validate exactly as before (same error strings).
 1.1.4 adds no invariant: a 1.1.4 record gets exactly the 1.1.3 checks, and 1.1.3 records validate exactly as before.
 1.1.5 adds no invariant either (its rulings are watcher-only): a 1.1.5 record gets exactly the 1.1.3 / 1.1.4 checks.
-1.1.6 records (only) additionally get (SOL-ACCEPT-001 G3/G4/G5/G6): INV-06 half-open -> open window
+1.1.6, 1.1.7 and 1.1.8 records (only) additionally get (SOL-ACCEPT-001 G3/G4/G5/G6): INV-06 half-open -> open window
 approved_at < filled_at < expires_at (a fill exactly at expires_at is INV-06-EXPIRED, exactly at approved_at
 INV-06-BEFORE; instants compared, whatever the UTC offset), naive / unparsable approval and fill times reported as
 INV-05-TIME-NAIVE / INV-06-TIME-NAIVE (-INVALID) errors instead of crashing, INV-17-REUSE (one approval opens at
@@ -91,7 +91,7 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
     v = Draft202012Validator(SCHEMA, format_checker=FormatChecker())
     errs = [f"schema {'/'.join(map(str, e.absolute_path))}: {e.message[:200]}" for e in v.iter_errors(sess)]
     if errs:
-        if isinstance(sess, dict) and sess.get("schema_version") == "1.1.6":   # 1.1.6 (G5): naive times get an INV id too
+        if isinstance(sess, dict) and sess.get("schema_version") in ("1.1.6", "1.1.7", "1.1.8"):   # 1.1.6+ (G5): naive times get an INV id too
             errs.extend(naive_time_errors(sess))
         return errs
     src = {s["id"]: s for s in sess["sources"]}
@@ -112,11 +112,11 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
             if is_field(o) and o["status"] in ("ok", "stale") and o["source_id"] in src:
                 if datetime.fromisoformat(o["as_of"]) > datetime.fromisoformat(src[o["source_id"]]["fetched_at"]):
                     errs.append(f"INV-09 {p} as_of after source fetch")
-    v11 = sess["schema_version"] in ("1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6")   # v1.1 shape
-    v111 = sess["schema_version"] in ("1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6")   # stricter 1.1.1 checks (INV-13 credit, INV-14), kept in 1.1.2+
-    v112 = sess["schema_version"] in ("1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6") # 1.1.2 checks (INV-15 stop/target operators), kept in 1.1.3+
-    v113 = sess["schema_version"] in ("1.1.3", "1.1.4", "1.1.5", "1.1.6")          # 1.1.3 checks (INV-03/04/05/06 tightening, INV-16), kept in 1.1.4+
-    v116 = sess["schema_version"] == "1.1.6"   # 1.1.6 checks (G3 fail-closed aggregate, G4 open INV-06 window, G5 naive times, G6 INV-17)
+    v11 = sess["schema_version"] in ("1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8")   # v1.1 shape
+    v111 = sess["schema_version"] in ("1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8")   # stricter 1.1.1 checks (INV-13 credit, INV-14), kept in 1.1.2+
+    v112 = sess["schema_version"] in ("1.1.2", "1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8") # 1.1.2 checks (INV-15 stop/target operators), kept in 1.1.3+
+    v113 = sess["schema_version"] in ("1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8")          # 1.1.3 checks (INV-03/04/05/06 tightening, INV-16), kept in 1.1.4+
+    v116 = sess["schema_version"] in ("1.1.6", "1.1.7", "1.1.8")   # 1.1.6 checks, kept in 1.1.7 and 1.1.8 (G3 fail-closed aggregate, G4 open INV-06 window, G5 naive times, G6 INV-17)
     # INV-10 run phase vs NY clock (v1.1 'closed')
     for r in sess["runs"]:
         closed = CAL.is_closed(datetime.fromisoformat(r["started"]["ny"]))

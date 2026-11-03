@@ -19,9 +19,9 @@ def test_records_are_written_as_1_1_6_with_spec_labels(pipeline_output, spec):
     rec = pipeline_output["record"]
     ruleset = str(yaml.safe_load(spec.path("risk_rules").read_text())["ruleset_version"])
     assert rec["schema_version"] == compat.V11 == "1.1.6"
-    assert ruleset == "1.1.6" and rec["session"].get("risk_ruleset_version", ruleset) == ruleset
+    assert ruleset == "1.1.8" and rec["session"].get("risk_ruleset_version", ruleset) == ruleset
     assert rec["risk_reviews"] and {r["ruleset_version"] for r in rec["risk_reviews"]} == {ruleset}
-    assert str(spec.watcher_rules()["watcher_version"]) == "1.1.6"
+    assert str(spec.watcher_rules()["watcher_version"]) == "1.1.8"   # 1.1.7 / 1.1.8: label only (records stay 1.1.6)
 
 
 def _validator_errors(spec, rec):
@@ -78,16 +78,13 @@ def test_undated_reviews_sort_deterministically():
     assert latest_review([t1, t2]) is t2 and latest_review([t2, t1]) is t1
 
 
-def test_watcher_rules_top_level_precedence_equals_scope(spec):
-    """Moodle (SOL-ACCEPT-001, spec 1.1.6): watcher_rules.yaml has a redundant top-level `target_precedence` (steps
-    1, 2, 3, 4a, 4b with ids). `scope.target_precedence` is canonical; the top-level list must name the same targets
-    in the same order, so the two can never drift apart."""
+def test_watcher_rules_scope_precedence_is_the_only_source(spec):
+    """Moodle (SOL-ACCEPT-001) asked that the redundant top-level `target_precedence` of spec 1.1.6 never drift from
+    `scope.target_precedence`; spec 1.1.7 removed the duplicate (pinned here since FEAT-OODLE-01 PR A, spec 1.1.8), so
+    `scope.target_precedence` is the only source and keeps the same order."""
     wr = spec.watcher_rules()
-    scope = list(wr["scope"]["target_precedence"])
-    top = wr["target_precedence"]
-    assert scope == ["vetoed", "terminal", "rejected", "approved_pending", "idea_status"]
-    ids = [s["id"] if isinstance(s, dict) else s for s in top]
-    assert list(dict.fromkeys(ids)) == scope
+    assert "target_precedence" not in wr
+    assert list(wr["scope"]["target_precedence"]) == ["vetoed", "terminal", "rejected", "approved_pending", "idea_status"]
 
 
 @pytest.mark.parametrize("old", OLD)

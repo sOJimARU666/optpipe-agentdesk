@@ -1,0 +1,59 @@
+{
+  "schema_version": "1.1.7",
+  "kind": "pack_index",
+  "pack_id": "EXAMPLE-2026-10-20",
+  "pack_built_at": "2026-10-20T09:00:00-04:00",
+  "data_label": "EXAMPLE",
+  "date": "2026-10-20",
+  "tickers": [
+    {
+      "ticker": "JPM",
+      "file": "JPM.json",
+      "watchlist": "fixture"
+    },
+    {
+      "ticker": "WDC",
+      "file": "WDC.json",
+      "watchlist": "fixture"
+    },
+    {
+      "ticker": "XMPLA",
+      "file": "XMPLA.json",
+      "watchlist": "eugene"
+    },
+    {
+      "ticker": "XMPLB",
+      "file": "XMPLB.json",
+      "watchlist": "street",
+      "candidate_status": "idea"
+    }
+  ],
+  "sources_terms": [
+    {
+      "source": "example_quotes",
+      "domain": "example.com",
+      "basis": "robots_and_terms_allow",
+      "automated": true,
+      "terms_url": "https://quotes.example.com/terms",
+      "note": "EXAMPLE source"
+    },
+    {
+      "source": "example_chain",
+      "domain": "example.com",
+      "basis": "robots_and_terms_allow",
+      "automated": true
+    },
+    {
+      "source": "example_ir",
+      "domain": "example.com",
+      "basis": "issuer_public_release",
+      "automated": false
+    },
+    {
+      "source": "example_wire",
+      "domain": "example.org",
+      "basis": "manual_read_once",
+      "automated": false
+    }
+  ]
+}

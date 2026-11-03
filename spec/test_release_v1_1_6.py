@@ -48,15 +48,19 @@ CHANGED_VS_1_1_5: dict = {}
 # ------------------------------------------------------------------ labels
 def test_schema_version_1_1_6_listed_and_example_is_1_1_6():
     enum = json.loads((SPEC / "session.schema.json").read_text())["properties"]["schema_version"]["enum"]
-    assert enum == OLD_VERSIONS + ["1.1.6"]
-    assert fx.example()["schema_version"] == "1.1.6" and vs.validate(fx.example()) == []
-    assert (SPEC / "VERSION").read_text().strip() == "1.1.6"
-    assert rr.load_rules()["ruleset_version"] == "1.1.6" and wr.load_watcher_rules()["watcher_version"] == "1.1.6"
+    assert enum[:len(OLD_VERSIONS) + 1] == OLD_VERSIONS + ["1.1.6"]   # spec 1.1.7 appended 1.1.7, 1.1.8 appended 1.1.8
+    ex = fx.example(); ex["schema_version"] = "1.1.6"                  # the example tracks the current version (1.1.7 since 1.1.7, 1.1.8 since 1.1.8)
+    assert vs.validate(ex) == []
+    frozen = SPEC / "_v1_1_6_backup"
+    assert (frozen / "VERSION").read_text().strip() == "1.1.6"
+    assert yaml.safe_load((frozen / "risk_rules.yaml").read_text())["ruleset_version"] == "1.1.6"
+    assert yaml.safe_load((frozen / "watcher_rules.yaml").read_text())["watcher_version"] == "1.1.6"
 
 
 def test_example_regenerated_only_labels_changed():
-    """build_example.py output = the frozen 1.1.5 example with the three version labels bumped"""
-    old, new = json.loads((BACKUP_115 / "session.example.json").read_text()), fx.example()
+    """the 1.1.6 example (frozen in _v1_1_6_backup) = the frozen 1.1.5 example with the three version labels bumped"""
+    old = json.loads((BACKUP_115 / "session.example.json").read_text())
+    new = json.loads((SPEC / "_v1_1_6_backup" / "session.example.json").read_text())
     labels = json.dumps(old).replace('"1.1.5"', '"1.1.6"')
     assert json.loads(labels) == new
     assert json.dumps(old).count('"1.1.5"') == 4
@@ -170,7 +174,7 @@ def test_watcher_yaml_cases_unchanged_vs_frozen_1_1_5():
     for k in old:
         if k not in ("watcher_version",):
             assert old[k] == twr.WR[k], k
-    assert set(twr.WR) - set(old) == {"target_precedence", "real_approval"}
+    assert set(twr.WR) - set(old) == {"real_approval"}   # 1.1.6 also added a top-level target_precedence; 1.1.7 removed it
 
 
 def test_session_cases_and_grid_identical_to_frozen_1_1_5_reference():
@@ -421,8 +425,16 @@ def test_g3_validator_inv16_recompute_fails_closed():
 
 
 # ------------------------------------------------------------------ explicit target_precedence
+# spec 1.1.7 (Moodle) removed the duplicate top-level `target_precedence` from watcher_rules.yaml; scope.target_precedence
+# is the only source. The 1.1.6 step list (step, id, target, watched) is read from the frozen 1.1.6 YAML and must still
+# match the current scope list, the reference and the md numbering.
+def _steps_1_1_6():
+    return yaml.safe_load((SPEC / "_v1_1_6_backup" / "watcher_rules.yaml").read_text())["target_precedence"]
+
+
 def test_target_precedence_is_explicit_and_matches_reference_and_scope():
-    tp = twr.WR["target_precedence"]
+    assert "target_precedence" not in twr.WR                       # 1.1.7: scope.target_precedence only
+    tp = _steps_1_1_6()
     assert [x["id"] for x in tp] == list(wr.TARGET_PRECEDENCE) == twr.WR["scope"]["target_precedence"]
     assert [x["step"] for x in tp] == ["1", "2", "3", "4a", "4b"] and twr.WR["real_approval"]["step"] == "5"
     assert [x["target"] for x in tp] == ["vetoed", "idea_status", "rejected", "approved_pending", "idea_status"]
@@ -444,14 +456,15 @@ def test_target_precedence_matches_md_numbering():
 
 
 def _first_match(st, tamper, idea):
-    """independent reading of the YAML target_precedence `when` texts for the test_release_v1_1_5 grid"""
+    """independent reading of the 1.1.6 step `when` texts, in scope.target_precedence order, for the test_release_v1_1_5 grid"""
     real = idea in ("approved_pending", "approved") and st == "active"           # step 5 (window / INV-05 / INV-16 clean)
     when = {"vetoed": tamper is not None or idea == "vetoed",
             "terminal": idea in ("executed", "closed"),
             "rejected": idea == "rejected" or (st == "revoked" and not real),
             "approved_pending": idea in ("approved_pending", "approved", None),
             "idea_status": True}
-    step = next(x for x in twr.WR["target_precedence"] if when[x["id"]])
+    steps = {x["id"]: x for x in _steps_1_1_6()}
+    step = next(steps[i] for i in twr.WR["scope"]["target_precedence"] if when[i])
     status = idea if step["target"] == "idea_status" else step["target"]
     return step["id"], status, step["id"] == "approved_pending" and real
 

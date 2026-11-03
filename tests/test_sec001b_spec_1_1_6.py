@@ -73,8 +73,8 @@ def theirs(ref, r: dict, now: str = NOWS):
     return t["status"], t["status"] == "vetoed", bool(t["approved"])
 
 
-def test_pinned_spec_is_1_1_6(spec):                                       # NEGATIVE (pin)
-    assert (spec.root / "VERSION").read_text().strip() == "1.1.6"
+def test_pinned_spec_is_1_1_8(spec):                                       # NEGATIVE (pin; 1.1.8 since FEAT-OODLE-01 PR A)
+    assert (spec.root / "VERSION").read_text().strip() == "1.1.8"
 
 
 # ---------------------------------------------------------------- G4: INV-06 fill window (open at both ends)
