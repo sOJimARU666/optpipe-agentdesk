@@ -58,10 +58,10 @@ def tk(s):
 
 
 # ------------------------------------------------------------------ fixtures sanity
-def test_example_is_1_1_5_and_valid():
+def test_example_is_1_1_6_and_valid():
     s = fx.example()
-    assert s["schema_version"] == "1.1.5" and errs(s) == []
-    assert (SPEC / "VERSION").read_text().strip() == "1.1.5"
+    assert s["schema_version"] == "1.1.6" and errs(s) == []
+    assert (SPEC / "VERSION").read_text().strip() == "1.1.6"
 
 
 def test_approved_record_is_valid_positive_control():
@@ -288,8 +288,15 @@ def test_inv06_closing_fill_after_consumed_ok():
 
 
 def test_inv06_fill_at_expiry_boundary_ok():
-    s = rec(); [f.update(filled_at=fx.at("16:00")) for f in pos(s)["fills"]]
+    """1.1.3-1.1.5 records keep the closed window (a fill exactly at expires_at is accepted)"""
+    s = rec(); s["schema_version"] = "1.1.5"; [f.update(filled_at=fx.at("16:00")) for f in pos(s)["fills"]]
     assert not has(errs(s), "INV-06")
+
+
+def test_inv06_fill_at_expiry_boundary_invalid_from_1_1_6():
+    """spec 1.1.6 (SOL-ACCEPT-001 G4): valid only while filled_at < expires_at; more in test_release_v1_1_6.py"""
+    s = rec(); assert s["schema_version"] == "1.1.6"; [f.update(filled_at=fx.at("16:00")) for f in pos(s)["fills"]]
+    assert has(errs(s), "INV-06-EXPIRED f-1 ")
 
 
 def test_inv06_terms_veto_qty_side():
@@ -647,7 +654,7 @@ def test_message_format_placeholders_are_alert_fields():  # row 17
 
 def test_rule_file_labels_equal_version():                 # row 19
     v = (HERE / "VERSION").read_text().strip()
-    assert v == "1.1.5"
+    assert v == "1.1.6"
     assert _yaml("risk_rules.yaml")["ruleset_version"] == v
     assert _yaml("watcher_rules.yaml")["watcher_version"] == v
     assert (HERE / "risk_rules.md").read_text().splitlines()[0].startswith(f"# Risk rules v{v} ")

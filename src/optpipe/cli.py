@@ -196,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
         # 2 = unreadable input, missing/broken validator or a validator crash. Any non-zero is FAIL.
         import json
         from .orchestrator import ValidatorCrashed, load_validator, run_validator
-        from .records.guards import check_record
+        from .records.guards import check_record, guard_crashed
         mod, err = load_validator(discover(settings.spec_path))
         if mod is None:
             print(err, file=sys.stderr); return 2
@@ -209,6 +209,8 @@ def main(argv: list[str] | None = None) -> int:
         except ValidatorCrashed as e:
             print(str(e), file=sys.stderr); return 2
         errs = merge(errs, check_record(rec) if isinstance(rec, dict) else [])
+        if guard_crashed(errs):                # a guard crash is like a validator crash: exit 2 (SOL-ACCEPT-001 G5)
+            print("\n".join(errs), file=sys.stderr); return 2
         from .records.store import verify_session_ref
         tp = Path(str(a.file).replace(".json", ".trace.json"))
         if tp.exists():
@@ -243,9 +245,12 @@ def main(argv: list[str] | None = None) -> int:
     print(f"wrote {w.json}  sha256 {w.json_sha256}  (schema {rec['schema_version']}, trace_ref -> {w.trace.name})\n"
           f"wrote {w.trace}  sha256 {w.trace_sha256}\nwrote {w.md}")
     if ferrs is not None:                      # always a list now; a missing validator is an error in it
-        print(f"validate_session {w.json.name}: " + (f"OK as {rec['schema_version']} (schema + invariants INV-01..{ {'1.1.5': '16', '1.1.4': '16', '1.1.3': '16', '1.1.2': '15', '1.1.1': '14'}.get(rec['schema_version'], '13') })" if not ferrs
+        print(f"validate_session {w.json.name}: " + (f"OK as {rec['schema_version']} (schema + invariants INV-01..{ {'1.1.6': '17', '1.1.5': '16', '1.1.4': '16', '1.1.3': '16', '1.1.2': '15', '1.1.1': '14'}.get(rec['schema_version'], '13') })" if not ferrs
                                                      else f"{len(ferrs)} error(s)\n  " + "\n  ".join(ferrs[:20])))
     v = trace.runs[-1].validation
+    from .records.guards import guard_crashed
+    if guard_crashed(ferrs or []):
+        return 2
     return 1 if (v.get("errors") or ferrs) else 0
 
 
