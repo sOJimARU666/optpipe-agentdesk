@@ -12,7 +12,7 @@ from typing import Any, Optional
 from ..agent import Agent
 from ..models.contracts import RiskInput, RiskOutput
 from ..records.fields import tspair
-from ..records.guards import effective_verdict
+from ..records.guards import effective_verdict, review_view
 from .adapter import review_input_from_session
 from .engine import evaluate
 from .ruleset import Ruleset
@@ -65,8 +65,9 @@ class RiskOfficerAgent(Agent[RiskInput, RiskOutput]):
 
     def summarize_output(self, out: RiskOutput) -> dict[str, Any]:
         d = out.model_dump(mode="json")["risk_reviews"]
-        return {r["ticket_id"]: {"verdict": effective_verdict(r), "blocking": r["overall"]["blocking_rule_ids"],
-                                 "flags": r["overall"]["flag_rule_ids"]} for r in d}
+        v = {r["ticket_id"]: review_view(r) for r in d}      # recomputed ids, never the stored ones (SOL-ACCEPT-001 G2)
+        return {t: {"verdict": x["verdict"], "blocking": x["blocking_rule_ids"], "flags": x["flag_rule_ids"]}
+                for t, x in v.items()}
 
     def verdict(self, out: RiskOutput) -> Optional[str]:
         d = out.model_dump(mode="json")["risk_reviews"]
