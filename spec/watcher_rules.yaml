@@ -3,7 +3,7 @@
 # Tests: test_watcher_reference.py. Market hours/holidays come from risk_rules.yaml config.market_hours.
 # The watcher NEVER places, modifies or cancels orders (paper or live). Every alert says so.
 # All timestamps quoted; never let YAML auto-convert.
-watcher_version: "1.1.0"
+watcher_version: "1.1.5"   # labels track spec VERSION from 1.1.3; 1.1.5: a review failing INV-16 is VETO for the watcher (an approval on it is never real), executed / closed ideas keep their status, a revoked approval rejects every pre-execution ticket, a real approval needs an approved_pending / approved idea, scope.target_precedence, SCOPE-h..r; 1.1.4: a revoked approval maps the ticket to rejected (shadow), scope.approval_status, SCOPE-e..g; 1.1.3: `detail` listed in alert_fields, approval state read only from approvals[].status (no `decision` field)
 
 config:
   alert_text: "alert only, no order"       # must appear in every alert message
@@ -30,6 +30,35 @@ scope:
   watched: "paper_positions with status open; tickets with idea status approved_pending (watched as if entered at the ticket limit)"
   shadow: "tickets whose review/idea is vetoed or rejected: NO intraday polling and NO W01-W07 alerts; one info 'shadow' end-of-day summary at/after the NY close of each trading day"
   ignored: "closed positions, expired/cancelled tickets"
+  # spec 1.1.4 ruling: approval status -> ticket target (watcher_reference.target_from_session / APPROVAL_STATUS_TARGET),
+  # read ONLY from approvals[].status (there is no `decision` field). real = approved_pending with approved: true (only if
+  # inside approved_at <= now < expires_at, INV-05 clean and, spec 1.1.5, its review INV-16 clean; an active approval
+  # failing those is hypothetical, or vetoed when its review fails INV-16); hypothetical = approved_pending with
+  # approved: false (a watched paper what-if); rejected = shadow only (no intraday alerts, SHADOW_EOD summary).
+  # Applied inside target_precedence below (VETO first; revoked -> rejected unless a real approval exists).
+  approval_status:
+    active: real
+    revoked: rejected
+    expired: hypothetical
+    consumed: hypothetical
+    none: hypothetical       # missing: no approval for the ticket
+  # spec 1.1.5 ruling: full precedence of target_from_session (watcher_reference.TARGET_PRECEDENCE); first match wins.
+  #   1 vetoed:   the ticket's latest review (by evaluated_at) is blocked, any approval of the ticket points at a blocked
+  #               review, or the idea is vetoed. blocked = recorded VETO, VETO derived from the rule results (VETO or
+  #               hard UNKNOWN), no results, OR INV-16 inconsistent (stored overall verdict / blocking ids / flag ids !=
+  #               risk_reference.overall(results), e.g. tampered_pass: a stored PASS over FLAG results). Any
+  #               schema_version (fail closed).
+  #   2 terminal: the idea is executed or closed -> keeps that status (not watched as a ticket; the trade is watched by
+  #               the position rules). A revoked approval does NOT relabel it.
+  #   3 rejected: pre-execution idea (proposed, simulated, approved_pending, approved, rejected, any other non-terminal
+  #               status, or no idea): the idea is rejected, or any approval of the ticket is revoked and there is no
+  #               real approval (5).
+  #   4 otherwise: idea approved_pending / approved / no idea -> approved_pending, real (approved: true) if a real
+  #               approval (5) exists, else hypothetical; any other non-approved idea (proposed, simulated, ...) keeps
+  #               its status and is not watched.
+  #   5 real approval: the idea is approved_pending or approved AND the approval is active, inside its window, INV-05
+  #               clean and INV-16 clean. An active approval on a proposed / simulated idea (or with no idea) is never real.
+  target_precedence: [vetoed, terminal, rejected, approved_pending, idea_status]
 
 polling:
   rule: "Only while the NY regular session is open (America/New_York, 09:30-16:00, 13:00 early close, no weekends/NYSE holidays). Closed -> no poll (next_poll = null)."
@@ -43,7 +72,7 @@ dedupe:
     (rule_id, target_id), a new alert is held back unless it escalates to exit_signal. Suppressed or held-back alerts do
     not update the state. The shadow summary is deduped per (target_id, NY date).
 
-alert_fields: [rule_id, level, target_id, value, threshold, quote_as_of, at, message]
+alert_fields: [rule_id, level, target_id, value, threshold, quote_as_of, at, detail, message]
 message_format: "[{level}] {rule_id} {target_id}: {detail} | value={value} threshold={threshold} quote_as_of={quote_as_of} | alert only, no order"
 
 definitions:
@@ -129,8 +158,28 @@ tests:
   - {id: POLL-d, desc: "expiry day 15:10 NY = last hour -> 1-min poll (and W04 exit)", set: {now: "2026-10-30T15:10:00-04:00", time_stop: "2026-10-30T15:30:00-04:00", hold_window.end: "2026-10-30T15:30:00-04:00", underlying.last.as_of: "2026-10-30T15:09:00-04:00", legs.0.bid.as_of: "2026-10-30T15:09:00-04:00", legs.0.ask.as_of: "2026-10-30T15:09:00-04:00", legs.1.bid.as_of: "2026-10-30T15:09:00-04:00", legs.1.ask.as_of: "2026-10-30T15:09:00-04:00", underlying.bars_5m: []}, expect: {alerts: [[W04_TIME, exit_signal]], next_poll: 60}}
   - {id: SCOPE-a, desc: "approved_pending ticket is watched like a position", set: {target: {kind: ticket, id: tk-1, ticket_id: tk-1, status: approved_pending}, legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {alerts: [[W01_MARK_VS_STOP_TARGET, exit_signal]], next_poll: 60}}
   - {id: SCOPE-b, desc: "vetoed ticket: no intraday alerts even at the stop", set: {target: {kind: ticket, id: tk-1, ticket_id: tk-1, status: vetoed}, legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {alerts: [], next_poll: null}}
-  - {id: SCOPE-c, desc: "vetoed ticket after the close: one info shadow summary", set: {now: "2026-10-20T16:05:00-04:00", target: {kind: ticket, id: tk-1, ticket_id: tk-1, status: rejected}}, expect: {alerts: [[SHADOW_EOD, info]], next_poll: null}}
+  - {id: SCOPE-c, desc: "rejected ticket after the close: one info shadow summary", set: {now: "2026-10-20T16:05:00-04:00", target: {kind: ticket, id: tk-1, ticket_id: tk-1, status: rejected}}, expect: {alerts: [[SHADOW_EOD, info]], next_poll: null}}
   - {id: SCOPE-d, desc: "shadow summary deduped per day", set: {now: "2026-10-20T16:20:00-04:00", target: {kind: ticket, id: tk-1, ticket_id: tk-1, status: vetoed}}, state: {sent: {"SHADOW_EOD|tk-1|2026-10-20": "info"}}, expect: {alerts: [], next_poll: null}}
+  # spec 1.1.4: `approval_status` builds the target from a session record (session_fixtures.approved_record without a
+  # position, approval ap-1 set to that status, status_changed_at 12:40; `none` removes it) via
+  # watcher_reference.target_from_session at 2026-10-13 13:00 NY (inside ap-1's window); expect.target_status checks it.
+  - {id: SCOPE-e, desc: "revoked approval -> rejected ticket (1.1.4, fail closed): no intraday alerts even at the stop", approval_status: revoked, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: rejected, alerts: [], next_poll: null}}
+  - {id: SCOPE-f, desc: "revoked approval -> rejected ticket after the close: one info shadow summary", approval_status: revoked, set: {now: "2026-10-20T16:05:00-04:00"}, expect: {target_status: rejected, alerts: [[SHADOW_EOD, info]], next_poll: null}}
+  - {id: SCOPE-g, desc: "expired approval stays hypothetical (approved_pending, watched): exit_signal at the stop", approval_status: expired, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: approved_pending, alerts: [[W01_MARK_VS_STOP_TARGET, exit_signal]], next_poll: 60}}
+  # spec 1.1.5: `review_tamper` (session_fixtures.TAMPER_KINDS) makes ap-1's review fail INV-16; `idea_status` sets the
+  # idea's current_status; `approval_status` defaults to active; expect.target_approved checks the target's `approved`.
+  # Same session record and now as SCOPE-e..g.
+  - {id: SCOPE-h, desc: "stored PASS over VETO results (INV-16) with an active approval -> vetoed: no intraday alerts even at the stop", review_tamper: pass_over_veto, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: vetoed, alerts: [], next_poll: null}}
+  - {id: SCOPE-i, desc: "stored PASS over FLAG results (INV-16, optpipe tampered_pass) with an active approval -> vetoed (1.1.5; was a real approval): no intraday alerts even at the stop", review_tamper: pass_over_flag, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: vetoed, alerts: [], next_poll: null}}
+  - {id: SCOPE-j, desc: "stored PASS over FLAG results -> vetoed after the close: one info shadow summary", review_tamper: pass_over_flag, set: {now: "2026-10-20T16:05:00-04:00"}, expect: {target_status: vetoed, alerts: [[SHADOW_EOD, info]], next_poll: null}}
+  - {id: SCOPE-k, desc: "flag_rule_ids missing a flag (INV-16-FLAGS) under an active approval -> vetoed: no intraday alerts", review_tamper: flag_ids_mismatch, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: vetoed, alerts: [], next_poll: null}}
+  - {id: SCOPE-l, desc: "revoked approval with idea status proposed -> rejected (1.1.5; was proposed, unwatched): no intraday alerts even at the stop", approval_status: revoked, idea_status: proposed, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: rejected, alerts: [], next_poll: null}}
+  - {id: SCOPE-m, desc: "revoked approval with idea status proposed -> rejected after the close: one info shadow summary (1.1.5; was none)", approval_status: revoked, idea_status: proposed, set: {now: "2026-10-20T16:05:00-04:00"}, expect: {target_status: rejected, alerts: [[SHADOW_EOD, info]], next_poll: null}}
+  - {id: SCOPE-n, desc: "active in-window approval with idea status proposed -> stays proposed, NEVER really approved: not watched, no alerts", approval_status: active, idea_status: proposed, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: proposed, target_approved: false, alerts: [], next_poll: null}}
+  - {id: SCOPE-o, desc: "revoked approval with idea status executed -> keeps executed (terminal; watched by the position rules): no ticket alerts at the stop", approval_status: revoked, idea_status: executed, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: executed, target_approved: false, alerts: [], next_poll: null}}
+  - {id: SCOPE-p, desc: "revoked approval with idea status executed -> keeps executed after the close: no shadow summary", approval_status: revoked, idea_status: executed, set: {now: "2026-10-20T16:05:00-04:00"}, expect: {target_status: executed, alerts: [], next_poll: null}}
+  - {id: SCOPE-q, desc: "revoked approval with idea status simulated -> rejected (1.1.5; was simulated, unwatched): no intraday alerts even at the stop", approval_status: revoked, idea_status: simulated, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: rejected, alerts: [], next_poll: null}}
+  - {id: SCOPE-r, desc: "control: active in-window approval with idea status approved -> really approved, watched: exit_signal at the stop", approval_status: active, idea_status: approved, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: approved_pending, target_approved: true, alerts: [[W01_MARK_VS_STOP_TARGET, exit_signal]], next_poll: 60}}
   # W01 mark: mid 7.20 - 3.00 = 4.20 in the fixture
   - {id: W01-a, desc: "mark 2.30 within 10% of 2.15 stop distance (<= 2.315) -> warn, fast poll", set: {legs.0.bid.value: 3.80, legs.0.ask.value: 3.90, legs.1.bid.value: 1.50, legs.1.ask.value: 1.60}, expect: {alerts: [[W01_MARK_VS_STOP_TARGET, warn]], next_poll: 60}}
   - {id: W01-b, desc: "mark exactly at stop 2.10 (3.60 - 1.50) -> exit_signal", set: {legs.0.bid.value: 3.55, legs.0.ask.value: 3.65, legs.1.bid.value: 1.50, legs.1.ask.value: 1.50}, expect: {alerts: [[W01_MARK_VS_STOP_TARGET, exit_signal]], next_poll: 60}}

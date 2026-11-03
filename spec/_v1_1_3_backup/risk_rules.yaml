@@ -1,0 +1,385 @@
+# Deterministic Risk Officer rules for the PAPER-ONLY US options app.
+# Human-readable companion: risk_rules.md. Reference implementation: risk_reference.py.
+# All quoted: never let YAML auto-convert timestamps/dates.
+ruleset_version: "1.1.3"   # labels track spec VERSION from 1.1.3 (no 1.1.2 ruleset); 1.1.3: combine([]) of zero per-leg/per-quote results is UNKNOWN (fail closed, was PASS), approvals must acknowledge every flag (INV-05); 1.1.1: R04 max loss for verticals from the INV-14 formula (verticals.py); 1.1.0: R11 sector cap, R12 defined-risk structure, R13 hold period, profiles.demo
+
+config:
+  # --- placeholders pending Eugene: keep labelled until he confirms ---
+  per_trade_max_loss_usd: 500          # PLACEHOLDER pending Eugene
+  max_underlying_risk_usd: 1000        # PLACEHOLDER pending Eugene (R11)
+  max_total_open_risk_usd: 2000        # PLACEHOLDER pending Eugene (R11)
+  max_open_positions: 5                # PLACEHOLDER pending Eugene (R11)
+  placeholders: [per_trade_max_loss_usd, max_underlying_risk_usd, max_total_open_risk_usd, max_open_positions]
+  # --- defaults ---
+  quote_max_age_seconds: 900           # 15 min
+  quote_future_tolerance_seconds: 60   # as_of more than this in the future = invalid -> UNKNOWN
+  max_spread_pct_of_mid: "0.10"        # string -> exact Decimal
+  min_open_interest: 500
+  min_dte: 7
+  net_price_basis: mid                 # mid | natural
+  fees_per_contract_usd: "0"
+  macro_event_kinds: [CPI, PPI, FOMC, NFP]
+  min_put_extrinsic: "0.05"            # R09 short-put FLAG threshold
+  iv_min_history_obs: 20
+  iv_rank_high: "0.80"                 # debit tickets FLAG above
+  iv_rank_low: "0.20"                  # credit tickets FLAG below
+  contract_multiplier: 100
+  # --- v1.1 defaults (no profile) ---
+  max_sector_risk_usd: null            # null = sector cap not checked (R11); set by a profile
+  sector_map: {}                       # underlying -> sector (R11 sector cap); empty by default
+  allowed_structures: [long_call, long_put, bull_call_debit_spread, bear_put_debit_spread, bull_put_credit_spread, bear_call_credit_spread, iron_condor]   # R12: defined-risk only; naked short options always VETO
+  hold_min_days: 7                     # R13: time stop and DTE must be >= this (NY calendar days)
+  hold_max_days: null                  # R13: null = no upper bound by default
+  tick_rules:                          # v1.1 INV-13 (session validator) - option price tick grid
+    # PLACEHOLDER list - verify against the current Cboe/OCC penny program list before relying on it.
+    penny_pilot: [SPY, QQQ, IWM, JPM]
+    threshold: "3.00"                  # tier chosen by the RAW price
+    penny_ticks: ["0.01", "0.05"]      # below / at-or-above threshold
+    standard_ticks: ["0.05", "0.10"]
+    directions:                        # INV-13; credit directions enforced for schema 1.1.1 / 1.1.2 records only
+      debit: {limit: down, stop: up, target: down}    # pay at most; stop and target trigger no later than the raw level
+      credit: {limit: up, stop: down, target: up}     # receive at least; stop and target (buy-back cost) trigger no later than raw
+  market_hours:
+    timezone: America/New_York         # ALWAYS compute here; Berlin is display only
+    open: "09:30"
+    close: "16:00"
+    early_close: "13:00"
+    # NYSE 2026 calendar - verify against nyse.com/markets/hours-calendars before production use
+    holidays: ["2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25"]
+    early_closes: ["2026-11-27", "2026-12-24"]
+
+# ---------------------------------------------------------------------------
+# Named profiles: evaluate(..., profile="demo") applies config_overrides on top of the defaults above.
+# The defaults (incl. the PLACEHOLDER limits 500/1000/2000/5) stay the documented baseline.
+profiles:
+  demo:
+    label: "DEMO - fictional scenario, values relayed by agent Moodle, not confirmed by Eugene directly"
+    confirmed_by_eugene: false
+    broker_display: "Harborline Securities"   # fictional, display only; no broker connection, paper only
+    paper_account_equity_usd: 25000
+    max_risk_per_idea_pct: 2                  # 2% of 25000 = 500 -> R04 per_trade_max_loss_usd
+    max_risk_per_sector_pct: 6                # 1500
+    max_total_open_risk_pct: 10               # 2500
+    watchlist: [JPM, WDC, AAPL, MSFT, NVDA, XOM]
+    config_overrides:
+      per_trade_max_loss_usd: 500             # R04 (= 2% of equity)
+      max_open_positions: 5                   # R11: max open ideas
+      max_underlying_risk_usd: 500            # R11: = one idea per underlying
+      max_sector_risk_usd: 1500               # R11: 6% of equity
+      max_total_open_risk_usd: 2500           # R11: 10% of equity
+      allowed_structures: [bull_call_debit_spread, bear_put_debit_spread, bull_put_credit_spread, bear_call_credit_spread]   # R12: defined-risk debit/credit spreads only
+      hold_min_days: 7                        # R13
+      hold_max_days: 28                       # R13
+      sector_map: {JPM: Financial, WDC: Technology, AAPL: Technology, MSFT: Technology, NVDA: Technology, XOM: Energy}
+
+result_precedence: [VETO, UNKNOWN, FLAG, PASS]   # combining per-leg / per-item results inside one rule
+
+overall:
+  verdict: "VETO if any rule result is VETO or any HARD rule is UNKNOWN; else FLAG if any FLAG or any SOFT rule UNKNOWN; else PASS"
+  approval_required: true   # always, even on PASS; approval is contract-level (exact legs, qty, limit) and expires
+  approvable_verdicts: [PASS, FLAG]   # FLAG requires approver to acknowledge each flagged rule_id
+
+common_definitions:
+  usable_field: "status in {ok, stale} and value is not null. missing/conflicting/absent = unusable -> rule UNKNOWN (unless a definite VETO is found elsewhere in the same rule)."
+  point_in_time: "A Field is visible to a review only if its source.fetched_at <= evaluated_at; otherwise treated as missing."
+  mid: "(bid + ask) / 2 using exact decimal arithmetic. Leg quote invalid (-> UNKNOWN) if bid < 0, ask <= 0, or ask < bid."
+  window: "window_start = max(evaluated_at, ticket.hold_window.start); window_end = min(ticket.hold_window.end, earliest leg expiry at market close NY). Inclusive at both ends."
+  event_interval: "earnings/macro: bmo -> [D 09:30 NY]; amc -> [D 16:00 NY]; during_market/at_time -> [scheduled_at]; unknown -> [D 00:00, D 23:59:59 NY]. In window iff interval overlaps window (inclusive)."
+  exdiv_exposure_instant: "market close (NY) of the trading day before the ex-date (holidays/weekends skipped). Ex-div is 'in window' iff this instant is within the window."
+  coverage: "For a (kind, underlying) the calendar must have a usable coverage.checked_through >= window_end NY date; otherwise the rule is UNKNOWN for that kind."
+  dte: "(leg.expiry - evaluated_at converted to America/New_York date).days; ticket DTE = min over legs."
+
+rules:
+  - id: R01_QUOTE_FRESHNESS
+    severity: hard
+    description: Underlying and every leg quote must be live (<= 15 min old) and the US regular session must be open.
+    inputs: [evaluated_at, underlying.last, "legs[].bid", "legs[].ask", config.market_hours]
+    formula: "age_s = evaluated_at - as_of (seconds) for each of underlying.last, legs[].bid, legs[].ask; measured = max age in minutes"
+    threshold: {quote_max_age_seconds: 900}
+    result_logic:
+      VETO: "market closed at evaluated_at (America/New_York); OR any item status=stale; OR any age_s > 900"
+      UNKNOWN: "any item unusable or as_of null; OR as_of more than 60 s in the future"
+      PASS: "market open and every age_s <= 900"
+  - id: R02_BID_ASK_WIDTH
+    severity: hard
+    description: Each leg's bid-ask width must be <= 10% of its mid.
+    inputs: ["legs[].bid", "legs[].ask"]
+    formula: "width_pct = (ask - bid) / ((bid + ask) / 2), per leg, exact decimal"
+    threshold: {max_spread_pct_of_mid: "0.10"}
+    result_logic:
+      VETO: "any leg width_pct > 0.10"
+      UNKNOWN: "any leg bid/ask unusable or invalid (ask < bid, ask <= 0, bid < 0, mid = 0)"
+      PASS: "every leg width_pct <= 0.10"
+  - id: R03_OPEN_INTEREST
+    severity: hard
+    description: Each leg must have open interest >= 500.
+    inputs: ["legs[].open_interest"]
+    formula: "oi per leg"
+    threshold: {min_open_interest: 500}
+    result_logic:
+      VETO: "any leg oi < 500"
+      UNKNOWN: "any leg oi unusable"
+      PASS: "every leg oi >= 500"
+  - id: R04_MAX_LOSS
+    severity: hard
+    placeholder: true
+    description: Ticket max loss at its limit price must be <= the per-trade limit (default $500, PLACEHOLDER pending Eugene).
+    inputs: ["legs[] (type, side, strike, expiry, ratio)", ticket.quantity, ticket.limit_price, config.fees_per_contract_usd]
+    formula: >-
+      Expiry payoff per unit P(S) = sum(sign * ratio * intrinsic(S)) - premium, sign=+1 buy/-1 sell,
+      premium = +limit for debit, -limit for credit. Total PnL(S) = 100 * quantity * P(S) - fees.
+      max_loss = -min(PnL(S)) over S in {0} U strikes (piecewise linear); unlimited if the net call ratio
+      (sum sign*ratio over calls) < 0 (loss grows as S -> infinity). fees = fees_per_contract * quantity * sum(ratio).
+    threshold: {per_trade_max_loss_usd: 500}
+    result_logic:
+      VETO: "unlimited, or max_loss > per_trade_max_loss_usd"
+      UNKNOWN: "limit price missing, threshold null, or legs with different expiries (multi-expiry payoff unsupported in v1)"
+      PASS: "max_loss <= per_trade_max_loss_usd"
+  - id: R05_NET_PRICE_VS_LIMIT
+    severity: hard
+    description: Current net debit (mid basis) must be <= the ticket limit; for credit tickets net credit must be >= the limit.
+    inputs: ["legs[].bid", "legs[].ask", "legs[].side", "legs[].ratio", ticket.limit_price]
+    formula: "net = sum(buy ratio*px) - sum(sell ratio*px), px = mid (or ask for buys / bid for sells if net_price_basis=natural); debit positive"
+    threshold: {source: ticket.limit_price.amount, net_price_basis: mid}
+    result_logic:
+      VETO: "debit: net > limit; credit: -net < limit"
+      UNKNOWN: "any leg quote unusable/invalid"
+      PASS: "debit: net <= limit; credit: -net >= limit"
+  - id: R06_MIN_DTE
+    severity: hard
+    description: Every leg must have >= 7 calendar days to expiry (NY date).
+    inputs: ["legs[].expiry", evaluated_at]
+    formula: "dte = min over legs of (expiry - date_NY(evaluated_at)).days"
+    threshold: {min_dte: 7}
+    result_logic:
+      VETO: "dte < 7"
+      UNKNOWN: "no legs"
+      PASS: "dte >= 7"
+  - id: R07_EARNINGS_IN_WINDOW
+    severity: hard
+    description: No earnings for the underlying inside the hold window unless the ticket marks that event intended.
+    inputs: ["events[kind=earnings, underlying=ticket.underlying]", "coverage[kind=earnings, underlying]", ticket.hold_window, ticket.intended_event_ids]
+    formula: "for each earnings event: in_window(event_interval); coverage check"
+    threshold: {window: common_definitions.window}
+    result_logic:
+      VETO: "an earnings event in window and not in intended_event_ids"
+      UNKNOWN: "coverage missing/short of window_end, or an event's scheduled_at unusable"
+      FLAG: "every in-window earnings event is intended (approver must acknowledge)"
+      PASS: "coverage ok and no earnings in window"
+  - id: R08_MACRO_EVENTS
+    severity: soft
+    description: Scheduled CPI, PPI, FOMC, NFP inside the hold window are flagged.
+    inputs: ["events[kind in macro_event_kinds]", "coverage[kind in macro_event_kinds, underlying=null]", ticket.hold_window]
+    formula: "for each macro kind: coverage check; each event: in_window(event_interval)"
+    threshold: {macro_event_kinds: [CPI, PPI, FOMC, NFP]}
+    result_logic:
+      UNKNOWN: "any macro kind's coverage missing/short, or an event's scheduled_at unusable"
+      FLAG: "any macro event in window"
+      PASS: "all kinds covered, none in window"
+  - id: R09_EARLY_ASSIGNMENT
+    severity: hard
+    description: Short legs must not carry early-assignment risk (short call ITM with ex-dividend in window, or short call extrinsic < dividend with ex-dividend in window).
+    inputs: ["legs[side=sell]", underlying.last, "legs[].bid/ask", "events[kind=ex_dividend]", "coverage[kind=ex_dividend, underlying]"]
+    formula: >-
+      Short call: intrinsic = max(0, S - K); extrinsic = mid - intrinsic; exdiv_in_window via exdiv_exposure_instant.
+      Short put: intrinsic = max(0, K - S); extrinsic = mid - intrinsic.
+    threshold: {min_put_extrinsic: "0.05"}
+    result_logic:
+      VETO: "short call with ex-div in window AND (S > K OR extrinsic < dividend)"
+      FLAG: "short call with ex-div in window, OTM and extrinsic >= dividend; OR short put ITM with extrinsic < min_put_extrinsic"
+      UNKNOWN: "short call present and ex-div coverage missing/short or ex-div event date/dividend unusable; or S / leg quote unusable when needed"
+      PASS: "no short legs, or none of the above"
+  - id: R10_IV_VS_HISTORY
+    severity: soft
+    description: Compare current IV30 with its trailing 30-day history (IV rank).
+    inputs: [iv.iv30_current, iv.iv30_history, ticket.limit_price.price_type]
+    formula: "iv_rank = (cur - min(hist)) / (max(hist) - min(hist)); 0.5 if max == min"
+    threshold: {iv_rank_high: "0.80", iv_rank_low: "0.20", iv_min_history_obs: 20}
+    result_logic:
+      UNKNOWN: "cur or history unusable, or len(history) < 20"
+      FLAG: "debit and iv_rank > 0.80 (buying rich vol); credit and iv_rank < 0.20 (selling cheap vol)"
+      PASS: "otherwise"
+  - id: R11_CONCENTRATION
+    severity: soft
+    placeholder: true
+    description: Position concentration across open paper positions (per underlying, per sector, total, count). Default limits are PLACEHOLDERS; profiles.demo sets fictional demo limits.
+    inputs: [open_positions, ticket.underlying, "R04 max_loss", config.sector_map]
+    formula: >-
+      same = sum(max_loss of open positions in underlying) + ticket max_loss; total = sum(all) + ticket max_loss; count = n_open + 1;
+      if max_sector_risk_usd is set: sector = sector_map[underlying] (open position may carry its own `sector`),
+      same_sector = sum(max_loss of open positions in that sector) + ticket max_loss
+    threshold: {max_underlying_risk_usd: 1000, max_sector_risk_usd: null, max_total_open_risk_usd: 2000, max_open_positions: 5}
+    result_logic:
+      UNKNOWN: "open_positions unusable; or sector cap configured and the ticket's or an open position's underlying has no sector"
+      FLAG: "same > max_underlying_risk_usd or same_sector > max_sector_risk_usd or total > max_total_open_risk_usd or count > max_open_positions or ticket max loss unlimited"
+      PASS: "otherwise"
+  - id: R12_DEFINED_RISK_STRUCTURE
+    severity: hard
+    description: Only defined-risk structures from config.allowed_structures; the legs must actually form the declared strategy. Naked short options are always VETO.
+    inputs: [ticket.strategy, "legs[] (type, side, strike, expiry, ratio)", ticket.limit_price.price_type, config.allowed_structures]
+    formula: >-
+      naked = for calls or puts, sum(sign*ratio) < 0 (sign +1 buy / -1 sell).
+      Vertical shape: 2 legs, same type/expiry/ratio, one buy + one sell, different strikes;
+      bull_call_debit buys the lower call, bear_put_debit buys the higher put, bull_put_credit buys the lower put,
+      bear_call_credit buys the higher call; price_type must be debit for *_debit_spread and credit for *_credit_spread.
+      long_call/long_put = 1 bought leg, debit. iron_condor = bull put credit + bear call credit, one expiry, credit.
+    threshold: {allowed_structures: config.allowed_structures}
+    result_logic:
+      VETO: "naked short option; OR strategy not in allowed_structures; OR legs/price_type do not match the declared strategy"
+      UNKNOWN: "no legs or ticket.strategy missing"
+      PASS: "allowed, defined-risk, legs match"
+  - id: R13_HOLD_PERIOD
+    severity: hard
+    description: Planned hold (time stop = hold_window.end) and DTE must both sit in [hold_min_days, hold_max_days] NY calendar days, and the time stop must not be after the earliest leg's expiry close.
+    inputs: [evaluated_at, ticket.hold_window_start, ticket.hold_window_end, "legs[].expiry", config.market_hours]
+    formula: "hold_days = date_NY(hold_window_end) - date_NY(max(evaluated_at, hold_window_start)); dte = min over legs (expiry - date_NY(evaluated_at))"
+    threshold: {hold_min_days: 7, hold_max_days: null}
+    result_logic:
+      VETO: "hold_days or dte < hold_min_days or > hold_max_days (if set); OR hold_window_end after 16:00 NY (13:00 early close) of the earliest expiry"
+      UNKNOWN: "no legs, or hold_min_days not configured"
+      PASS: "otherwise"
+
+# ---------------------------------------------------------------------------
+# Test fixture: a ticket that PASSES every rule. Each test applies set/append/remove on a deep copy.
+# Paths are dot-separated; integers index lists.
+fixture:
+  evaluated_at: "2026-10-14T11:00:00-04:00"
+  underlying:
+    symbol: JPM
+    last: {value: 345.00, status: ok, as_of: "2026-10-14T10:58:00-04:00"}
+  ticket:
+    underlying: JPM
+    strategy: bull_call_debit_spread
+    quantity: 1
+    limit_price: {amount: 4.25, price_type: debit}
+    hold_window_start: "2026-10-14T09:45:00-04:00"
+    hold_window_end: "2026-10-27T16:00:00-04:00"
+    intended_event_ids: []
+  legs:
+    - leg_id: leg-1
+      type: call
+      side: buy
+      strike: 340
+      expiry: "2026-10-30"
+      ratio: 1
+      bid: {value: 7.00, status: ok, as_of: "2026-10-14T10:59:00-04:00"}
+      ask: {value: 7.40, status: ok, as_of: "2026-10-14T10:59:00-04:00"}
+      open_interest: {value: 800, status: ok, as_of: "2026-10-13T16:00:00-04:00"}
+    - leg_id: leg-2
+      type: call
+      side: sell
+      strike: 350
+      expiry: "2026-10-30"
+      ratio: 1
+      bid: {value: 2.90, status: ok, as_of: "2026-10-14T10:59:00-04:00"}
+      ask: {value: 3.10, status: ok, as_of: "2026-10-14T10:59:00-04:00"}
+      open_interest: {value: 900, status: ok, as_of: "2026-10-13T16:00:00-04:00"}
+  events:
+    - {event_id: ev-jpm-earn, kind: earnings, underlying: JPM, timing: bmo, scheduled_at: {value: "2026-10-13T00:00:00-04:00", status: ok, as_of: "2026-10-13T07:00:00-04:00"}}
+    - {event_id: ev-jpm-exdiv, kind: ex_dividend, underlying: JPM, timing: unknown, scheduled_at: {value: "2026-10-06T00:00:00-04:00", status: ok, as_of: "2026-09-15T16:00:00-04:00"}, dividend_amount: {value: 1.65, status: ok, as_of: "2026-09-15T16:00:00-04:00"}}
+    - {event_id: ev-cpi-nov, kind: CPI, underlying: null, timing: at_time, scheduled_at: {value: "2026-11-10T08:30:00-05:00", status: ok, as_of: "2026-01-01T00:00:00-05:00"}}
+  coverage:
+    - {kind: earnings, underlying: JPM, checked_through: {value: "2026-12-31", status: ok, as_of: "2026-10-14T08:00:00-04:00"}}
+    - {kind: ex_dividend, underlying: JPM, checked_through: {value: "2026-12-31", status: ok, as_of: "2026-10-14T08:00:00-04:00"}}
+    - {kind: CPI, underlying: null, checked_through: {value: "2026-12-31", status: ok, as_of: "2026-10-14T08:00:00-04:00"}}
+    - {kind: PPI, underlying: null, checked_through: {value: "2026-12-31", status: ok, as_of: "2026-10-14T08:00:00-04:00"}}
+    - {kind: FOMC, underlying: null, checked_through: {value: "2026-12-31", status: ok, as_of: "2026-10-14T08:00:00-04:00"}}
+    - {kind: NFP, underlying: null, checked_through: {value: "2026-12-31", status: ok, as_of: "2026-10-14T08:00:00-04:00"}}
+  iv:
+    iv30_current: {value: 0.25, status: ok, as_of: "2026-10-14T10:59:00-04:00"}
+    iv30_history: {value: [0.20, 0.21, 0.22, 0.23, 0.24, 0.25, 0.26, 0.27, 0.28, 0.29, 0.30, 0.29, 0.28, 0.27, 0.26, 0.25, 0.24, 0.23, 0.22, 0.21, 0.20, 0.22, 0.24, 0.26, 0.28, 0.30, 0.27, 0.25, 0.23, 0.21], status: ok, as_of: "2026-10-13T16:00:00-04:00"}
+  open_positions: {value: [], status: ok, as_of: "2026-10-14T11:00:00-04:00"}
+
+tests:
+  # R01
+  - {id: R01-a, rule: R01_QUOTE_FRESHNESS, desc: "fixture: market open, ages 1-2 min", expect: {result: PASS}}
+  - {id: R01-b, rule: R01_QUOTE_FRESHNESS, desc: "leg-2 bid 16 min old", set: {legs.1.bid.as_of: "2026-10-14T10:44:00-04:00"}, expect: {result: VETO, measured: {max_age_min: 16.0}}}
+  - {id: R01-c, rule: R01_QUOTE_FRESHNESS, desc: "age exactly 15:00 is inclusive", set: {legs.1.bid.as_of: "2026-10-14T10:45:00-04:00"}, expect: {result: PASS, measured: {max_age_min: 15.0}}}
+  - {id: R01-d, rule: R01_QUOTE_FRESHNESS, desc: "premarket 08:00 ET: market closed", set: {evaluated_at: "2026-10-14T08:00:00-04:00", underlying.last.as_of: "2026-10-14T07:59:00-04:00"}, expect: {result: VETO}}
+  - {id: R01-e, rule: R01_QUOTE_FRESHNESS, desc: "underlying last missing", set: {underlying.last: {value: null, status: missing, as_of: null}}, expect: {result: UNKNOWN}}
+  - {id: R01-f, rule: R01_QUOTE_FRESHNESS, desc: "DST gap week: 14:35 Berlin (+01:00) = 09:35 NY (EDT) -> open; naive Berlin-6h would say closed", set: {evaluated_at: "2026-10-26T14:35:00+01:00", underlying.last.as_of: "2026-10-26T09:34:00-04:00", legs.0.bid.as_of: "2026-10-26T09:34:00-04:00", legs.0.ask.as_of: "2026-10-26T09:34:00-04:00", legs.1.bid.as_of: "2026-10-26T09:34:00-04:00", legs.1.ask.as_of: "2026-10-26T09:34:00-04:00"}, expect: {result: PASS}}
+  - {id: R01-g, rule: R01_QUOTE_FRESHNESS, desc: "stale status vetoes even if timestamp recent", set: {legs.0.ask.status: stale}, expect: {result: VETO}}
+  # R02
+  - {id: R02-a, rule: R02_BID_ASK_WIDTH, desc: "5.6% and 6.7%", expect: {result: PASS}}
+  - {id: R02-b, rule: R02_BID_ASK_WIDTH, desc: "leg-2 2.70/3.10 = 13.79%", set: {legs.1.bid.value: 2.70}, expect: {result: VETO}}
+  - {id: R02-c, rule: R02_BID_ASK_WIDTH, desc: "exactly 10% (2.85/3.15) passes; no float error", set: {legs.1.bid.value: 2.85, legs.1.ask.value: 3.15}, expect: {result: PASS}}
+  - {id: R02-d, rule: R02_BID_ASK_WIDTH, desc: "crossed quote ask<bid", set: {legs.1.bid.value: 3.20}, expect: {result: UNKNOWN}}
+  - {id: R02-e, rule: R02_BID_ASK_WIDTH, desc: "one leg vetoes, other missing -> VETO wins", set: {legs.1.bid.value: 2.70, legs.0.ask: {value: null, status: missing, as_of: null}}, expect: {result: VETO}}
+  # R03
+  - {id: R03-a, rule: R03_OPEN_INTEREST, desc: "800/900", expect: {result: PASS}}
+  - {id: R03-b, rule: R03_OPEN_INTEREST, desc: "leg-1 OI 499", set: {legs.0.open_interest.value: 499}, expect: {result: VETO}}
+  - {id: R03-c, rule: R03_OPEN_INTEREST, desc: "OI exactly 500 inclusive", set: {legs.0.open_interest.value: 500}, expect: {result: PASS}}
+  - {id: R03-d, rule: R03_OPEN_INTEREST, desc: "OI conflicting", set: {legs.0.open_interest: {value: null, status: conflicting, as_of: null}}, expect: {result: UNKNOWN}}
+  # R04
+  - {id: R04-a, rule: R04_MAX_LOSS, desc: "debit 4.25 x 100 = 425 <= 500", expect: {result: PASS, measured: {max_loss_usd: 425.0}}}
+  - {id: R04-b, rule: R04_MAX_LOSS, desc: "quantity 2 -> 850", set: {ticket.quantity: 2}, expect: {result: VETO, measured: {max_loss_usd: 850.0}}}
+  - {id: R04-c, rule: R04_MAX_LOSS, desc: "naked short call = unlimited", remove: [legs.0], expect: {result: VETO, measured: {unlimited: true}}}
+  - {id: R04-d, rule: R04_MAX_LOSS, desc: "configurable: limit 5.10 (510) passes with per-trade 600", set: {ticket.limit_price.amount: 5.10}, config: {per_trade_max_loss_usd: 600}, expect: {result: PASS, measured: {max_loss_usd: 510.0}}}
+  - {id: R04-e, rule: R04_MAX_LOSS, desc: "bull put credit spread 1.50 credit on 5-wide: (5-1.5)*100 = 350", set: {ticket.limit_price: {amount: 1.50, price_type: credit}, legs.0.type: put, legs.0.strike: 335, legs.1.type: put, legs.1.strike: 340}, expect: {result: PASS, measured: {max_loss_usd: 350.0}}}
+  # R05
+  - {id: R05-a, rule: R05_NET_PRICE_VS_LIMIT, desc: "mid 4.20 <= 4.25", expect: {result: PASS, measured: {net: 4.2}}}
+  - {id: R05-b, rule: R05_NET_PRICE_VS_LIMIT, desc: "mid 4.20 > 4.19", set: {ticket.limit_price.amount: 4.19}, expect: {result: VETO}}
+  - {id: R05-c, rule: R05_NET_PRICE_VS_LIMIT, desc: "leg quote missing", set: {legs.1.bid: {value: null, status: missing, as_of: null}}, expect: {result: UNKNOWN}}
+  - {id: R05-d, rule: R05_NET_PRICE_VS_LIMIT, desc: "natural basis 7.40-2.90 = 4.50 > 4.25", config: {net_price_basis: natural}, expect: {result: VETO, measured: {net: 4.5}}}
+  # R06
+  - {id: R06-a, rule: R06_MIN_DTE, desc: "16 DTE", expect: {result: PASS, measured: {dte: 16}}}
+  - {id: R06-b, rule: R06_MIN_DTE, desc: "Fri 10-23 -> exactly 7", set: {evaluated_at: "2026-10-23T10:00:00-04:00"}, expect: {result: PASS, measured: {dte: 7}}}
+  - {id: R06-c, rule: R06_MIN_DTE, desc: "Mon 10-26 -> 4", set: {evaluated_at: "2026-10-26T10:00:00-04:00"}, expect: {result: VETO, measured: {dte: 4}}}
+  - {id: R06-d, rule: R06_MIN_DTE, desc: "DTE uses NY date: 2026-10-24T03:00+02:00 Berlin is still 10-23 in NY -> 7", set: {evaluated_at: "2026-10-24T03:00:00+02:00"}, expect: {result: PASS, measured: {dte: 7}}}
+  # R07
+  - {id: R07-a, rule: R07_EARNINGS_IN_WINDOW, desc: "earnings 10-13 bmo is before window", expect: {result: PASS}}
+  - {id: R07-b, rule: R07_EARNINGS_IN_WINDOW, desc: "earnings 10-20 amc inside window", append: {events: [{event_id: ev-x, kind: earnings, underlying: JPM, timing: amc, scheduled_at: {value: "2026-10-20T00:00:00-04:00", status: ok, as_of: "2026-10-01T00:00:00-04:00"}}]}, expect: {result: VETO}}
+  - {id: R07-c, rule: R07_EARNINGS_IN_WINDOW, desc: "same event marked intended -> FLAG", set: {ticket.intended_event_ids: [ev-x]}, append: {events: [{event_id: ev-x, kind: earnings, underlying: JPM, timing: amc, scheduled_at: {value: "2026-10-20T00:00:00-04:00", status: ok, as_of: "2026-10-01T00:00:00-04:00"}}]}, expect: {result: FLAG}}
+  - {id: R07-d, rule: R07_EARNINGS_IN_WINDOW, desc: "earnings coverage missing", set: {coverage.0.checked_through: {value: null, status: missing, as_of: null}}, expect: {result: UNKNOWN}}
+  - {id: R07-e, rule: R07_EARNINGS_IN_WINDOW, desc: "amc on window-end date 10-27 16:00 is inclusive", append: {events: [{event_id: ev-y, kind: earnings, underlying: JPM, timing: amc, scheduled_at: {value: "2026-10-27T00:00:00-04:00", status: ok, as_of: "2026-10-01T00:00:00-04:00"}}]}, expect: {result: VETO}}
+  # R08
+  - {id: R08-a, rule: R08_MACRO_EVENTS, desc: "CPI Nov 10 outside window", expect: {result: PASS}}
+  - {id: R08-b, rule: R08_MACRO_EVENTS, desc: "CPI 10-15 08:30 inside window", append: {events: [{event_id: ev-cpi, kind: CPI, underlying: null, timing: at_time, scheduled_at: {value: "2026-10-15T08:30:00-04:00", status: ok, as_of: "2026-01-01T00:00:00-05:00"}}]}, expect: {result: FLAG}}
+  - {id: R08-c, rule: R08_MACRO_EVENTS, desc: "FOMC calendar not checked", set: {coverage.4.checked_through: {value: null, status: missing, as_of: null}}, expect: {result: UNKNOWN}}
+  - {id: R08-d, rule: R08_MACRO_EVENTS, desc: "NFP coverage ends before window end", set: {coverage.5.checked_through.value: "2026-10-20"}, expect: {result: UNKNOWN}}
+  # R09
+  - {id: R09-a, rule: R09_EARLY_ASSIGNMENT, desc: "short 350C OTM, ex-div 10-06 already past", expect: {result: PASS}}
+  - {id: R09-b, rule: R09_EARLY_ASSIGNMENT, desc: "ex-div 10-20 in window, S=352 > 350 short call ITM", set: {underlying.last.value: 352.0}, append: {events: [{event_id: ev-div2, kind: ex_dividend, underlying: JPM, timing: unknown, scheduled_at: {value: "2026-10-20T00:00:00-04:00", status: ok, as_of: "2026-10-01T00:00:00-04:00"}, dividend_amount: {value: 0.50, status: ok, as_of: "2026-10-01T00:00:00-04:00"}}]}, expect: {result: VETO}}
+  - {id: R09-c, rule: R09_EARLY_ASSIGNMENT, desc: "ex-div in window, OTM, extrinsic 3.00 >= 0.50 -> FLAG", append: {events: [{event_id: ev-div2, kind: ex_dividend, underlying: JPM, timing: unknown, scheduled_at: {value: "2026-10-20T00:00:00-04:00", status: ok, as_of: "2026-10-01T00:00:00-04:00"}, dividend_amount: {value: 0.50, status: ok, as_of: "2026-10-01T00:00:00-04:00"}}]}, expect: {result: FLAG}}
+  - {id: R09-d, rule: R09_EARLY_ASSIGNMENT, desc: "ex-div in window, OTM but extrinsic 3.00 < dividend 3.50 -> VETO", append: {events: [{event_id: ev-div2, kind: ex_dividend, underlying: JPM, timing: unknown, scheduled_at: {value: "2026-10-20T00:00:00-04:00", status: ok, as_of: "2026-10-01T00:00:00-04:00"}, dividend_amount: {value: 3.50, status: ok, as_of: "2026-10-01T00:00:00-04:00"}}]}, expect: {result: VETO}}
+  - {id: R09-e, rule: R09_EARLY_ASSIGNMENT, desc: "ex-div coverage missing with short call", set: {coverage.1.checked_through: {value: null, status: missing, as_of: null}}, expect: {result: UNKNOWN}}
+  - {id: R09-f, rule: R09_EARLY_ASSIGNMENT, desc: "ex-date 10-28: exposure = close 10-27 16:00 = window end (inclusive), ITM -> VETO", set: {underlying.last.value: 352.0}, append: {events: [{event_id: ev-div3, kind: ex_dividend, underlying: JPM, timing: unknown, scheduled_at: {value: "2026-10-28T00:00:00-04:00", status: ok, as_of: "2026-10-01T00:00:00-04:00"}, dividend_amount: {value: 0.50, status: ok, as_of: "2026-10-01T00:00:00-04:00"}}]}, expect: {result: VETO}}
+  # R10
+  - {id: R10-a, rule: R10_IV_VS_HISTORY, desc: "rank 0.5", expect: {result: PASS, measured: {iv_rank: 0.5}}}
+  - {id: R10-b, rule: R10_IV_VS_HISTORY, desc: "debit with IV30 0.35 vs 0.20-0.30 -> rank 1.5", set: {iv.iv30_current.value: 0.35}, expect: {result: FLAG, measured: {iv_rank: 1.5}}}
+  - {id: R10-c, rule: R10_IV_VS_HISTORY, desc: "history missing", set: {iv.iv30_history: {value: null, status: missing, as_of: null}}, expect: {result: UNKNOWN}}
+  - {id: R10-d, rule: R10_IV_VS_HISTORY, desc: "only 10 observations", set: {iv.iv30_history.value: [0.2, 0.21, 0.22, 0.23, 0.24, 0.25, 0.26, 0.27, 0.28, 0.3]}, expect: {result: UNKNOWN}}
+  # R11
+  - {id: R11-a, rule: R11_CONCENTRATION, desc: "no open positions", expect: {result: PASS}}
+  - {id: R11-b, rule: R11_CONCENTRATION, desc: "open JPM risk 700 + 425 = 1125 > 1000", set: {open_positions.value: [{underlying: JPM, max_loss_usd: 700}]}, expect: {result: FLAG, measured: {same_underlying_usd: 1125.0}}}
+  - {id: R11-c, rule: R11_CONCENTRATION, desc: "positions unknown", set: {open_positions: {value: null, status: missing, as_of: null}}, expect: {result: UNKNOWN}}
+  # OVERALL
+  - {id: R11-d, rule: R11_CONCENTRATION, profile: demo, desc: "DEMO: open WDC 500 + NVDA 400 + JPM ticket 425 -> Technology unaffected, Financial 425 <= 1500", set: {open_positions.value: [{underlying: WDC, max_loss_usd: 500}, {underlying: NVDA, max_loss_usd: 400}]}, expect: {result: PASS, measured: {same_sector_usd: 425.0, total_usd: 1325.0}}}
+  - {id: R11-e, rule: R11_CONCENTRATION, profile: demo, desc: "DEMO: AAPL ticket + open WDC 500, MSFT 400, NVDA 300 -> Technology 1625 > 1500", set: {ticket.underlying: AAPL, underlying.symbol: AAPL, open_positions.value: [{underlying: WDC, max_loss_usd: 500}, {underlying: MSFT, max_loss_usd: 400}, {underlying: NVDA, max_loss_usd: 300}]}, expect: {result: FLAG, measured: {sector: Technology, same_sector_usd: 1625.0}}}
+  - {id: R11-f, rule: R11_CONCENTRATION, profile: demo, desc: "DEMO: Technology exactly 1500 is inclusive", set: {ticket.underlying: AAPL, underlying.symbol: AAPL, open_positions.value: [{underlying: WDC, max_loss_usd: 500}, {underlying: MSFT, max_loss_usd: 500}, {underlying: NVDA, max_loss_usd: 75}]}, expect: {result: PASS, measured: {same_sector_usd: 1500.0}}}
+  - {id: R11-g, rule: R11_CONCENTRATION, profile: demo, desc: "DEMO: one idea per underlying: open JPM 100 + ticket 425 = 525 > 500", set: {open_positions.value: [{underlying: JPM, max_loss_usd: 100}]}, expect: {result: FLAG, measured: {same_underlying_usd: 525.0}}}
+  - {id: R11-h, rule: R11_CONCENTRATION, profile: demo, desc: "DEMO: open position in unmapped TSLA -> sector unknown", set: {open_positions.value: [{underlying: TSLA, max_loss_usd: 100}]}, expect: {result: UNKNOWN}}
+  - {id: R11-i, rule: R11_CONCENTRATION, profile: demo, desc: "DEMO: total cap: XOM 500 + WDC 500 + AAPL 300 + MSFT 400 + ticket 425 = 2125 <= 2500, 5 ideas ok (Technology 1200 <= 1500)", set: {open_positions.value: [{underlying: XOM, max_loss_usd: 500}, {underlying: WDC, max_loss_usd: 500}, {underlying: AAPL, max_loss_usd: 300}, {underlying: MSFT, max_loss_usd: 400}]}, expect: {result: PASS, measured: {total_usd: 2125.0, count: 5}}}
+  - {id: R11-j, rule: R11_CONCENTRATION, profile: demo, desc: "DEMO: total 2625 > 2500", set: {open_positions.value: [{underlying: XOM, max_loss_usd: 500}, {underlying: WDC, max_loss_usd: 500}, {underlying: AAPL, max_loss_usd: 500}, {underlying: MSFT, max_loss_usd: 200}, {underlying: NVDA, max_loss_usd: 500}]}, expect: {result: FLAG, measured: {total_usd: 2625.0, count: 6}}}
+  # R12
+  - {id: R12-a, rule: R12_DEFINED_RISK_STRUCTURE, desc: "fixture bull call debit spread", expect: {result: PASS, measured: {defined_risk: true}}}
+  - {id: R12-b, rule: R12_DEFINED_RISK_STRUCTURE, desc: "naked short call (long leg removed) -> VETO", remove: [legs.0], set: {ticket.strategy: other}, expect: {result: VETO, measured: {naked_short: [call]}}}
+  - {id: R12-c, rule: R12_DEFINED_RISK_STRUCTURE, desc: "naked short put labelled as credit spread -> VETO", set: {legs.0.type: put, legs.0.side: sell, legs.0.strike: 330, legs.1.type: put, legs.1.side: sell, ticket.strategy: bull_put_credit_spread, ticket.limit_price: {amount: 1.50, price_type: credit}}, expect: {result: VETO, measured: {naked_short: [put]}}}
+  - {id: R12-d, rule: R12_DEFINED_RISK_STRUCTURE, desc: "bull put credit spread 335/340 is allowed", set: {ticket.strategy: bull_put_credit_spread, ticket.limit_price: {amount: 1.50, price_type: credit}, legs.0.type: put, legs.0.strike: 335, legs.1.type: put, legs.1.strike: 340}, expect: {result: PASS}}
+  - {id: R12-e, rule: R12_DEFINED_RISK_STRUCTURE, desc: "legs inverted (buys the 350, sells the 340) do not form a bull call debit spread", set: {legs.0.side: sell, legs.1.side: buy}, expect: {result: VETO}}
+  - {id: R12-f, rule: R12_DEFINED_RISK_STRUCTURE, profile: demo, desc: "DEMO: long call is defined-risk but not a spread -> not allowed", remove: [legs.1], set: {ticket.strategy: long_call}, expect: {result: VETO}}
+  - {id: R12-g, rule: R12_DEFINED_RISK_STRUCTURE, desc: "default profile allows a long call", remove: [legs.1], set: {ticket.strategy: long_call}, expect: {result: PASS}}
+  - {id: R12-h, rule: R12_DEFINED_RISK_STRUCTURE, desc: "debit spread priced as credit -> VETO", set: {ticket.limit_price: {amount: 4.25, price_type: credit}}, expect: {result: VETO}}
+  # R13
+  - {id: R13-a, rule: R13_HOLD_PERIOD, profile: demo, desc: "DEMO: time stop 13 d, DTE 16", expect: {result: PASS, measured: {hold_days: 13, dte: 16}}}
+  - {id: R13-b, rule: R13_HOLD_PERIOD, profile: demo, desc: "DEMO: time stop 10-20 = 6 d < 7", set: {ticket.hold_window_end: "2026-10-20T16:00:00-04:00"}, expect: {result: VETO, measured: {hold_days: 6}}}
+  - {id: R13-c, rule: R13_HOLD_PERIOD, profile: demo, desc: "DEMO: 2026-12-18 expiry = 65 DTE > 28", set: {legs.0.expiry: "2026-12-18", legs.1.expiry: "2026-12-18"}, expect: {result: VETO, measured: {dte: 65}}}
+  - {id: R13-d, rule: R13_HOLD_PERIOD, profile: demo, desc: "DEMO: exactly 28 DTE (expiry 11-11) and 28 d time stop inclusive", set: {legs.0.expiry: "2026-11-11", legs.1.expiry: "2026-11-11", ticket.hold_window_end: "2026-11-11T15:00:00-05:00"}, expect: {result: PASS, measured: {hold_days: 28, dte: 28}}}
+  - {id: R13-e, rule: R13_HOLD_PERIOD, desc: "time stop after expiry close -> VETO", set: {ticket.hold_window_end: "2026-10-30T16:30:00-04:00"}, expect: {result: VETO}}
+  - {id: R13-f, rule: R13_HOLD_PERIOD, desc: "default: no upper bound, 65 DTE passes", set: {legs.0.expiry: "2026-12-18", legs.1.expiry: "2026-12-18"}, expect: {result: PASS, measured: {dte: 65}}}
+  - {id: OV-e, rule: OVERALL, profile: demo, desc: "DEMO: fixture passes everything under the demo profile", expect: {result: PASS}}
+  - {id: OV-f, rule: OVERALL, profile: demo, desc: "DEMO: naked short call -> VETO", remove: [legs.0], set: {ticket.strategy: other}, expect: {result: VETO}}
+  - {id: OV-a, rule: OVERALL, desc: "all PASS -> PASS, approval still required", expect: {result: PASS}}
+  - {id: OV-b, rule: OVERALL, desc: "soft UNKNOWN only (IV) -> FLAG", set: {iv.iv30_history: {value: null, status: missing, as_of: null}}, expect: {result: FLAG}}
+  - {id: OV-c, rule: OVERALL, desc: "hard UNKNOWN (earnings coverage) -> VETO", set: {coverage.0.checked_through: {value: null, status: missing, as_of: null}}, expect: {result: VETO}}
+  - {id: OV-d, rule: OVERALL, desc: "any VETO -> VETO", set: {legs.0.open_interest.value: 100}, expect: {result: VETO}}

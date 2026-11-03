@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
-from ..records.compat import from_v1
+from ..records.compat import V11_SHAPE, from_v1
 
 BERLIN = ZoneInfo("Europe/Berlin")
 NY = ZoneInfo("America/New_York")
@@ -83,7 +83,7 @@ class OutDir:
         if not jp.exists():
             raise KeyError(date)
         main = json.loads(jp.read_text())
-        if main.get("schema_version") in ("1.1.0", "1.1.1", "1.1.2"):
+        if main.get("schema_version") in V11_SHAPE:
             rec, origin = main, f"record (schema {main['schema_version']})"
         elif vp.exists():
             rec, origin = json.loads(vp.read_text()), "v1.1 preview (older output)"

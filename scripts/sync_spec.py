@@ -10,12 +10,14 @@ Doodle owns spec/. Never edit it here: changes go through Doodle in ../trading/s
 MANIFEST, then a new pin below (EXPECTED_*) and a re-run of this script. The live folder stays the source of
 truth; local/default runs keep reading ../trading/spec directly, CI sets OPTIONS_SPEC_DIR=spec/.
 
-Copied: the files listed in MANIFEST.sha256, the manifest itself, and the two frozen v1.0.0 files from
+Copied: the files listed in MANIFEST.sha256, the manifest itself, the two frozen v1.0.0 files from
 _v1_backup/ that gen_models.py / make_spec_patch.py need (not covered by the manifest, so pinned by their
-own sha256 in spec/PIN.json). Nothing is globbed from the source: the copy and the release check follow
+own sha256 in spec/PIN.json), and the frozen 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 releases (_v1_1_*_backup/, which
+Doodle's back-compat tests read), each by its own MANIFEST.sha256 and pinned by FROZEN_RELEASES below. Nothing is globbed from the source: the copy and the release check follow
 Doodle's MANIFEST.sha256 list exactly. Never copied or required: .venv/, __pycache__/, *.pyc, .pytest_cache/,
 backup folders (*_backup/, e.g. _v1_1_0_backup/) other than the two pinned _v1_backup files.
-The --check "nothing extra" scan of spec/ ignores the same build/backup clutter (Moodle, M4 review).
+The --check "nothing extra" scan of spec/ ignores the same build clutter (Moodle, M4 review), but a *_backup/
+folder in spec/ other than _v1_backup/ and the FROZEN_RELEASES is an error (Moodle, PR #6 review nit).
 Local only: no network, no git operations.
 """
 from __future__ import annotations
@@ -34,10 +36,22 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = ROOT.parent / "trading" / "spec"     # Doodle's live folder, the sibling of this repo
 DEFAULT_DEST = ROOT / "spec"
-EXPECTED_VERSION = "1.1.2"
-EXPECTED_MANIFEST_SHA256 = "9fcc55b0b84b6a8be43d9e5fefda22c7f05102aef9991089b851d6946cde0fdd"
+EXPECTED_VERSION = "1.1.5"
+EXPECTED_MANIFEST_SHA256 = "ecc73140a23fc5b4b0e4bedf46020981bca5cefcfbda8011c3bd72ef206bd7a4"
 MANIFEST, VERSION, PIN = "MANIFEST.sha256", "VERSION", "PIN.json"
 V1_FILES = ("_v1_backup/session.schema.json", "_v1_backup/session.example.json")
+# Frozen earlier releases that Doodle's own tests read (spec 1.1.5 test_release_v1_1_5.py / test_release_v1_1_4.py /
+# test_invariants_v1_1_3.py run the frozen 1.1.2, 1.1.3 and 1.1.4 validate_session.py / watcher_reference.py and read
+# every backup's session.example.json). Each one is pinned by the
+# manifest sha256 this script pinned when that release was current (git history of this file), and is copied by
+# its own MANIFEST.sha256 list only.
+FROZEN_RELEASES = {
+    "_v1_1_0_backup": ("1.1.0", "3b25cfe562bbd818589e82e069235b188c4f2b4aac434c04fce54d238fd95e07"),
+    "_v1_1_1_backup": ("1.1.1", "477401b68298f5b4513aa9b46eed9a56df5d1097e85175bdcf8a166cd3d4f489"),
+    "_v1_1_2_backup": ("1.1.2", "9fcc55b0b84b6a8be43d9e5fefda22c7f05102aef9991089b851d6946cde0fdd"),
+    "_v1_1_3_backup": ("1.1.3", "8785ee8b2f9f3bbc993bfbad0ff3ae8e7535cf15b42c507e32d145a25d6836c0"),
+    "_v1_1_4_backup": ("1.1.4", "f58db767b1c631d9d7c08d15df1e7bbedaa2215c5b2efa3b1a5f4b596a2d2610"),
+}
 IGNORED_DIRS = {"__pycache__", ".pytest_cache", ".venv"}  # never pinned; created by running Doodle's tests
 IGNORED_SUFFIXES = (".pyc", ".pyo")
 
@@ -49,6 +63,14 @@ def is_ignored(rel: str) -> bool:
         return False
     return (bool(IGNORED_DIRS.intersection(parts)) or rel.endswith(IGNORED_SUFFIXES)
             or any(p.endswith("_backup") for p in parts[:-1]) or parts[-1].endswith("_backup"))
+
+
+def is_frozen_clutter(rel: str) -> bool:
+    """For the "nothing extra" scan: inside a pinned frozen release only build clutter is ignored."""
+    parts = Path(rel).parts
+    if parts[0] in FROZEN_RELEASES:
+        return bool(IGNORED_DIRS.intersection(parts)) or rel.endswith(IGNORED_SUFFIXES)
+    return is_ignored(rel)
 
 
 class SpecMismatch(Exception):
@@ -96,6 +118,13 @@ def verify_release(d: Path, version: str, manifest_sha: str) -> dict[str, str]:
 
 def sync(source: Path, dest: Path, version: str, manifest_sha: str) -> dict:
     files = verify_release(source, version, manifest_sha)
+    frozen = {}
+    for sub, (fver, fsha) in FROZEN_RELEASES.items():
+        try:
+            flist = verify_release(source / sub, fver, fsha)
+        except SpecMismatch as e:
+            raise SpecMismatch(f"frozen release {sub}: {e}") from None
+        frozen[sub] = {"version": fver, "manifest_sha256": fsha, "files": len(flist)}
     v1 = {}
     for name in V1_FILES:
         if not (source / name).is_file():
@@ -110,13 +139,16 @@ def sync(source: Path, dest: Path, version: str, manifest_sha: str) -> dict:
         "manifest_sha256": manifest_sha,
         "files": dict(sorted(files.items())),
         "v1_backup_files": v1,
+        "frozen_releases": frozen,
         "synced_at": datetime.now(ZoneInfo("Europe/Berlin")).isoformat(timespec="seconds"),
         "synced_by": "scripts/sync_spec.py",
     }
     dest.parent.mkdir(parents=True, exist_ok=True)
     tmp = Path(tempfile.mkdtemp(prefix=".spec-sync-", dir=dest.parent))
     try:
-        for name in [*files, MANIFEST, *V1_FILES]:
+        frozen_names = [f"{sub}/{n}" for sub in FROZEN_RELEASES
+                        for n in [*parse_manifest((source / sub / MANIFEST).read_text()), MANIFEST]]
+        for name in [*files, MANIFEST, *V1_FILES, *frozen_names]:
             (tmp / name).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(source / name, tmp / name)
         (tmp / PIN).write_text(json.dumps(pin, indent=2) + "\n")
@@ -144,9 +176,25 @@ def verify_pinned(d: Path, version: str = EXPECTED_VERSION, manifest_sha: str = 
     for name, digest in (pin.get("v1_backup_files") or {}).items():
         if name not in V1_FILES or not (d / name).is_file() or sha256(d / name) != digest:
             raise SpecMismatch(f"{name} missing or edited (pinned {digest})")
+    frozen = pin.get("frozen_releases") or {}
+    if set(frozen) != set(FROZEN_RELEASES):
+        raise SpecMismatch(f"{PIN} frozen releases {sorted(frozen)} != {sorted(FROZEN_RELEASES)}")
     allowed = {*files, MANIFEST, PIN, *V1_FILES}
+    for sub, (fver, fsha) in FROZEN_RELEASES.items():
+        if (frozen[sub].get("version"), frozen[sub].get("manifest_sha256")) != (fver, fsha):
+            raise SpecMismatch(f"{PIN} pins {sub} as {frozen[sub]}, expected {fver} / {fsha}")
+        try:
+            flist = verify_release(d / sub, fver, fsha)
+        except SpecMismatch as e:
+            raise SpecMismatch(f"frozen release {sub}: {e}") from None
+        allowed |= {f"{sub}/{n}" for n in [*flist, MANIFEST]}
+    unknown = sorted(rel for p in d.rglob("*_backup") if p.is_dir()
+                     and not IGNORED_DIRS.intersection((rel := p.relative_to(d).as_posix()).split("/"))
+                     and rel not in FROZEN_RELEASES and rel != "_v1_backup")
+    if unknown:
+        raise SpecMismatch(f"unpinned backup folders in the pinned spec: {unknown} (not in FROZEN_RELEASES)")
     extra = sorted(rel for p in d.rglob("*") if p.is_file()
-                   and (rel := p.relative_to(d).as_posix()) not in allowed and not is_ignored(rel))
+                   and (rel := p.relative_to(d).as_posix()) not in allowed and not is_frozen_clutter(rel))
     if extra:
         raise SpecMismatch(f"files not in the pinned spec: {extra} (changes go through Doodle)")
     return pin
@@ -164,11 +212,13 @@ def main(argv: list[str] | None = None) -> int:
         if a.check:
             pin = verify_pinned(a.dest, a.version, a.manifest_sha256)
             print(f"OK: {a.dest} is the pinned spec {pin['version']} (manifest sha256 {pin['manifest_sha256']}, "
-                  f"{len(pin['files'])} files + {len(pin['v1_backup_files'])} v1 files, synced {pin['synced_at']})")
+                  f"{len(pin['files'])} files + {len(pin['v1_backup_files'])} v1 files + "
+                  f"frozen {', '.join(v['version'] for v in pin['frozen_releases'].values())}, synced {pin['synced_at']})")
         else:
             pin = sync(a.source, a.dest, a.version, a.manifest_sha256)
             print(f"synced {a.source} -> {a.dest}: spec {pin['version']}, manifest sha256 {pin['manifest_sha256']}, "
-                  f"{len(pin['files'])} files + {len(pin['v1_backup_files'])} v1 files; pin record {a.dest / PIN}")
+                  f"{len(pin['files'])} files + {len(pin['v1_backup_files'])} v1 files + "
+                  f"frozen {', '.join(v['version'] for v in pin['frozen_releases'].values())}; pin record {a.dest / PIN}")
     except SpecMismatch as e:
         print(f"spec pin mismatch: {e}", file=sys.stderr)
         return 1

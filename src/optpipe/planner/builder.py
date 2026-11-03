@@ -174,7 +174,7 @@ def build_vertical(cand: dict, strategy: str, p: PlannerParams, as_of: datetime,
         "intended_event_ids": [],
         "dm_alternatives": [],          # filled by the planner once all ideas are known
     }
-    # INV-14 (+ INV-15 once records are 1.1.2), on every planner ticket, for the schema we write: fail closed
+    # INV-14 (+ INV-15 for 1.1.2+ records), on every planner ticket, for the schema we write: fail closed
     errs = validate_vertical(ticket, RECORD_SCHEMA_VERSION)
     if errs:
         idea.reason = "INV-14: " + "; ".join(errs)

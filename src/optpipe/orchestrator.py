@@ -46,7 +46,7 @@ from .risk.engine import Calendar
 from .risk.ruleset import Ruleset, load_ruleset
 from .spec import SpecFiles, discover
 
-SCHEMA_VERSION = "1.1.2"   # Doodle's spec 1.1.2 (pinned 2026-10-29 21:32 CET; INV-15 on top of 1.1.1 INV-14 + credit rounding): written as-is; compat.to_v1 only for v1 readers
+SCHEMA_VERSION = "1.1.5"   # Doodle's spec 1.1.5 (pinned 2026-11-02, FIX-SEC-001 PR #6: same checks as 1.1.3/1.1.4 = INV-03..06 tightening + INV-16 on top of 1.1.2 INV-15): written as-is; compat.to_v1 only for v1 readers
 MODE = "paper"   # the only mode the schema allows; there is no live mode anywhere in this package
 
 
@@ -85,7 +85,7 @@ def phase_for(t: datetime, cal: Calendar) -> str:
     closed    weekend / NYSE holiday, before 04:00, or at/after the regular close
               (16:00; 13:00 on early-close days)                      [Doodle's ruling, v1.1]
     premarket 04:00 .. open-1h | preopen open-1h .. open | open open .. open+15m | intraday .. close
-    Records are schema 1.1.2 (v1.1 shape), so "closed" is written as-is (Doodle's INV-10 checks it against the NY clock).
+    Records are schema 1.1.5 (v1.1 shape), so "closed" is written as-is (Doodle's INV-10 checks it against the NY clock).
     """
     n = t.astimezone(NY)
     if not cal.is_trading_day(n.date()):
@@ -366,7 +366,7 @@ class Orchestrator:
         rec["idea_log"], recommendation = apply_reviews(rec["idea_log"], reviews, as_of)
         rec["data_quality"] = {**quality_index(rec), "notes": [recommendation, *notes][:50]}
         SessionRecordSpec.model_validate(rec)
-        SessionRecordSpec.model_validate(rec)          # Doodle's schema 1.1.2
+        SessionRecordSpec.model_validate(rec)          # Doodle's schema 1.1.5
 
         validation = self.validate(rec)
         trace = RunTrace(run_id=run_id, as_of=as_of, data_mode=self.p.data_mode, steps=self.steps,
@@ -418,13 +418,58 @@ class Orchestrator:
         return rec
 
     def validate(self, rec: dict) -> dict:
-        """errors: the 1.1.2 record against Doodle's validator + schema (the INV-11 trace file check runs
-        on the written file, see validate_file)."""
-        mod = self.spec.load_module("session_validator") if self.spec else None
+        """errors: the 1.1.5 record against Doodle's validator + schema (the INV-11 trace file check runs
+        on the written file, see validate_file), plus optpipe's guards (records/guards.py). Fails closed: a
+        missing, unimportable or crashing validator is an error, never an OK (FIX-SEC-001 P0-5)."""
+        mod, err = load_validator(self.spec)
         if mod is None:
-            return {"validator": None, "errors": [], "note": "spec validate_session.py not found; pydantic only"}
+            return {"validator": None, "errors": [err], "note": "spec validator unavailable; record NOT validated"}
         from .config import display_path
-        return {"validator": display_path(self.spec.path("session_validator")), "errors": list(mod.validate(copy.deepcopy(rec)))}
+        from .records.guards import check_record, merge
+        where = display_path(self.spec.path("session_validator"))
+        try:
+            errs = run_validator(mod, copy.deepcopy(rec))
+        except ValidatorCrashed as e:
+            return {"validator": None, "errors": [str(e)], "note": "spec validator crashed; record NOT validated"}
+        return {"validator": where, "errors": merge(errs, check_record(rec))}
+
+
+VALIDATOR_MISSING = "SPEC-VALIDATOR-MISSING"
+VALIDATOR_BROKEN = "SPEC-VALIDATOR-IMPORT-FAILED"
+VALIDATOR_CRASHED = "SPEC-VALIDATOR-CRASHED"
+
+
+class ValidatorCrashed(Exception):
+    """Doodle's validate() raised: the record is NOT validated (the CLI's exit 2, 'crash'); callers fail closed."""
+
+
+def run_validator(mod, rec: dict, **kw) -> list[str]:
+    """mod.validate(rec) as a list of error strings. A crash raises ValidatorCrashed (spec 1.1.3 CLI contract:
+    0 = valid, 1 = record errors, 2 = unreadable input or crash; any non-zero is FAIL)."""
+    try:
+        return list(mod.validate(rec, **kw))
+    except Exception as e:  # noqa: BLE001 - any crash must fail closed
+        raise ValidatorCrashed(f"{VALIDATOR_CRASHED}: validate_session.validate raised {type(e).__name__}: {e}; "
+                               "the record is NOT validated (fail closed)") from e
+
+
+def load_validator(spec) -> tuple[Optional[Any], Optional[str]]:
+    """(module, None) for Doodle's validate_session.py, or (None, error) when it is missing, fails to import or
+    has no validate(). Callers must treat the error as a failed validation (fail closed, FIX-SEC-001 P0-5)."""
+    from .config import display_path
+    where = display_path(getattr(spec, "root", None)) if spec is not None else None
+    if spec is None or spec.path("session_validator") is None:
+        return None, (f"{VALIDATOR_MISSING}: validate_session.py not found in spec dir {where}; "
+                      "the record cannot be validated (fail closed)")
+    try:
+        mod = spec.load_module("session_validator")
+    except Exception as e:  # noqa: BLE001 - any import failure must fail closed
+        return None, (f"{VALIDATOR_BROKEN}: validate_session.py in {where} could not be imported "
+                      f"({type(e).__name__}: {e}); the record cannot be validated (fail closed)")
+    if mod is None or not callable(getattr(mod, "validate", None)):
+        return None, (f"{VALIDATOR_BROKEN}: validate_session.py in {where} has no validate(); "
+                      "the record cannot be validated (fail closed)")
+    return mod, None
 
 
 def run_session(settings: Settings, inputs: SessionInputs, as_of: datetime, fixtures_dir: Optional[Path],
@@ -437,11 +482,22 @@ def run_session(settings: Settings, inputs: SessionInputs, as_of: datetime, fixt
     return rec, trace
 
 
-def validate_file(settings: Settings, path: Path) -> Optional[list[str]]:
-    """Doodle's validator on a written record file, with base_dir so INV-11 checks trace_ref against the trace."""
+def validate_file(settings: Settings, path: Path) -> list[str]:
+    """Doodle's validator on a written record file, with base_dir so INV-11 checks trace_ref against the trace,
+    plus optpipe's guards. Never None and never [] unless validated: a missing/broken/crashing validator or an
+    unreadable file is returned as an error (fail closed, FIX-SEC-001 P0-5)."""
     import json
-    mod = discover(settings.spec_path).load_module("session_validator")
+    from .records.guards import check_record, merge
+    mod, err = load_validator(discover(settings.spec_path))
     if mod is None:
-        return None
+        return [err]
     p = Path(path)
-    return list(mod.validate(json.loads(p.read_text()), base_dir=p.resolve().parent))
+    try:
+        rec = json.loads(p.read_text())
+    except (OSError, ValueError) as e:
+        return [f"SPEC-RECORD-UNREADABLE: {p.name}: {type(e).__name__}: {e} (fail closed)"]
+    try:
+        errs = run_validator(mod, copy.deepcopy(rec), base_dir=p.resolve().parent)
+    except ValidatorCrashed as e:
+        return [str(e)]
+    return merge(errs, check_record(rec) if isinstance(rec, dict) else [])

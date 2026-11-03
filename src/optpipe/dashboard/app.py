@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 
 from ..scenario import tag_for_record
 from .data import OutDir, Session, berlin, clock, compact, fval, ftitle, pair
+from ..records.guards import effective_verdict, reviews_by_time
 
 HERE = Path(__file__).parent
 PAGES = ("today", "tickets", "timeline", "history")
@@ -60,7 +61,7 @@ def timeline_model(s: Session) -> list[dict]:
         handoffs = [{"from": a["stage"], "to": b["stage"], "payload": a.get("outputs_summary") or {}}
                     for a, b in zip(rows, rows[1:])]
         rec_run = next((r for r in s.runs if r["run_id"] == run["run_id"]), {})
-        verdicts = Counter(rv["overall"]["verdict"] for rv in s.record.get("risk_reviews", [])
+        verdicts = Counter(effective_verdict(rv) for rv in s.record.get("risk_reviews", [])
                            if rv["run_id"] == run["run_id"])
         out.append({"run": run, "rec_run": rec_run, "steps": rows, "total_ms": round(end, 1),
                     "handoffs": handoffs, "verdicts": dict(sorted(verdicts.items(), key=lambda kv: VERDICT_ORDER[kv[0]])),
@@ -99,12 +100,11 @@ def watch_model(s: Session) -> Optional[dict]:
 
 def tickets_model(s: Session) -> list[dict]:
     reviews = defaultdict(list)
-    order = {r["run_id"]: i for i, r in enumerate(s.runs)}
     for rv in s.record.get("risk_reviews", []):
         reviews[rv["ticket_id"]].append(rv)
     out = []
     for t in s.record.get("tickets", []):
-        rvs = sorted(reviews.get(t["ticket_id"], []), key=lambda r: order.get(r["run_id"], 99))
+        rvs = reviews_by_time(reviews.get(t["ticket_id"], []))   # the watcher's latest-review rule (FIX-SEC-001 N6)
         out.append({"t": t, "reviews": rvs, "latest": rvs[-1] if rvs else None})
     return out
 
@@ -117,7 +117,7 @@ def history_model(od: OutDir) -> tuple[list[dict], list[dict]]:
         except (KeyError, ValueError) as e:                      # unreadable file: show it, don't crash
             sessions.append({"date": d, "error": str(e)})
             continue
-        v = Counter(rv["overall"]["verdict"] for rv in s.record.get("risk_reviews", []))
+        v = Counter(effective_verdict(rv) for rv in s.record.get("risk_reviews", []))
         tr = (s.trace or {}).get("runs", [])
         sessions.append({"date": d, "runs": s.runs, "tickets": len(s.record.get("tickets", [])),
                          "verdicts": dict(sorted(v.items(), key=lambda kv: VERDICT_ORDER[kv[0]])),

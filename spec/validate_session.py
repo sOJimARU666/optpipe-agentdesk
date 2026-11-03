@@ -1,5 +1,17 @@
-"""Validate a session record (schema v1.0.0, v1.1.0, v1.1.1 or v1.1.2): JSON Schema (draft 2020-12) + x-invariants INV-01..15.
-Usage: python validate_session.py session.example.json [more.json ...]"""
+"""Validate a session record (schema v1.0.0, v1.1.0, v1.1.1, v1.1.2, v1.1.3, v1.1.4 or v1.1.5): JSON Schema (draft 2020-12) + x-invariants INV-01..16.
+Usage: python validate_session.py session.example.json [more.json ...]
+
+Exit codes (fail-closed contract, see AGENTS.md / CHANGELOG 1.1.3):
+  0  every file was read, parsed as a JSON object and validated with no errors
+  1  at least one record has schema / invariant errors (an unknown schema_version is a schema error)
+  2  at least one file could not be read or parsed, is not a JSON object, or the validator itself raised
+Consumers must treat ANY non-zero exit, and a missing or unimportable validate_session.py, as FAIL.
+
+1.1.3 records get the stricter checks (INV-03/04 tightening, INV-05 flag acknowledgement + specific error ids,
+INV-06 approval status/ticket/terms checks, INV-16 overall-verdict consistency);
+1.0.0-1.1.2 records validate exactly as before (same error strings).
+1.1.4 adds no invariant: a 1.1.4 record gets exactly the 1.1.3 checks, and 1.1.3 records validate exactly as before.
+1.1.5 adds no invariant either (its rulings are watcher-only): a 1.1.5 record gets exactly the 1.1.3 / 1.1.4 checks."""
 from __future__ import annotations
 
 import hashlib
@@ -90,9 +102,10 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
             if is_field(o) and o["status"] in ("ok", "stale") and o["source_id"] in src:
                 if datetime.fromisoformat(o["as_of"]) > datetime.fromisoformat(src[o["source_id"]]["fetched_at"]):
                     errs.append(f"INV-09 {p} as_of after source fetch")
-    v11 = sess["schema_version"] in ("1.1.0", "1.1.1", "1.1.2")   # v1.1 shape
-    v111 = sess["schema_version"] in ("1.1.1", "1.1.2")          # stricter 1.1.1 checks (INV-13 credit, INV-14), kept in 1.1.2
-    v112 = sess["schema_version"] == "1.1.2"                     # 1.1.2 checks (INV-15 stop/target operators)
+    v11 = sess["schema_version"] in ("1.1.0", "1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5")   # v1.1 shape
+    v111 = sess["schema_version"] in ("1.1.1", "1.1.2", "1.1.3", "1.1.4", "1.1.5")   # stricter 1.1.1 checks (INV-13 credit, INV-14), kept in 1.1.2+
+    v112 = sess["schema_version"] in ("1.1.2", "1.1.3", "1.1.4", "1.1.5") # 1.1.2 checks (INV-15 stop/target operators), kept in 1.1.3+
+    v113 = sess["schema_version"] in ("1.1.3", "1.1.4", "1.1.5")          # 1.1.3 checks (INV-03/04/05/06 tightening, INV-16), kept in 1.1.4 / 1.1.5 (no new invariants)
     # INV-10 run phase vs NY clock (v1.1 'closed')
     for r in sess["runs"]:
         closed = CAL.is_closed(datetime.fromisoformat(r["started"]["ny"]))
@@ -133,6 +146,8 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
     uniq(sess["alerts"], "alert_id", "alert_id")
     uniq(sess["idea_log"], "idea_id", "idea_id")
     events = uniq(sess["event_calendar"]["events"], "event_id", "event_id")
+    if v113:  # INV-03 (1.1.3): legs per ticket, contracts per chain slice, fill ids
+        errs.extend(_inv03_v113(sess))
     # INV-04 references
     def ref(val, pool, label):
         if val is not None and val not in pool:
@@ -165,10 +180,15 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
     rv_by_id = {r["review_id"]: r for r in sess["risk_reviews"]}
     for r in sess["risk_reviews"]:
         ref(r["ticket_id"], tickets, "review.ticket_id"); ref(r["run_id"], runs, "review.run_id")
+        if v113:  # INV-16 overall == aggregate of rule results
+            errs.extend(overall_errors(r))
     # INV-05 approvals
     for a in sess["approvals"]:
         ref(a["ticket_id"], tickets, "approval.ticket_id"); ref(a["review_id"], reviews, "approval.review_id")
         rv, tk = rv_by_id.get(a["review_id"]), tk_by_id.get(a["ticket_id"])
+        if v113:  # INV-05 specific ids + flag acknowledgement
+            errs.extend(approval_errors(a, rv, tk))
+            continue
         if rv and (rv["overall"]["verdict"] == "VETO" or rv["ticket_id"] != a["ticket_id"]):
             errs.append(f"INV-05 {a['approval_id']} approves a VETO/foreign review")
         if tk and (a["legs"] != tk["legs"] or a["quantity"] != tk["quantity"] or a["limit_price"] != tk["limit_price"]):
@@ -180,6 +200,9 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
     for p in sess["paper_positions"]:
         ref(p["ticket_id"], tickets, "position.ticket_id"); ref(p["approval_id"], approvals, "position.approval_id")
         ap = ap_by_id.get(p["approval_id"])
+        if v113:  # INV-04 fill/leg_mark resolution + INV-06 (1.1.3)
+            errs.extend(position_errors(p, ap, tk_by_id.get(p["ticket_id"]), rv_by_id))
+            continue
         if ap:
             for f in p["fills"]:
                 ft = datetime.fromisoformat(f["filled_at"]["ny"])
@@ -247,12 +270,12 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
         for j, c in enumerate(w["conditions"]):
             if "raw_value" in c and tk:
                 tick_check(f"watch {w['watch_id']}[{j}]", tk["underlying"], c["value"], c["raw_value"], c["tick_size"], c["rounding"])
-    # INV-14 vertical consistency (1.1.1 and 1.1.2)
+    # INV-14 vertical consistency (1.1.1, 1.1.2 and 1.1.3)
     if v111:
         for t in sess["tickets"]:
             if vt.is_vertical(t["strategy"]):
                 errs.extend(f"INV-14 {t['ticket_id']} {m}" for m in vertical_errors(t))
-    # INV-15 vertical stop/target comparison direction (1.1.2 only)
+    # INV-15 vertical stop/target comparison direction (1.1.2 and 1.1.3)
     if v112:
         for t in sess["tickets"]:
             if vt.is_vertical(t["strategy"]):
@@ -263,6 +286,156 @@ def validate(sess: dict, base_dir: Path | None = None) -> list[str]:
         if sorted(qi[k]) != sorted(sess["data_quality"][k]):
             errs.append(f"data_quality.{k} out of sync with record")
     return errs
+
+
+# ------------------------------------------------------------------ 1.1.3 checks
+def _ny(pair) -> datetime:
+    return datetime.fromisoformat(pair["ny"])
+
+
+def _dups(ids) -> list:
+    seen, out = set(), []
+    for i in ids:
+        if i in seen and i not in out:
+            out.append(i)
+        seen.add(i)
+    return out
+
+
+def _inv03_v113(sess: dict) -> list[str]:
+    """INV-03 (1.1.3): leg_id / contract_id unique within each ticket's legs; contract_id unique within each
+    option_chain_slice; fill_id unique across all paper_positions."""
+    out = []
+    for t in sess["tickets"]:
+        for key in ("leg_id", "contract_id"):
+            out += [f"INV-03-LEG {t['ticket_id']} duplicate {key} {d}" for d in _dups(l[key] for l in t["legs"])]
+    for c in sess["candidates"]:
+        for s in c["snapshots"]:
+            for j, sl in enumerate(s["option_chain_slices"]):
+                out += [f"INV-03-CONTRACT {c['candidate_id']} snapshot {s['run_id']} slice {j} duplicate contract_id {d}"
+                        for d in _dups(k["contract_id"] for k in sl["contracts"])]
+    out += [f"INV-03-FILL duplicate fill_id {d}" for d in _dups(f["fill_id"] for p in sess["paper_positions"] for f in p["fills"])]
+    return out
+
+
+def review_is_veto(rv: dict) -> bool:
+    """recorded overall verdict VETO, or the verdict the rule results give (risk_reference.overall) is VETO,
+    or there are no rule results at all (fail closed: combine([]) is UNKNOWN)"""
+    return not rv["results"] or rv["overall"]["verdict"] == "VETO" or rr.overall(rv["results"])["verdict"] == "VETO"
+
+
+def overall_errors(rv: dict) -> list[str]:
+    """INV-16 (1.1.3): overall must equal risk_reference.overall(results) (verdict exactly; id lists as sets).
+    No rule results at all is an error (fail closed, like risk_reference.combine([]) == 'UNKNOWN')."""
+    want, got, rid = rr.overall(rv["results"]), rv["overall"], rv["review_id"]
+    if not rv["results"]:
+        return [f"INV-16-EMPTY {rid} has no rule results; the aggregate is UNKNOWN (fail closed), no stored verdict is valid"]
+    out = []
+    if got["verdict"] != want["verdict"]:
+        out.append(f"INV-16-VERDICT {rid} overall.verdict {got['verdict']} but rule results give {want['verdict']}")
+    for key, code in (("blocking_rule_ids", "INV-16-BLOCKING"), ("flag_rule_ids", "INV-16-FLAGS")):
+        if set(got[key]) != set(want[key]) or len(got[key]) != len(set(got[key])):
+            out.append(f"{code} {rid} overall.{key} {sorted(got[key])} but rule results give {sorted(want[key])}")
+    return out
+
+
+def required_acks(rv: dict) -> set:
+    """INV-05 (1.1.3) flag acknowledgement: flagged rule_ids of a review = FLAG or soft UNKNOWN results (risk_reference.overall) plus recorded flag_rule_ids."""
+    return set(rr.overall(rv["results"])["flag_rule_ids"]) | set(rv["overall"]["flag_rule_ids"])
+
+
+def approval_errors(a: dict, rv: dict | None, tk: dict | None) -> list[str]:
+    """INV-05 (1.1.3: specific ids + flag acknowledgement) for one approval. Unresolved refs are reported by INV-04."""
+    aid, out = a["approval_id"], []
+    if rv is not None:
+        if review_is_veto(rv):
+            out.append(f"INV-05-VETO {aid} approves review {rv['review_id']} whose verdict is VETO "
+                       f"(recorded {rv['overall']['verdict']}, rule results give {rr.overall(rv['results'])['verdict']})")
+        if rv["ticket_id"] != a["ticket_id"]:
+            out.append(f"INV-05-FOREIGN {aid} is for ticket {a['ticket_id']} but review {rv['review_id']} is for {rv['ticket_id']}")
+        if not review_is_veto(rv):
+            need, got = required_acks(rv), a.get("acknowledged_flags", [])
+            if need - set(got):
+                out.append(f"INV-05-ACK-MISSING {aid} does not acknowledge flagged rule_id(s) {sorted(need - set(got))} of {rv['review_id']}")
+            if set(got) - need:
+                out.append(f"INV-05-ACK-EXTRA {aid} acknowledges rule_id(s) {sorted(set(got) - need)} that {rv['review_id']} did not flag")
+            if _dups(got):
+                out.append(f"INV-05-ACK-DUPLICATE {aid} acknowledged_flags lists {_dups(got)} more than once")
+    if tk is not None and _terms_differ(a, tk):
+        out.append(f"INV-05-TERMS {aid} legs/qty/limit differ from ticket {tk['ticket_id']}")
+    if _ny(a["expires_at"]) <= _ny(a["approved_at"]):
+        out.append(f"INV-05-EXPIRY {aid} expires_at {a['expires_at']['ny']} is not after approved_at {a['approved_at']['ny']}")
+    return out
+
+
+def _terms_differ(a: dict, tk: dict) -> bool:
+    return a["legs"] != tk["legs"] or a["quantity"] != tk["quantity"] or a["limit_price"] != tk["limit_price"]
+
+
+def position_errors(p: dict, ap: dict | None, tk: dict | None, rv_by_id: dict) -> list[str]:
+    """INV-04 fill / leg_mark resolution and INV-06 (1.1.3) for one paper position.
+    ap / tk are the position's approval and ticket (None when unresolved: INV-04 reports that)."""
+    pid, out = p["position_id"], []
+    legs = {l["leg_id"]: l for l in tk["legs"]} if tk else None
+    if legs is not None:
+        for f in p["fills"]:
+            if f["leg_id"] not in legs:
+                out.append(f"INV-04-FILL-LEG {f['fill_id']} leg_id {f['leg_id']} is not a leg of ticket {tk['ticket_id']}")
+            elif f["contract_id"] != legs[f["leg_id"]]["contract_id"]:
+                out.append(f"INV-04-FILL-CONTRACT {f['fill_id']} contract_id {f['contract_id']} != {f['leg_id']} contract "
+                           f"{legs[f['leg_id']]['contract_id']}")
+        for m in p["marks"]:
+            for lm in m.get("leg_marks", []):
+                if lm["leg_id"] not in legs:
+                    out.append(f"INV-04-MARK-LEG {pid} mark {m['marked_at']['ny']} leg_id {lm['leg_id']} is not a leg of ticket {tk['ticket_id']}")
+    if ap is None:
+        return out
+    aid = ap["approval_id"]
+    opens = [f for f in p["fills"] if f["action"].endswith("_open")]
+    # active at every opening fill: status 'active', or revoked/expired/consumed with status_changed_at strictly AFTER
+    # the fill (changed at or before the fill -> invalid; a non-active status with no status_changed_at -> invalid).
+    # Closing fills reduce risk and are not gated by the entry approval (as for expires_at).
+    if ap["status"] != "active":
+        if "status_changed_at" not in ap:
+            out.append(f"INV-06-STATUS-UNDATED {pid} approval {aid} status {ap['status']!r} without status_changed_at")
+        else:
+            out += [f"INV-06-STATUS {f['fill_id']} filled at {f['filled_at']['ny']} but approval {aid} became {ap['status']!r} at "
+                    f"{ap['status_changed_at']['ny']}" for f in opens if _ny(ap["status_changed_at"]) <= _ny(f["filled_at"])]
+    if p["ticket_id"] != ap["ticket_id"]:
+        out.append(f"INV-06-TICKET {pid} is for ticket {p['ticket_id']} but approval {aid} is for {ap['ticket_id']}")
+    if tk is not None and _terms_differ(ap, tk):
+        out.append(f"INV-06-TERMS {pid} approval {aid} legs/qty/limit differ from ticket {tk['ticket_id']}")
+    rv = rv_by_id.get(ap["review_id"])
+    if rv is not None and review_is_veto(rv):
+        out.append(f"INV-06-VETO {pid} approval {aid} approves VETO review {rv['review_id']}")
+    t0, t1 = _ny(ap["approved_at"]), _ny(ap["expires_at"])
+    for f in opens:
+        ft = _ny(f["filled_at"])
+        if ft < t0:
+            out.append(f"INV-06-BEFORE {f['fill_id']} filled at {f['filled_at']['ny']} before approval {aid} at {ap['approved_at']['ny']}")
+        elif ft > t1:
+            out.append(f"INV-06-EXPIRED {f['fill_id']} filled at {f['filled_at']['ny']} after approval {aid} expiry {ap['expires_at']['ny']}")
+    alegs = {l["leg_id"]: l for l in ap["legs"]}
+    qty = {}
+    for f in opens:
+        l = alegs.get(f["leg_id"])
+        if l is None:
+            out.append(f"INV-06-QTY {f['fill_id']} leg_id {f['leg_id']} is not an approved leg of {aid}")
+            continue
+        if f["action"] != ("buy_to_open" if l["side"] == "buy" else "sell_to_open"):
+            out.append(f"INV-06-QTY {f['fill_id']} action {f['action']} contradicts approved {l['side']} leg {l['leg_id']}")
+        qty[l["leg_id"]] = qty.get(l["leg_id"], 0) + f["qty"]
+    for lid, n in qty.items():
+        if n > ap["quantity"] * alegs[lid]["ratio"]:
+            out.append(f"INV-06-QTY {pid} opened {n} contracts on {lid}, approval {aid} allows {ap['quantity'] * alegs[lid]['ratio']}")
+    if opens:
+        net = sum((rr.D(f["price"]) if f["action"] == "buy_to_open" else -rr.D(f["price"])) * f["qty"] for f in opens) / Decimal(ap["quantity"])
+        lim = ap["limit_price"]
+        amt = rr.D(lim["amount"])
+        if (lim["price_type"] == "debit" and net > amt) or (lim["price_type"] == "credit" and -net < amt):
+            out.append(f"INV-06-LIMIT {pid} entry net {'debit' if net >= 0 else 'credit'} {abs(net)} violates approved "
+                       f"{lim['price_type']} limit {amt}")
+    return out
 
 
 def _pv(t, grp):
@@ -347,11 +520,33 @@ def vertical_errors(t: dict) -> list[str]:
     return out
 
 
-if __name__ == "__main__":
-    paths = [Path(a) for a in sys.argv[1:]] or [SPEC / "session.example.json"]
-    bad = 0
+def main(argv: list[str]) -> int:
+    """CLI: 0 all valid; 1 any record invalid; 2 any file unreadable / unparsable / not an object, or the validator raised.
+    Every file is still checked; the worst code wins. Fail closed: nothing is 'OK' unless it validated."""
+    paths = [Path(a) for a in argv] or [SPEC / "session.example.json"]
+    rc = 0
     for path in paths:
-        e = validate(json.loads(path.read_text()), base_dir=path.resolve().parent)
+        try:
+            sess = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeDecodeError, ValueError) as ex:
+            print(f"{path}: ERROR cannot read/parse record: {type(ex).__name__}: {ex}", file=sys.stderr)
+            rc = 2
+            continue
+        if not isinstance(sess, dict):
+            print(f"{path}: ERROR record is a JSON {type(sess).__name__}, not an object", file=sys.stderr)
+            rc = 2
+            continue
+        try:
+            e = validate(sess, base_dir=path.resolve().parent)
+        except Exception as ex:  # noqa: BLE001 - a crashing validator must never look like a pass
+            print(f"{path}: ERROR validator raised {type(ex).__name__}: {ex}", file=sys.stderr)
+            rc = 2
+            continue
         print("\n".join(f"{path}: {x}" for x in e) if e else f"OK: {path} valid (schema + invariants)")
-        bad += bool(e)
-    sys.exit(1 if bad else 0)
+        if e:
+            rc = max(rc, 1)
+    return rc
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

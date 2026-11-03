@@ -4,7 +4,7 @@ Regenerate: .venv/bin/python scripts/gen_models.py
 """
 from __future__ import annotations
 
-SCHEMA_SHA256 = "48ec12872ccf1c1bc04e16c181ca4ca386ac76761881da31785f4bab40f4dc8d"
+SCHEMA_SHA256 = "6da9bf27541602553069681b24508d9d18b6275c33dee0b1719a2c13a92a268f"
 SCHEMA_SOURCE = "<spec>/session.schema.json"
 
 from datetime import date as date_aliased
@@ -34,6 +34,9 @@ class SchemaVersion(Enum):
     field_1_1_0 = '1.1.0'
     field_1_1_1 = '1.1.1'
     field_1_1_2 = '1.1.2'
+    field_1_1_3 = '1.1.3'
+    field_1_1_4 = '1.1.4'
+    field_1_1_5 = '1.1.5'
 
 
 class NyBerlinOffsetHours(IntEnum):
@@ -145,10 +148,16 @@ class Overall(BaseModel):
     )
     verdict: Verdict = Field(
         ...,
-        description='VETO if any rule VETO or any hard rule UNKNOWN; else FLAG if any FLAG or soft UNKNOWN; else PASS',
+        description='VETO if any rule VETO or any hard rule UNKNOWN; else FLAG if any FLAG or soft UNKNOWN; else PASS; 1.1.3 records: must equal risk_reference.overall(results) (INV-16), as must blocking_rule_ids and flag_rule_ids (as sets)',
     )
-    blocking_rule_ids: list[str]
-    flag_rule_ids: list[str]
+    blocking_rule_ids: list[str] = Field(
+        ...,
+        description='rule_ids whose result is VETO, or UNKNOWN with severity hard (1.1.3: INV-16)',
+    )
+    flag_rule_ids: list[str] = Field(
+        ...,
+        description='rule_ids whose result is FLAG, or UNKNOWN with severity soft; an approval must acknowledge each (1.1.3: INV-05)',
+    )
     approval_required: Literal[True] = Field(
         ..., description='Always true: even PASS needs explicit contract-level approval'
     )
@@ -1133,10 +1142,17 @@ class Approval(BaseModel):
     quantity: int = Field(..., ge=1)
     limit_price: LimitPrice
     acknowledged_flags: list[str] | None = Field(
-        None, description='FLAG rule_ids the approver explicitly accepted'
+        None,
+        description="FLAG rule_ids the approver explicitly accepted. 1.1.3 (INV-05): must equal the review's flagged rule_ids exactly (FLAG or soft UNKNOWN results): no missing, no extra, no duplicates; empty or absent for a PASS review.",
     )
-    status: Status1
-    status_changed_at: TsPair | None = None
+    status: Status1 = Field(
+        ...,
+        description="Canonical approval state (consumers must read this field; there is no 'decision' field). active = approved and usable until expires_at; consumed = used by a paper position; expired / revoked = not approved. 1.1.3 (INV-06): an opening fill is valid only while the approval is active (status_changed_at strictly after the fill for any non-active status).",
+    )
+    status_changed_at: TsPair | None = Field(
+        None,
+        description="when status last changed; 1.1.3: required for any status other than 'active' (INV-06)",
+    )
 
 
 class Fill(BaseModel):
@@ -1332,7 +1348,7 @@ class PaperUSOptionsTradingSessionRecord(BaseModel):
     )
     schema_version: SchemaVersion = Field(
         ...,
-        description="1.0.0 = v1 record; 1.1.0 = may use v1.1 additions (run phase 'closed', trace_ref, premarket_scans/global_snapshots, raw tick fields); 1.1.1 = same shape as 1.1.0 plus the stricter checks INV-13 credit directions and INV-14 vertical consistency; 1.1.2 = same shape and checks as 1.1.1 plus INV-15 vertical stop/target comparison direction. Integer open_interest applies to all (integral floats like 472.0 still validate).",
+        description="1.0.0 = v1 record; 1.1.0 = may use v1.1 additions (run phase 'closed', trace_ref, premarket_scans/global_snapshots, raw tick fields); 1.1.1 = same shape as 1.1.0 plus the stricter checks INV-13 credit directions and INV-14 vertical consistency; 1.1.2 = same shape and checks as 1.1.1 plus INV-15 vertical stop/target comparison direction. Integer open_interest applies to all (integral floats like 472.0 still validate). 1.1.3 = same shape as 1.1.2 plus stricter checks on 1.1.3 records only: INV-03 leg/contract/fill uniqueness, INV-04 fill/leg_mark leg and contract resolution, INV-05 flag acknowledgement and specific error ids, INV-06 approval status/ticket/terms at fills, INV-16 overall verdict = aggregate of rule results. Records 1.0.0-1.1.2 validate exactly as before (same error strings). 1.1.4 = same shape and checks as 1.1.3 (no new invariants; spec 1.1.4 changed tests, fixtures and the watcher approval mapping only); everything described as '1.1.3 records' below applies to 1.1.4 records too, and 1.1.3 records validate exactly as before. 1.1.5 = same shape and checks as 1.1.3 / 1.1.4 (no new invariants; spec 1.1.5 changed the watcher target mapping only); everything described as '1.1.3 records' below applies to 1.1.5 records too, and 1.1.4 and older records validate exactly as before.",
     )
     session: Session
     sources: list[Source]
@@ -1344,12 +1360,12 @@ class PaperUSOptionsTradingSessionRecord(BaseModel):
     premarket_scan: PremarketScanModel
     premarket_scans: list[PremarketScan] | None = Field(
         None,
-        description="(v1.1, 1.1.0 / 1.1.1 / 1.1.2 records only) one premarket scan per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'premarket_scan', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+        description="(v1.1, 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 / 1.1.4 / 1.1.5 records only) one premarket scan per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'premarket_scan', if present, is kept for v1 readers and must be one of these entries (same run_id).",
     )
     global_snapshot: GlobalSnapshotModel
     global_snapshots: list[GlobalSnapshot] | None = Field(
         None,
-        description="(v1.1, 1.1.0 / 1.1.1 / 1.1.2 records only) one global snapshot per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'global_snapshot', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+        description="(v1.1, 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 / 1.1.4 / 1.1.5 records only) one global snapshot per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'global_snapshot', if present, is kept for v1 readers and must be one of these entries (same run_id).",
     )
     event_calendar: EventCalendar = Field(
         ...,
@@ -1360,7 +1376,7 @@ class PaperUSOptionsTradingSessionRecord(BaseModel):
     risk_reviews: list[RiskReview]
     approvals: list[Approval] = Field(
         ...,
-        description='Contract-level approvals. Bound to exact legs + quantity + limit; any change requires a new approval. Never valid for a VETO review.',
+        description="Contract-level approvals. Bound to exact legs + quantity + limit; any change requires a new approval. Never valid for a VETO review. The approval state is approvals[].status (canonical; there is no 'decision' field and additionalProperties is false, so a 'decision' key is a schema error): only 'active' is a usable approval; 'expired', 'revoked', 'consumed' or no approval mean NOT approved for a new entry. A rejected idea is idea_log current_status 'rejected', not an approval field.",
     )
     paper_positions: list[PaperPosition]
     watcher_rules: list[WatcherRule]

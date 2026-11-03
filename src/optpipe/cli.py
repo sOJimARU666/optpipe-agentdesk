@@ -20,6 +20,7 @@ from pathlib import Path
 from .config import REPO_ROOT, load_settings
 from .records import paths, read_session, read_session_for_append, read_trace, render_markdown, write_session
 from .records.fields import BERLIN, NY
+from .records.guards import effective_verdict, merge
 
 DEFAULT_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "2026-10-13"
 
@@ -38,7 +39,7 @@ def summary(rec: dict, trace) -> str:
         o = r["overall"] if r else None
         why = (" <- " + ", ".join(o["blocking_rule_ids"])) if o and o["blocking_rule_ids"] else ""
         flags = (" flags " + ", ".join(o["flag_rule_ids"])) if o and o["flag_rule_ids"] else ""
-        lines.append(f"  {o['verdict'] if o else '-':5} {tk['ticket_id']:30} qty {tk['quantity']} "
+        lines.append(f"  {effective_verdict(r) if o else '-':5} {tk['ticket_id']:30} qty {tk['quantity']} "
                      f"limit {tk['limit_price']['amount']} {tk['limit_price']['price_type']} "
                      f"max loss ${tk['max_loss']['amount_usd']}{why}{flags}")
     lines.append(f"recommendation: {rt.recommendation}")
@@ -46,19 +47,20 @@ def summary(rec: dict, trace) -> str:
     lines.append(f"data quality: {len(dq['missing'])} missing, {len(dq['stale'])} stale, "
                  f"{len(dq['conflicting'])} conflicting")
     v = rt.validation
-    lines.append(f"validate_session: {'OK' if not v.get('errors') else str(len(v['errors'])) + ' error(s)'}"
-                 f"{'' if v.get('validator') else ' (spec validator not found)'} (record {rec['schema_version']}, Doodle's schema)")
+    ok = not v.get("errors") and bool(v.get("validator"))     # never OK without the validator (FIX-SEC-001 P0-5)
+    lines.append(f"validate_session: {'OK' if ok else str(len(v.get('errors') or [])) + ' error(s)'}"
+                 f"{'' if v.get('validator') else ' (spec validator unavailable: NOT validated)'} (record {rec['schema_version']}, Doodle's schema)")
     lines.append("trace: " + " -> ".join(f"{s.stage}({s.duration_ms:.0f}ms)" for s in rt.steps))
     return "\n".join(lines)
 
 
-LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+LOOPBACK = {"127.0.0.1", "::1"}   # literal loopback addresses only; no hostnames (FIX-SEC-001)
 
 
 def serve(out: str, host: str, port: int) -> int:
-    """Run the dashboard with uvicorn. Refuses any non-loopback bind (no 0.0.0.0)."""
+    """Run the dashboard with uvicorn. Refuses any bind other than 127.0.0.1 or ::1 (no all-interfaces bind, no hostnames)."""
     if host not in LOOPBACK:
-        print(f"refusing to bind {host!r}: the dashboard is local-only (use 127.0.0.1)", file=sys.stderr)
+        print(f"refusing to bind {host!r}: the dashboard is local-only (use 127.0.0.1 or ::1)", file=sys.stderr)
         return 2
     import uvicorn
     from .dashboard import create_app
@@ -90,6 +92,13 @@ def watch(a, settings) -> int:
     if not sess.exists():
         print(f"session file not found: {sess}", file=sys.stderr); return 2
     rec = json.loads(sess.read_text())
+    # Fail closed (FIX-SEC-001 P0-4): never watch a record Doodle's validator (or the optpipe guards) rejects.
+    from .orchestrator import validate_file
+    verrs = validate_file(settings, sess)              # Doodle's validator + records/guards.check_record, merged
+    if verrs:
+        print(f"optpipe watch: refusing to watch {sess.name}: the session record does not validate "
+              f"({len(verrs)} error(s))\n  " + "\n  ".join(verrs), file=sys.stderr)
+        return 2
     if a.live:
         src, clock = LiveNasdaqSource(settings.http.user_agent, settings.http.timeout_s), RealClock()
     else:
@@ -101,7 +110,7 @@ def watch(a, settings) -> int:
     s0 = clock.now()
     until = (datetime.fromisoformat(a.until) if a.until else
              datetime.combine(s0.astimezone(NY).date(), datetime.min.time(), NY).replace(hour=17))
-    wt = Watcher(rec, rules, cal, src, get_engine(a.engine), session_path=sess)
+    wt = Watcher(rec, rules, cal, src, get_engine(a.engine), session_path=sess, now=s0)
     doc = wt.run(clock, until, once=a.once)
     res = write_watch(doc, sess, Path(a.out))
     sm = doc["summary"]
@@ -141,7 +150,7 @@ def main(argv: list[str] | None = None) -> int:
         sub.add_parser(name).add_argument("file")
     sv = sub.add_parser("serve", help="read-only local dashboard over out/ (GET only, loopback only)")
     sv.add_argument("--out", default=str(REPO_ROOT / "out"))
-    sv.add_argument("--host", default="127.0.0.1", help="loopback only: 127.0.0.1, ::1 or localhost")
+    sv.add_argument("--host", default="127.0.0.1", help="loopback only: 127.0.0.1 or ::1")
     sv.add_argument("--port", type=int, default=8765)
     w = sub.add_parser("watch", help="paper-only watcher over a session's tickets (alert only, no order)")
     w.add_argument("--session", help="session JSON (default: <out>/session-<date>.json)")
@@ -174,11 +183,23 @@ def main(argv: list[str] | None = None) -> int:
         print(render_markdown(read_session(a.file), read_trace(str(a.file).replace(".json", ".trace.json"))))
         return 0
     if a.cmd == "validate":
+        # exit codes as Doodle's validate_session CLI (spec 1.1.3): 0 = valid, 1 = record errors,
+        # 2 = unreadable input, missing/broken validator or a validator crash. Any non-zero is FAIL.
         import json
-        mod = discover(settings.spec_path).load_module("session_validator")
+        from .orchestrator import ValidatorCrashed, load_validator, run_validator
+        from .records.guards import check_record
+        mod, err = load_validator(discover(settings.spec_path))
         if mod is None:
-            print("spec validate_session.py not found"); return 2
-        errs = list(mod.validate(json.loads(Path(a.file).read_text()), base_dir=Path(a.file).resolve().parent))
+            print(err, file=sys.stderr); return 2
+        try:
+            rec = json.loads(Path(a.file).read_text())
+        except (OSError, ValueError) as e:
+            print(f"SPEC-RECORD-UNREADABLE: {a.file}: {type(e).__name__}: {e} (fail closed)", file=sys.stderr); return 2
+        try:
+            errs = run_validator(mod, json.loads(json.dumps(rec)), base_dir=Path(a.file).resolve().parent)
+        except ValidatorCrashed as e:
+            print(str(e), file=sys.stderr); return 2
+        errs = merge(errs, check_record(rec) if isinstance(rec, dict) else [])
         from .records.store import verify_session_ref
         tp = Path(str(a.file).replace(".json", ".trace.json"))
         if tp.exists():
@@ -190,7 +211,11 @@ def main(argv: list[str] | None = None) -> int:
         print("\n".join(errs) if errs else "OK: 0 errors")
         return 1 if errs else 0
 
-    from .orchestrator import load_inputs, run_session
+    from .orchestrator import load_inputs, load_validator, run_session
+    _, verr = load_validator(discover(settings.spec_path))
+    if verr:                                   # fail closed before anything is run or written (FIX-SEC-001 P0-5)
+        print(f"optpipe run: refusing to run without Doodle's session validator.\n{verr}", file=sys.stderr)
+        return 2
     fixtures = None if a.live else Path(a.fixtures)
     ip = a.inputs or (fixtures / "session_inputs.yaml" if fixtures and (fixtures / "session_inputs.yaml").exists() else None)
     inputs = load_inputs(ip)
@@ -208,8 +233,8 @@ def main(argv: list[str] | None = None) -> int:
     ferrs = validate_file(settings, w.json)
     print(f"wrote {w.json}  sha256 {w.json_sha256}  (schema {rec['schema_version']}, trace_ref -> {w.trace.name})\n"
           f"wrote {w.trace}  sha256 {w.trace_sha256}\nwrote {w.md}")
-    if ferrs is not None:
-        print(f"validate_session {w.json.name}: " + (f"OK as {rec['schema_version']} (schema + invariants INV-01..{ {'1.1.2': '15', '1.1.1': '14'}.get(rec['schema_version'], '13') })" if not ferrs
+    if ferrs is not None:                      # always a list now; a missing validator is an error in it
+        print(f"validate_session {w.json.name}: " + (f"OK as {rec['schema_version']} (schema + invariants INV-01..{ {'1.1.5': '16', '1.1.4': '16', '1.1.3': '16', '1.1.2': '15', '1.1.1': '14'}.get(rec['schema_version'], '13') })" if not ferrs
                                                      else f"{len(ferrs)} error(s)\n  " + "\n  ".join(ferrs[:20])))
     v = trace.runs[-1].validation
     return 1 if (v.get("errors") or ferrs) else 0

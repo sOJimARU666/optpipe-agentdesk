@@ -1,4 +1,4 @@
-# Local-only CI definition (this repo has no remote and is never pushed - Eugene's rule).
+# CI for the private GitHub repo: runs on every push and pull request (any base branch) and on manual dispatch.
 # PAPER ONLY: nothing here talks to a broker; all tests run offline from fixtures.
 name: ci
 on: [push, pull_request, workflow_dispatch]
@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 env:
-  # spec/ is the pinned copy of Doodle's spec (scripts/sync_spec.py: VERSION 1.1.2 + MANIFEST sha256 9fcc55b0..., 21 files).
+  # spec/ is the pinned copy of Doodle's spec (scripts/sync_spec.py: VERSION 1.1.5 + MANIFEST sha256 ecc73140..., 30 files).
   # Doodle owns it; changes go through Doodle in ../trading/spec and a re-sync, never an edit here.
   OPTIONS_SPEC_DIR: ${{ github.workspace }}/spec
   PYTHONDONTWRITEBYTECODE: "1"
@@ -36,8 +36,9 @@ jobs:
         working-directory: ${{ env.OPTIONS_SPEC_DIR }}
         run: |
           pip install pyyaml jsonschema pytest
-          python -m pytest -q -p no:cacheprovider
-      - name: CLI fixture run validates (schema 1.1.2 with Doodle's validator, INV-01..15)
+          # spec 1.1.5 is hermetic (fixtures vendored under spec/fixtures/): no sibling checkout or link needed
+          python -m pytest -p no:cacheprovider       # 605 passed on spec 1.1.5
+      - name: CLI fixture run validates (schema 1.1.5 with Doodle's validator, INV-01..16)
         run: |
           optpipe run --out "$RUNNER_TEMP/out"
           optpipe validate "$RUNNER_TEMP/out/session-2026-10-13.json"
