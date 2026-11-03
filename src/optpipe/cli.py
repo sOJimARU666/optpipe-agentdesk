@@ -186,6 +186,14 @@ def main(argv: list[str] | None = None) -> int:
         _, notes = load_ruleset(sp)
         for n in notes:
             print(f"note               {n}")
+        # SOL-ACCEPT-001 G8: a spec folder that is not the pinned release, or has no usable validator, is a FAIL.
+        from .orchestrator import load_validator
+        _, verr = load_validator(sp)
+        if verr:
+            print(f"spec_pin           FAIL\n{verr}", file=sys.stderr)
+            return 2
+        from .spec_pin import EXPECTED_VERSION
+        print(f"spec_pin           OK (pinned release {EXPECTED_VERSION}, every MANIFEST.sha256 file verified)")
         return 0
     if a.cmd == "watch":
         return watch(a, settings)

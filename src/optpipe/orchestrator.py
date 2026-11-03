@@ -461,6 +461,10 @@ def load_validator(spec) -> tuple[Optional[Any], Optional[str]]:
     if spec is None or spec.path("session_validator") is None:
         return None, (f"{VALIDATOR_MISSING}: validate_session.py not found in spec dir {where}; "
                       "the record cannot be validated (fail closed)")
+    from .spec_pin import pin_error
+    perr = pin_error(getattr(spec, "root", None))       # SOL-ACCEPT-001 G8: only the pinned release is trusted
+    if perr:
+        return None, perr
     try:
         mod = spec.load_module("session_validator")
     except Exception as e:  # noqa: BLE001 - any import failure must fail closed
