@@ -103,3 +103,29 @@ def test_summary_unknown_result_string_is_veto(pipeline_output, bad):
     trace = read_trace(pipeline_output["out"] / f"session-{DATE}.trace.json")
     line = next(ln for ln in summary(rec, trace).splitlines() if TID in ln)
     assert line.split()[0] == "VETO", line
+
+
+def test_classify_equals_pinned_spec_1_1_6_risk_reference(spec):
+    """G3 aligned with spec 1.1.6: optpipe's classify is exactly risk_reference.classify (None == 'pass') over every
+    recognised and unrecognised result / severity, and on non-object entries."""
+    import itertools
+    import sys
+    from optpipe.records.guards import classify
+    sys.path.insert(0, str(spec.root))
+    try:
+        import risk_reference as rr
+    finally:
+        sys.path.remove(str(spec.root))
+    results = ["PASS", "FLAG", "UNKNOWN", "VETO", "veto", "Pass", "BLOCK", "", None, 0, 1, ["PASS"], "MISSING"]
+    sevs = ["hard", "soft", "HARD", "x", "", None, 1, "MISSING"]
+    rows = []
+    for res, sev in itertools.product(results, sevs):
+        x = {"rule_id": "R"}
+        if res != "MISSING":
+            x["result"] = res
+        if sev != "MISSING":
+            x["severity"] = sev
+        rows.append(x)
+    rows += [None, "PASS", 1, ["PASS"]]
+    for x in rows:
+        assert (classify(x) or "pass") == rr.classify(x), x
