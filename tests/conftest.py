@@ -27,6 +27,23 @@ LIVE_SPEC = (ROOT.parent / "trading" / "spec").resolve()
 USER_SPEC_DIR = os.environ.get("OPTIONS_SPEC_DIR")
 os.environ.setdefault("OPTIONS_SPEC_DIR", str(PINNED_SPEC))
 
+# Runtime network guard (SOL-ACCEPT-001 G9): installed here, at import, before any test module or src/ code is
+# imported. It covers this process and, through tests/netguard/sitecustomize.py on PYTHONPATH, every Python
+# subprocess the tests start (the optpipe CLI and scripts/*.py). See tests/netguard/optpipe_netguard.py.
+# Opt-in `live` tests are exempt. Starlette's in-process TestClient opens no socket and is allowed.
+NETGUARD_DIR = ROOT / "tests" / "netguard"
+sys.path.insert(0, str(NETGUARD_DIR))
+import optpipe_netguard as netguard  # noqa: E402
+
+netguard.install()
+os.environ["OPTPIPE_NETGUARD"] = "1"
+os.environ["PYTHONPATH"] = os.pathsep.join(p for p in (str(NETGUARD_DIR), os.environ.get("PYTHONPATH")) if p)
+if not os.environ.get("OPTPIPE_NETGUARD_LOG"):
+    import tempfile
+    _fd, _log = tempfile.mkstemp(prefix="optpipe-netguard-", suffix=".log")
+    os.close(_fd)
+    os.environ["OPTPIPE_NETGUARD_LOG"] = _log
+
 
 @pytest.fixture(scope="session", autouse=True)
 def _isolated_state(tmp_path_factory):
@@ -120,3 +137,46 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(pytest.mark.skip(reason="live test: run with `-m live` or OPTPIPE_LIVE_TESTS=1"))
         if "live_spec" in item.keywords and spec_reason:
             item.add_marker(pytest.mark.skip(reason=spec_reason))
+
+
+def pytest_configure(config):
+    config.addinivalue_line("markers", "netguard_expected: the test triggers the network guard on purpose; "
+                                       "its own blocked calls do not fail it")
+
+
+def _netguard_log_size() -> int:
+    try:
+        return os.path.getsize(os.environ["OPTPIPE_NETGUARD_LOG"])
+    except (KeyError, OSError):
+        return 0
+
+
+def _netguard_log_since(pos: int) -> str:
+    try:
+        with open(os.environ["OPTPIPE_NETGUARD_LOG"], encoding="utf-8") as fh:
+            fh.seek(pos)
+            return fh.read()
+    except (KeyError, OSError):
+        return ""
+
+
+@pytest.hookimpl(wrapper=True)
+def pytest_runtest_call(item):
+    """Fail any test that made a blocked network call, in this process or in a subprocess, even if the code under
+    test caught the error. `live` tests run with the guard suspended (here and in their subprocesses)."""
+    if "live" in item.keywords:
+        old = os.environ.get("OPTPIPE_NETGUARD")
+        os.environ["OPTPIPE_NETGUARD"] = "0"
+        try:
+            with netguard.suspended():
+                return (yield)
+        finally:
+            os.environ["OPTPIPE_NETGUARD"] = old or "1"
+    netguard.clear()
+    pos = _netguard_log_size()
+    result = yield
+    seen = netguard.violations() or [ln for ln in _netguard_log_since(pos).splitlines() if ln.strip()]
+    netguard.clear()
+    if seen and "netguard_expected" not in item.keywords:
+        raise AssertionError("runtime network guard: the test made a blocked network call:\n  " + "\n  ".join(seen))
+    return result
