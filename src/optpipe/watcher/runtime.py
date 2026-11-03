@@ -258,7 +258,7 @@ class Target:
 def _latest_review(rec: dict, tid: str) -> Optional[dict]:
     """The ticket's latest review by `evaluated_at`, stable tie-break = last listed (spec/watcher_reference.py
     target_from_session, watcher_rules.md 'VETO comes first'). Never by list position alone (FIX-SEC-001 R1)."""
-    return latest_review(r for r in rec.get("risk_reviews") or [] if r.get("ticket_id") == tid)
+    return latest_review(r for r in _dicts(rec.get("risk_reviews")) if r.get("ticket_id") == tid)
 
 
 def _veto_reasons(rec: dict, tid: str, rv: Optional[dict], istat: Optional[str]) -> list[str]:
@@ -272,12 +272,12 @@ def _veto_reasons(rec: dict, tid: str, rv: Optional[dict], istat: Optional[str])
     if rv is not None and effective_verdict(rv) == "VETO":
         out.append("; ".join(review_errors(rv)) or ", ".join(rv.get("overall", {}).get("blocking_rule_ids") or [])
                    or f"latest review {rv.get('review_id')} is VETO")
-    reviews = {r.get("review_id"): r for r in rec.get("risk_reviews") or []}
-    for a in rec.get("approvals") or []:
+    reviews = {r.get("review_id"): r for r in _dicts(rec.get("risk_reviews"))}
+    for a in _dicts(rec.get("approvals")):
         arv = reviews.get(a.get("review_id"))
         if a.get("ticket_id") == tid and arv is not None and arv is not rv and effective_verdict(arv) == "VETO":
             out.append(f"approval {a.get('approval_id')} points at VETO review {arv.get('review_id')}")
-    for r in rec.get("risk_reviews") or []:
+    for r in _dicts(rec.get("risk_reviews")):
         if r.get("ticket_id") == tid and r is not rv and _when(r.get("evaluated_at")) is None and effective_verdict(r) == "VETO":
             out.append(f"undated VETO review {r.get('review_id')}")
     if istat == "vetoed":
@@ -379,17 +379,19 @@ def targets_from_session(rec: dict, now: datetime) -> list[Target]:
          ticket with NO idea plus an active approval is HYPOTHETICAL, never really approved (spec 1.1.5 ruling)."""
     if not isinstance(now, datetime):
         raise TypeError("targets_from_session: `now` must be a datetime (the watch start)")
-    ideas = {i.get("ticket_id"): i for i in rec.get("idea_log") or []}
+    ideas = {i.get("ticket_id"): i for i in _dicts(rec.get("idea_log")) if isinstance(i.get("ticket_id"), str)}
     out = []
-    for tk in rec.get("tickets") or []:
-        tid = tk["ticket_id"]
+    for tk in _dicts(rec.get("tickets")):          # a non-object entry is never a ticket (G7: never raise)
+        tid = tk.get("ticket_id")
+        if not isinstance(tid, str):
+            continue                                # no usable id: cannot be watched (the CLI gate refuses it)
         idea = ideas.get(tid) or {}
         rv = _latest_review(rec, tid)
         verdict = effective_verdict(rv) if rv else None      # a tampered/empty review is VETO (INV-16, FIX-SEC-001)
         istat = idea.get("current_status")                   # None = no idea (reference: istatus None)
         appr, blockers = _pick_approval(rec, tid, now)
         real = appr is not None and not blockers and istat in APPROVED_IDEA_STATUSES      # step 5
-        revoked = [a.get("approval_id") for a in rec.get("approvals") or []
+        revoked = [a.get("approval_id") for a in _dicts(rec.get("approvals"))
                    if a.get("ticket_id") == tid and a.get("status") == "revoked"]
         vetoes = _veto_reasons(rec, tid, rv, istat)
         if vetoes:
@@ -424,7 +426,7 @@ def targets_from_session(rec: dict, now: datetime) -> list[Target]:
             out.append(Target(tid, "ticket", tid, "approved_pending", istat, False, True, tk,
                               f"HYPOTHETICAL (record status {istat!r}, verdict {verdict or 'none'}, {why}): "
                               "watched as a paper what-if"))
-    tickets = {t["ticket_id"]: t for t in rec.get("tickets") or []}
+    tickets = {t["ticket_id"]: t for t in _dicts(rec.get("tickets")) if isinstance(t.get("ticket_id"), str)}
     for p in _dicts(rec.get("paper_positions")):
         if p.get("status") == "open" and p.get("ticket_id") in tickets:
             pid = p.get("position_id") or f"pos-{p['ticket_id']}"

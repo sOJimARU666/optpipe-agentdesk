@@ -175,3 +175,24 @@ def test_watch_document_hash_is_of_the_watched_bytes(tmp_path, example, monkeypa
     assert rc == 0, f"the clean first read was not what got validated (exit {rc}):\n{cap.err[-800:]}"
     doc = json.loads(next(out.glob("*.watch.json")).read_bytes())
     assert doc["session"]["sha256"] == hashlib.sha256(good).hexdigest(), "watch document hashes a re-read, not the watched bytes"
+
+
+# ------------------------------------------------------- non-object list entries (Moodle review of #11, probe X3)
+JUNK = {"str": "junk", "int": 7, "null": None, "list": ["x"]}
+
+
+@pytest.mark.parametrize("junk", list(JUNK), ids=list(JUNK))
+@pytest.mark.parametrize("section", ["risk_reviews", "idea_log", "tickets", "approvals"])
+def test_non_object_entry_never_crashes_targets(positioned, section, junk):
+    """Negative: a non-object entry in risk_reviews / idea_log / tickets / approvals is ignored by the library, never
+    an AttributeError / TypeError (G7: the library fails closed by itself, not only behind the CLI schema gate). The
+    real entries keep their meaning: the approved ticket is still really approved and its position still watched."""
+    rec = copy.deepcopy(positioned)
+    rec[section].insert(0, copy.deepcopy(JUNK[junk]))
+    try:
+        ts_ = _targets(rec)
+    except Exception as e:                    # noqa: BLE001 - the crash IS the failure under test
+        pytest.fail(f"targets_from_session raised {type(e).__name__}: {e} on a non-object {section} entry")
+    real = [t for t in ts_ if t.kind == "ticket" and t.status == "approved_pending" and not t.hypothetical]
+    assert len(real) == 1, [(t.target_id, t.status, t.note) for t in ts_]
+    assert [(t.target_id, t.status) for t in ts_ if t.kind == "position"] == [("pos-1", "open")]
