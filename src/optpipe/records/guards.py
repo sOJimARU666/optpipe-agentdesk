@@ -58,6 +58,17 @@ def effective_verdict(rv: dict) -> str:
     return "VETO" if review_is_veto(rv) or review_errors(rv) else (rv.get("overall") or {}).get("verdict")
 
 
+def review_view(rv: dict) -> dict[str, Any]:
+    """What a consumer may DISPLAY for one review (SOL-ACCEPT-001 G1/G2): the effective verdict and the blocking /
+    flag rule_ids recomputed from the rule results, never the stored overall. `stored_verdict` and `errors` (the
+    INV-16 errors) let a page mark a tampered review; `tampered` is True whenever the stored overall disagrees."""
+    o = rv.get("overall") or {}
+    d, errs = derive_overall(rv.get("results") or []), review_errors(rv)
+    return {"verdict": effective_verdict(rv), "blocking_rule_ids": d["blocking_rule_ids"],
+            "flag_rule_ids": d["flag_rule_ids"], "stored_verdict": o.get("verdict"),
+            "approval_required": o.get("approval_required"), "errors": errs, "tampered": bool(errs)}
+
+
 def _dups(ids) -> list:
     seen, out = set(), []
     for i in ids:

@@ -20,7 +20,7 @@ from pathlib import Path
 from .config import REPO_ROOT, load_settings
 from .records import paths, read_session, read_session_for_append, read_trace, render_markdown, write_session
 from .records.fields import BERLIN, NY
-from .records.guards import effective_verdict, merge
+from .records.guards import merge, review_view
 
 DEFAULT_FIXTURES = REPO_ROOT / "tests" / "fixtures" / "2026-10-13"
 
@@ -36,10 +36,11 @@ def summary(rec: dict, trace) -> str:
     reviews = {r["ticket_id"]: r for r in rec["risk_reviews"] if r["run_id"] == run["run_id"]}
     for tk in rec["tickets"]:
         r = reviews.get(tk["ticket_id"])
-        o = r["overall"] if r else None
+        o = review_view(r) if r else None       # verdict + ids recomputed from the rule results (SOL-ACCEPT-001 G2)
         why = (" <- " + ", ".join(o["blocking_rule_ids"])) if o and o["blocking_rule_ids"] else ""
         flags = (" flags " + ", ".join(o["flag_rule_ids"])) if o and o["flag_rule_ids"] else ""
-        lines.append(f"  {effective_verdict(r) if o else '-':5} {tk['ticket_id']:30} qty {tk['quantity']} "
+        why += " [INV-16 tampered: stored " + str(o["stored_verdict"]) + "]" if o and o["tampered"] else ""
+        lines.append(f"  {o['verdict'] if o else '-':5} {tk['ticket_id']:30} qty {tk['quantity']} "
                      f"limit {tk['limit_price']['amount']} {tk['limit_price']['price_type']} "
                      f"max loss ${tk['max_loss']['amount_usd']}{why}{flags}")
     lines.append(f"recommendation: {rt.recommendation}")

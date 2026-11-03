@@ -1,8 +1,10 @@
-{% set o = rv.overall %}
+{% set o = rview(rv) %}
 <div class="review" id="rv-{{ rv.review_id }}">
 <p style="margin:6px 0"><span class="badge {{ o.verdict }}">{{ o.verdict }}</span>
   <span class="mono small">{{ rv.review_id }}</span> · run <b>{{ rv.run_id }}</b> · evaluated {{ rv.evaluated_at|pair }}
   · approval required: {{ 'yes' if o.approval_required else 'no' }}</p>
+{% if o.tampered %}<p class="small bad">INV-16 tampered: the stored overall says {{ o.stored_verdict or 'nothing' }}; the verdict above is recomputed from the rule results.
+  {% for e in o.errors %}<span class="pill mono">{{ e }}</span>{% endfor %}</p>{% endif %}
 {% if o.blocking_rule_ids %}<p class="small">Blocking: {% for r in o.blocking_rule_ids %}<span class="pill">{{ r }}</span>{% endfor %}</p>{% endif %}
 {% if o.flag_rule_ids %}<p class="small">Flags: {% for r in o.flag_rule_ids %}<span class="pill">{{ r }}</span>{% endfor %}</p>{% endif %}
 <table>
