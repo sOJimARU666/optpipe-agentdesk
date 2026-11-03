@@ -1,0 +1,104 @@
+# Market-data snapshot rules (spec 1.1.8; 1.1.7 packs still accepted, unchanged) for the PAPER-ONLY US options app.
+# Producer: Oodle (read-only market-data agent). Consumer: the app (reads files only, never fetches; Sol R6).
+# Schema: market_snapshot.schema.json. Validator: validate_market_snapshot.py. Reference loader: market_data_loader.py.
+# Human-readable companion: market_data_rules.md. If the md and this file disagree, this file wins.
+# All quoted: never let YAML auto-convert timestamps / dates.
+market_data_rules_version: "1.1.8"   # labels track spec VERSION; 1.1.8: MD-13..MD-15, origin-based MD-07, catalysts.json; 1.1.7: first release (MD-01..MD-12)
+schema_versions: ["1.1.7", "1.1.8"]  # market_snapshot schema_version values this spec accepts (a pack uses ONE; 1.1.7 packs validate exactly as in spec 1.1.7)
+
+staleness:
+  staleness_limit_minutes: 20        # THE limit (defined once; code reads it from here)
+  # A quote field is STALE iff (pack_built_at - as_of) > staleness_limit_minutes, compared as exact instants
+  # (any UTC offset). Exactly 20:00 old = fresh (OK allowed); 20:00 plus any fraction of a second = STALE.
+  # Same inclusive convention as R01_QUOTE_FRESHNESS (risk_rules.yaml, case R01-c "age exactly 15:00 is inclusive")
+  # and W06 (quote_max_age_seconds): an age limit is inclusive; only the 1.1.6 approval *window* is open.
+  comparison: "STALE iff pack_built_at - as_of > staleness_limit_minutes"
+  # Fields the staleness rule applies to (quotes and quote-derived values). Earnings fields are calendar facts:
+  # they are dated by as_of but never STALE by this rule (they are confirmed / unconfirmed instead, MD-07).
+  quote_fields: [last_price, iv, iv_rank, implied_move, open_interest, volume, bid, ask, spread, spread_pct_of_mid]
+  # NOT the same limit as R01_QUOTE_FRESHNESS: MD-05 measures age at pack_built_at (the actual build time) against
+  # 20 minutes; R01 measures age at DECISION time against 15 minutes (risk_rules.yaml). A quote can pass MD-05 (OK in
+  # the pack) and fail R01 later (VETO in the session record), by design: the pack is not a decision.
+
+statuses: [OK, STALE, UNKNOWN, UNCONFIRMED]
+usable_statuses: [OK]                # the app may build an idea only from OK fields; everything else fails closed
+session_status_map: {OK: ok, STALE: stale, UNKNOWN: missing, UNCONFIRMED: missing}   # into session.schema.json Field.status
+
+earnings:
+  fields: [earnings_date, earnings_time]
+  min_independent_sources: 2         # OK needs >= 2 entries in `sources` with distinct registrable domains
+  # registrable domain = the last two labels of the URL host, lower-case, after dropping a leading "www."
+  # (investor.nvidia.com and nvidianews.nvidia.com are ONE source: nvidia.com). Known limit: multi-part public
+  # suffixes such as .co.uk collapse to the suffix; such pairs are treated as the same domain (fail closed).
+  time_values: [BMO, AMC, unknown]   # earnings_time value; "unknown" (or null) means status UNKNOWN
+  # earnings_time follows the same two-source rule as earnings_date: one source = UNCONFIRMED. A session (BMO / AMC)
+  # INFERRED from a conference-call time is never a source for earnings_time: it goes in summary.md only.
+  # ---- spec 1.1.8 packs (schema_version 1.1.8): independence by ORIGIN, not by domain (replaces the domain rule;
+  # 1.1.7 packs keep the domain rule above). Every entry in `sources` carries origin + origin_entity; OK needs
+  # >= min_independent_sources entries whose (origin, origin_entity casefolded) pairs differ.
+  independence_v1_1_8: origin
+  origins: [issuer, exchange, broker, data_vendor, news, other]
+  # An issuer's own release is ONE source wherever it is read: its IR site, a newswire carrying it, or the IR host.
+  # A source whose URL's registrable domain is listed here, or whose host starts with an IR label, must be
+  # origin issuer (MD-07-ORIGIN); with a ticker, an issuer's origin_entity must be that ticker (MD-07-ORIGIN).
+  issuer_channel_domains: [globenewswire.com, prnewswire.com, businesswire.com, gcs-web.com]
+  issuer_host_labels: [ir, investor, investors]   # first host label, e.g. ir.example.com
+
+watchlists: [eugene, street, fixture]
+candidate_status:
+  values: [idea, candidate]
+  default: idea                      # a missing candidate_status is read as idea
+  street_must_be: idea               # MD-10: street tickers are idea sources only; R01-R13 decide candidacy, never the pack
+
+data_labels: [EXAMPLE, TEST, MARKET] # EXAMPLE / TEST: never market data for a real idea; MARKET: Oodle's real pack
+
+layout:
+  root: "market-data"                # <root>/<YYYY-MM-DD>/, the date is the America/New_York date of pack_built_at
+  date_dir_pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+  manifest: "pack.sha256"            # NOT named MANIFEST.sha256: the spec release find excludes that name (fixture packs must ship); sha256sum format: "<64 lowercase hex>  <name>", one line per pack file (write it LC_ALL=C sorted; order is not checked), not listing itself
+  index: "index.json"
+  summary: "summary.md"              # optional; if present it must be listed in the manifest
+  catalysts: "catalysts.json"        # 1.1.8 packs only (index.json schema_version 1.1.8); optional; listed in the manifest
+  ticker_file_pattern: "^[A-Z][A-Z0-9.-]{0,9}\\.json$"   # <TICKER>.json, one per index entry
+  max_file_bytes: 1048576            # 1 MiB per file; larger = MD-01-SIZE (never read)
+  # Nothing else is allowed in a date dir: no other names or extensions (.py, .sh, .pyc, ...), no sub-directories
+  # (__pycache__ included), no dotfiles, no symlinks (the date dir itself included, and no symlinked ancestor:
+  # realpath must equal the absolute path), no non-regular files (FIFO, socket, device), no executable bit.
+
+source_terms_bases: [robots_and_terms_allow, public_government_data, issuer_public_release, manual_read_once, robots_only_no_terms]
+# robots_only_no_terms (1.1.8 packs only): the site has no terms page and only robots.txt permits access (e.g. Finviz);
+# such an entry carries no terms_url. 1.1.8 sources_terms entries may also declare delayed / delay_minutes (MD-14).
+sources_not_used_reasons: [terms_forbid, login_required, paid, contact_email_required, other]   # 1.1.8 index.json sources_not_used; other needs a note
+
+as_of_basis:                        # 1.1.8 packs (MD-13): per field, what as_of measures
+  values: [quote_time, last_trade, fetch_minus_delay, published]
+  # quote_time: the quote's own timestamp. last_trade: the last trade's time, ACCEPTED AS A CONSERVATIVE FALLBACK when
+  # the source shows no quote time (it is never newer than the quote, so staleness is over- not under-stated).
+  # fetch_minus_delay: fetch time minus the declared delay; only with delayed true (MD-13-DELAY). published: a
+  # publication time (releases, calendars, news).
+  # Required (MD-13-MISSING) on these fields whenever they carry a value: price and option-chain fields.
+  required_for: [last_price, iv, implied_move, open_interest, volume, bid, ask, spread, spread_pct_of_mid, prior_close]
+
+catalysts:                          # 1.1.8 packs only: <root>/<date>/catalysts.json, kind catalyst_log (MD-15)
+  file: "catalysts.json"            # optional; if present it must be listed in pack.sha256 (a 1.1.7 pack may not hold it: MD-01-NAME)
+  types: [earnings, fomc, macro_release, investor_day, conference, fda, analyst_action, other]
+  statuses: [CONFIRMED, UNCONFIRMED, UNKNOWN]   # CONFIRMED needs >= 2 sources with distinct (origin, origin_entity)
+  analyst_actions: [upgrade, downgrade, initiate, reiterate, target_raise, target_cut, other]
+
+rules:
+  MD-01: "layout: the date dir exists, is a real directory (not a symlink, no symlinked ancestor), is named YYYY-MM-DD = NY date of pack_built_at, and holds only regular, non-executable files with allowed names and size; catalysts.json is an allowed name only in a 1.1.8 pack (index.json schema_version 1.1.8) (-DIR, -UNREADABLE, -SYMLINK, -NOT-REGULAR, -NAME, -EXEC, -SIZE, -DATE)"
+  MD-02: "manifest: pack.sha256 exists and is well-formed; it lists exactly the pack files (index.json, one <TICKER>.json per index entry, optional summary.md, optional catalysts.json in 1.1.8 packs); names are plain file names (no /, \\, .., absolute paths); every sha256 matches the bytes read (-MISSING, -FORMAT, -PATH, -DUPLICATE, -EXTRA, -ABSENT, -INDEX, -HASH)"
+  MD-03: "schema: every pack JSON is a UTF-8 JSON object valid against market_snapshot.schema.json (additionalProperties false everywhere: no personal or account fields) (-JSON, -SCHEMA)"
+  MD-04: "times: pack_built_at and every as_of are ISO 8601 with a UTC offset; naive or unparsable is an error; an as_of after pack_built_at is an error; in 1.1.8 documents also every sources[].as_of, and an analyst action date after the pack's NY date (-TIME-NAIVE, -TIME-INVALID, -FUTURE)"
+  MD-05: "staleness: a quote field marked OK whose as_of is more than staleness_limit_minutes before pack_built_at is an error; it must be STALE (-STALE)"
+  MD-06: "unknown: a null or missing value is UNKNOWN, never OK / STALE / UNCONFIRMED; an UNKNOWN field carries no value; a value needs a source and an as_of (-UNKNOWN, -VALUE, -UNSOURCED)"
+  MD-07: "earnings: 1.1.7 packs: OK needs >= 2 sources with distinct registrable domains; 1.1.8 packs: OK needs >= 2 sources with distinct (origin, origin_entity), by origin not domain; otherwise UNCONFIRMED; UNCONFIRMED is only for earnings fields; 1.1.8: a source on an issuer channel (issuer_channel_domains, IR host) must be origin issuer, and with a ticker an issuer's origin_entity is that ticker (-UNCONFIRMED, -STATUS, -ORIGIN)"
+  MD-08: "delay: delayed true needs delay_minutes >= 1; delayed false carries no delay_minutes (-DELAY)"
+  MD-09: "privacy: no e-mail address anywhere in a pack file (also not example.com); pack files hold tickers and market data only (-EMAIL)"
+  MD-10: "street: a street ticker has candidate_status idea (default idea); only R01-R13 in a session record can make it a candidate (-STREET-CANDIDATE)"
+  MD-11: "consistency: every ticker file's (and in 1.1.8 catalysts.json's) schema_version, pack_id, pack_built_at, data_label equal the index (catalysts.json also date); ticker / watchlist / candidate_status equal its index entry; the file is named <ticker>.json; tickers unique (-PACK, -TICKER, -DUPLICATE)"
+  MD-12: "sources and terms (optional sources_terms in index.json): if present, every source id used by a field (and in 1.1.8 by catalysts.json) is listed there with its terms basis; 1.1.8: a sources_not_used name must not also be a sources_terms source (-SOURCE, -CONFLICT)"
+  MD-13: "as_of basis (1.1.8 packs): price and option-chain fields (as_of_basis.required_for) that carry a value state as_of_basis; fetch_minus_delay needs delayed true; last_trade is accepted as a conservative fallback (-MISSING, -DELAY)"
+  MD-14: "declared delay (1.1.8 packs): if index.json sources_terms declares a source delayed with delay_minutes N, every field from that source is delayed true with delay_minutes >= N (-DELAY)"
+  MD-15: "catalysts (1.1.8 catalysts.json): event_date null iff status UNKNOWN; a dated entry has >= 1 source; CONFIRMED needs >= 2 sources with distinct (origin, origin_entity); event_time is ISO 8601 with a UTC offset whose NY date is event_date; event_date is a real date; ticker_context lists each ticker once (-UNKNOWN, -VALUE, -UNSOURCED, -UNCONFIRMED, -TIME-NAIVE, -TIME-INVALID, -DATE, -DUPLICATE)"
+  MD-00: "fail closed: a loader or validator crash is an error, never a pass (-CRASH)"

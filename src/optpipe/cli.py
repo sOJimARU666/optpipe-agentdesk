@@ -7,14 +7,17 @@
   optpipe spec-check                 what was found in Doodle's spec folder + ruleset placeholders
   optpipe validate FILE.json         run Doodle's validate_session.py on a record
   optpipe show FILE.json             print the Markdown for a record
+  optpipe market-data [--data-dir ROOT] [--date D] [--now TS]
+                                     verify + validate one of Oodle's market-data packs (file I/O only, no network)
 """
 from __future__ import annotations
 
 from .scenario import tag_for_record
 
 import argparse
+import re
 import sys
-from datetime import datetime, timezone
+from datetime import date as _date, datetime, timezone
 from pathlib import Path
 
 from .config import REPO_ROOT, load_settings
@@ -143,6 +146,54 @@ def watch(a, settings) -> int:
     return 1 if (errs or not ok) else 0
 
 
+def market_data(a, settings) -> int:
+    """FEAT-OODLE-01 PR A: load one date dir with optpipe.marketdata (fail closed). Exit 0 valid / 1 rule errors /
+    2 unreadable, crash or spec not pinned. Paper only: pure file I/O; nothing else reads this pack yet (PR B)."""
+    from zoneinfo import ZoneInfo
+    from . import marketdata as md
+    from .config import display_path
+    from .spec import discover
+    if a.now:
+        try:
+            now = datetime.fromisoformat(a.now)
+        except ValueError:
+            print(f"--now {a.now!r} is not an ISO timestamp", file=sys.stderr); return 2
+        if now.tzinfo is None or now.utcoffset() is None:
+            print("--now needs a UTC offset (MD-19-TZ)", file=sys.stderr); return 2
+    else:
+        now = datetime.now(timezone.utc)
+    root = Path(a.data_dir) if a.data_dir else md.data_root_from_env()
+    if root is None:   # no live folder by default: nothing is opened (PR #22 review)
+        res = md.load_date(None, a.date)
+        for e in res.errors:
+            print(e, file=sys.stderr)
+        return 2
+    if a.date is not None:
+        if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", a.date):
+            print(f"--date {a.date!r} is not YYYY-MM-DD", file=sys.stderr); return 2
+        try:
+            _date.fromisoformat(a.date)
+        except ValueError:
+            print(f"--date {a.date!r} is not a real calendar date", file=sys.stderr); return 2
+    date = a.date or now.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+    res = md.load_date(root, date, now=now, spec=discover(settings.spec_path))
+    shown = display_path(root / date)
+    for e in res.errors:
+        print(e, file=sys.stderr)
+    rc = res.exit_code()
+    if rc:
+        print(f"FAIL: {shown}: {len(res.errors)} error(s), exit {rc} (fail closed: nothing from this pack is used)",
+              file=sys.stderr)
+        return rc
+    print(f"OK: {shown} valid (market_snapshot pack, schema_version {res.schema_version}, "
+          f"data_label {res.index.get('data_label')}, {len(res.snapshots)} ticker(s), checked at {now.isoformat()})")
+    for t in sorted(res.snapshots):
+        why = md.no_idea_reasons(res, t, now=now)
+        print(f"  {t:8} {'inputs usable' if not why else 'NO IDEA: ' + md.error_id(why[0])}"
+              + (f" (+{len(why) - 1} more)" if len(why) > 1 else ""))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="optpipe", description="Paper-only options research pipeline (no orders, ever)")
     ap.add_argument("--config", help="settings.yaml path")
@@ -172,6 +223,11 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--once", action="store_true", help="a single wake at --clock")
     w.add_argument("--live", action="store_true", help="EXPERIMENTAL: real clock + read-only Nasdaq GETs while open")
     w.add_argument("--engine", default="spec", help="rule engine name (pluggable; default: spec)")
+    m = sub.add_parser("market-data", help="verify one of Oodle's market-data packs (fail closed; file I/O only)")
+    m.add_argument("--data-dir", help="market-data root holding YYYY-MM-DD dirs (else $OPTPIPE_MARKET_DATA_DIR; "
+                                      "there is no default: with neither, exit 2 and nothing is opened)")
+    m.add_argument("--date", help="pack date YYYY-MM-DD (default: today in New York)")
+    m.add_argument("--now", help="the clock, ISO with offset (default: the real clock); used for MD-19 checks")
     a = ap.parse_args(argv)
     if a.cmd == "serve":
         return serve(a.out, a.host, a.port)
@@ -197,6 +253,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if a.cmd == "watch":
         return watch(a, settings)
+    if a.cmd == "market-data":
+        return market_data(a, settings)
     if a.cmd == "show":
         print(render_markdown(read_session(a.file), read_trace(str(a.file).replace(".json", ".trace.json"))))
         return 0

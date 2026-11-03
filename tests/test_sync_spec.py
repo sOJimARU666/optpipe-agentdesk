@@ -34,8 +34,8 @@ def pinned(source, tmp_path):
 
 
 def test_pin_constants():
-    assert sync_spec.EXPECTED_VERSION == "1.1.6"
-    assert sync_spec.EXPECTED_MANIFEST_SHA256 == "6b4c51ce10c71a885d8e009436fedd28d9cf6cb1feaa5a704b63d7241099a647"
+    assert sync_spec.EXPECTED_VERSION == "1.1.8"
+    assert sync_spec.EXPECTED_MANIFEST_SHA256 == "0837c74c79c1dd0ee3bb51f515304f058fd85494856a0a58faeea4399de27cd5"
     assert sync_spec.FROZEN_RELEASES == {          # the earlier pins of this file, in order (git history)
         "_v1_1_0_backup": ("1.1.0", "3b25cfe562bbd818589e82e069235b188c4f2b4aac434c04fce54d238fd95e07"),
         "_v1_1_1_backup": ("1.1.1", "477401b68298f5b4513aa9b46eed9a56df5d1097e85175bdcf8a166cd3d4f489"),
@@ -43,17 +43,22 @@ def test_pin_constants():
         "_v1_1_3_backup": ("1.1.3", "8785ee8b2f9f3bbc993bfbad0ff3ae8e7535cf15b42c507e32d145a25d6836c0"),
         "_v1_1_4_backup": ("1.1.4", "f58db767b1c631d9d7c08d15df1e7bbedaa2215c5b2efa3b1a5f4b596a2d2610"),
         "_v1_1_5_backup": ("1.1.5", "ecc73140a23fc5b4b0e4bedf46020981bca5cefcfbda8011c3bd72ef206bd7a4"),
+        "_v1_1_6_backup": ("1.1.6", "6b4c51ce10c71a885d8e009436fedd28d9cf6cb1feaa5a704b63d7241099a647"),
+        "_v1_1_7_backup": ("1.1.7", "91f7fd260d214708c0b50a0fa307e0f4203492c86fcffd5ff5e3c705811cd1c4"),
     }
 
 
 def test_sync_writes_manifest_files_and_pin_record(pinned, source):
     files = sync_spec.parse_manifest((source / "MANIFEST.sha256").read_text())
-    assert len(files) == 31 and {"test_invariants_v1_1_3.py", "session_fixtures.py", "test_release_v1_1_4.py",
-                                "test_release_v1_1_5.py", "test_release_v1_1_6.py"} <= set(files)
+    assert len(files) == 191 and {"test_invariants_v1_1_3.py", "session_fixtures.py", "test_release_v1_1_4.py",
+                                 "test_release_v1_1_5.py", "test_release_v1_1_6.py", "test_release_v1_1_7.py",
+                                 "test_release_v1_1_8.py", "market_data_loader.py", "validate_market_snapshot.py",
+                                 "fixtures/market_data/valid/2026-10-20/pack.sha256",
+                                 "fixtures/market_data_v1_1_7/valid/2026-10-20/pack.sha256"} <= set(files)
     vendored = [n for n in files if n.startswith("fixtures/")]          # spec 1.1.4+: hermetic fixtures in a subdirectory
     assert vendored and all((pinned / n).is_file() for n in vendored)
     pin = json.loads((pinned / "PIN.json").read_text())
-    assert pin["version"] == "1.1.6" and pin["manifest_sha256"] == sync_spec.EXPECTED_MANIFEST_SHA256
+    assert pin["version"] == "1.1.8" and pin["manifest_sha256"] == sync_spec.EXPECTED_MANIFEST_SHA256
     assert pin["owner"] == "Doodle" and pin["files"] == dict(sorted(files.items()))
     assert pin["synced_at"].endswith(("+01:00", "+02:00"))               # Berlin time
     for name, digest in files.items():
@@ -62,11 +67,11 @@ def test_sync_writes_manifest_files_and_pin_record(pinned, source):
     assert not (pinned / ".venv").exists() and not (pinned / "_v1_backup" / "risk_rules.yaml").exists()
     assert {k: v["version"] for k, v in pin["frozen_releases"].items()} == {
         "_v1_1_0_backup": "1.1.0", "_v1_1_1_backup": "1.1.1", "_v1_1_2_backup": "1.1.2", "_v1_1_3_backup": "1.1.3",
-        "_v1_1_4_backup": "1.1.4", "_v1_1_5_backup": "1.1.5"}
+        "_v1_1_4_backup": "1.1.4", "_v1_1_5_backup": "1.1.5", "_v1_1_6_backup": "1.1.6", "_v1_1_7_backup": "1.1.7"}
     for sub in sync_spec.FROZEN_RELEASES:                  # copied by their own manifest, byte-identical
         for name, digest in sync_spec.parse_manifest((source / sub / "MANIFEST.sha256").read_text()).items():
             assert sync_spec.sha256(pinned / sub / name) == digest
-    assert sync_spec.verify_pinned(pinned)["version"] == "1.1.6"
+    assert sync_spec.verify_pinned(pinned)["version"] == "1.1.8"
 
 
 @pytest.mark.parametrize("tamper", ["edit_file", "edit_manifest", "extra_file", "missing_file", "edit_v1", "edit_pin",

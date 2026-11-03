@@ -165,6 +165,52 @@ or webhooks). It also never modifies the session record; `watch.json` references
   4 wakes, 1 quote GET at 15:55 ET, and 4 `SHADOW_EOD` alerts at 16:00 ET (22:00 Berlin, CEST). The unit tests
   cover the watched paths (W01–W07) with synthetic approved tickets on the same tape.
 
+## Market-data packs (FEAT-OODLE-01 PR A): fail-closed loader, nothing consumes it yet
+
+`optpipe.marketdata` loads one of Oodle's dated market-data packs (`<root>/YYYY-MM-DD/`: `pack.sha256`, `index.json`,
+`summary.md`, `catalysts.json`, `<TICKER>.json`) with spec 1.1.8's rules (MD-01..MD-15, delegated to the pinned
+`spec/validate_market_snapshot.py`) plus app-side hardening tagged with the ids PROPOSED in Doodle's R7 proposal
+(MD-16..MD-20: non-finite numbers, duplicate keys, control characters, entry / byte bounds, empty packs, hard links,
+writable or foreign-owned files, replacement races, an injected clock with future and tz checks, earnings conflicts,
+and `no_idea_reasons()` for critical UNKNOWN / stale / conflicting inputs). Pure file I/O: no network, read-only,
+paper only. Any doubt fails closed (exit 0 valid, 1 rule errors, 2 unreadable / crash / spec not pinned).
+
+```bash
+.venv/bin/optpipe market-data --data-dir spec/fixtures/market_data/valid --date 2026-10-20 --now 2026-10-20T09:05:00-04:00
+OPTPIPE_MARKET_DATA_DIR=<root> .venv/bin/optpipe market-data        # date = NY today
+```
+
+There is **no default data root**: without `--data-dir` or `$OPTPIPE_MARKET_DATA_DIR` the command exits 2
+(`MD-00-ROOT (app)`) and opens nothing, so no live folder is read by accident. `--date` must be a real `YYYY-MM-DD`
+date (exit 2 otherwise). The date dir is always confined to the root (MD-17-ROOT), from the CLI and from
+`load_pack(date_dir, root=...)` / `load_date(root, date)`. Ids that are not spec 1.1.8 ids are labelled in the output:
+MD-16..MD-21 as `(proposed)` (Doodle's R7 proposal), MD-00-SPEC / MD-00-ROOT as `(app)`.
+
+Fail closed (pack exit 1 or 2) on, among others: NaN / Infinity / 1e400 and any integer with |n| > 2**53, duplicate
+keys, control characters, a BOM or bad UTF-8, too many entries or bytes, hard links, group- / world-writable or
+foreign-owned files, files replaced while read, a pack built after the clock, any `as_of` after the clock, and earnings
+conflicts (MD-20-CONFLICT): an `earnings_date` that is not the next CONFIRMED catalysts.json earnings date, an
+`earnings_time` (BMO / AMC) that contradicts the NY session of the matching entry's `event_time` (before 09:30 = BMO,
+from 16:00 = AMC), or two CONFIRMED / UNCONFIRMED earnings entries on different dates within 30 days (two CONFIRMED
+quarters further apart are fine).
+
+`no_idea_reasons()` gives NO IDEA for a ticker unless `last_price` and `earnings_date` are OK, fresh and not future,
+the `earnings_date` agrees with any UNCONFIRMED entry, a BMO / AMC `earnings_time` is corroborated by a matching
+`event_time` (catalysts.json has none for the example JPM entry, only a note, so that ticker is NO IDEA: the time
+cannot be checked), and at least one contract has usable, fresh `bid`, `ask`, `open_interest` and
+`spread_pct_of_mid` (PR B must then use only such a contract). **Not checked yet:** R07 catalyst coverage to the
+hold-window end and R08 macro catalysts plus coverage; both wait for PR B, where the consumer and its hold window exist.
+
+**Record version vs labels:** session records are still written as `1.1.6` (`records/compat.py`) but carry the 1.1.8
+`risk_ruleset_version` and `watcher_rules_version` labels (1.1.7 and 1.1.8 are label-only for the rules). The 1.1.8
+record bump is deferred to PR B (also in `spec_patches/v1.1/MERGE_STATUS.md`).
+
+The spec sets no market-data clock skew, so the loader allows none (`skew_seconds=0`, injectable). The spec's
+`staleness.staleness_limit_minutes` (20 in 1.1.8) is `pack_built_at - as_of` per quote field (inclusive);
+`no_idea_reasons()` reads the same value from the pinned spec and applies it against the clock at decision time. EXAMPLE / TEST packs always give NO IDEA (MD-20-SCOPE) unless a caller opts in.
+R01's 15 minutes stays with the Risk Officer. Discovery, research and the
+watcher switch to packs in PR B; `--live` is unchanged.
+
 ## Sources: macro calendars, risk-free rate, IV
 
 | Source | URL | Used for |
@@ -227,7 +273,8 @@ fees (`fees_per_contract_usd` × contracts × legs), as the spec's `risk_referen
 checks parity with the spec's `vertical_errors` on a mutation matrix, and with `direction_errors` (same messages verbatim).
 INV-15 is strict (`lt`/`gt` fail), reads the same single `position_value` condition as INV-14, skips a side INV-14 already
 flagged as missing or duplicated, and applies to **1.1.2 records only**: 1.1.0/1.1.1 records are unaffected, while 1.1.2
-records keep every 1.1.1 check. The risk ruleset stays `ruleset_version` 1.1.1.
+records keep every 1.1.1 check. That ruleset was 1.1.1 at the time; the pinned spec's risk ruleset label is now
+`ruleset_version` 1.1.8 (label-only changes since 1.1.6), while records are still written as 1.1.6.
 
 ## CI (local only)
 
@@ -263,9 +310,10 @@ These gaps are **known and not fixed**:
 |---|---|---|---|
 | `agent.py` | Generic `Agent[In, Out]` stage base (typed in/out, summaries for the trace) | Moodle | Poodle |
 | `orchestrator.py` | Runs the 5 stages, assembles/merges the session record (multi-run), validates v1 + v1.1, writes the trace | Moodle | Poodle |
-| `cli.py`, `__main__.py` | `optpipe run / validate / show / spec-check / serve` | Moodle | Poodle |
+| `cli.py`, `__main__.py` | `optpipe run / validate / show / spec-check / serve / watch / market-data` | Moodle | Poodle |
 | `config.py`, `config/settings.yaml` | Settings: mode (paper_only only), sources, IV, watchlist/sectors/broker/trade-style placeholders, overrides | Moodle (shape) / Eugene (values) | Poodle |
 | `spec.py` | Locates and loads Doodle's spec read-only | Moodle | Poodle |
+| `marketdata.py` | Fail-closed loader for Oodle's market-data packs (file I/O only; `optpipe market-data`) | Doodle (rules) / Moodle | Poodle |
 | `models/schema_v1.py`, `models/schema_v1_1.py` | Generated from `session.schema.json` / `spec_patches/v1.1/session.schema.json` | Doodle (schema) | generated |
 | `models/contracts.py`, `models/common.py` | Stage I/O contracts, manual inputs, `HYPOTHETICAL_LABEL` | Moodle | Poodle |
 | `models/session.py` | Hand-off trace models | Moodle | Poodle |

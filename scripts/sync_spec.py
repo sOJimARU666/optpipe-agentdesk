@@ -12,7 +12,7 @@ truth; local/default runs keep reading ../trading/spec directly, CI sets OPTIONS
 
 Copied: the files listed in MANIFEST.sha256, the manifest itself, the two frozen v1.0.0 files from
 _v1_backup/ that gen_models.py / make_spec_patch.py need (not covered by the manifest, so pinned by their
-own sha256 in spec/PIN.json), and the frozen 1.1.0 .. 1.1.5 releases (_v1_1_*_backup/, which
+own sha256 in spec/PIN.json), and the frozen 1.1.0 .. 1.1.7 releases (_v1_1_*_backup/, which
 Doodle's back-compat tests read), each by its own MANIFEST.sha256 and pinned by FROZEN_RELEASES below. Nothing is globbed from the source: the copy and the release check follow
 Doodle's MANIFEST.sha256 list exactly. Never copied or required: .venv/, __pycache__/, *.pyc, .pytest_cache/,
 backup folders (*_backup/, e.g. _v1_1_0_backup/) other than the two pinned _v1_backup files.
@@ -36,11 +36,13 @@ from zoneinfo import ZoneInfo
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = ROOT.parent / "trading" / "spec"     # Doodle's live folder, the sibling of this repo
 DEFAULT_DEST = ROOT / "spec"
-EXPECTED_VERSION = "1.1.6"
-EXPECTED_MANIFEST_SHA256 = "6b4c51ce10c71a885d8e009436fedd28d9cf6cb1feaa5a704b63d7241099a647"
+EXPECTED_VERSION = "1.1.8"
+EXPECTED_MANIFEST_SHA256 = "0837c74c79c1dd0ee3bb51f515304f058fd85494856a0a58faeea4399de27cd5"
 MANIFEST, VERSION, PIN = "MANIFEST.sha256", "VERSION", "PIN.json"
 V1_FILES = ("_v1_backup/session.schema.json", "_v1_backup/session.example.json")
-# Frozen earlier releases that Doodle's own tests read (spec 1.1.6 test_release_v1_1_6.py / test_release_v1_1_5.py /
+# Frozen earlier releases that Doodle's own tests read (spec 1.1.8 test_release_v1_1_8.py runs the frozen 1.1.7
+# validator and loader on _v1_1_7_backup/fixtures/market_data/; test_release_v1_1_7.py runs the frozen 1.1.6 validator;
+# spec 1.1.6 test_release_v1_1_6.py / test_release_v1_1_5.py /
 # test_release_v1_1_4.py / test_invariants_v1_1_3.py run the frozen 1.1.2 .. 1.1.5 validate_session.py /
 # watcher_reference.py and read every backup's session.example.json). Each one is pinned by the
 # manifest sha256 this script pinned when that release was current (git history of this file), and is copied by
@@ -52,6 +54,8 @@ FROZEN_RELEASES = {
     "_v1_1_3_backup": ("1.1.3", "8785ee8b2f9f3bbc993bfbad0ff3ae8e7535cf15b42c507e32d145a25d6836c0"),
     "_v1_1_4_backup": ("1.1.4", "f58db767b1c631d9d7c08d15df1e7bbedaa2215c5b2efa3b1a5f4b596a2d2610"),
     "_v1_1_5_backup": ("1.1.5", "ecc73140a23fc5b4b0e4bedf46020981bca5cefcfbda8011c3bd72ef206bd7a4"),
+    "_v1_1_6_backup": ("1.1.6", "6b4c51ce10c71a885d8e009436fedd28d9cf6cb1feaa5a704b63d7241099a647"),
+    "_v1_1_7_backup": ("1.1.7", "91f7fd260d214708c0b50a0fa307e0f4203492c86fcffd5ff5e3c705811cd1c4"),
 }
 IGNORED_DIRS = {"__pycache__", ".pytest_cache", ".venv"}  # never pinned; created by running Doodle's tests
 IGNORED_SUFFIXES = (".pyc", ".pyo")

@@ -1,0 +1,235 @@
+# Alert-only Watcher rules for the PAPER-ONLY US options app (spec v1.1).
+# Human-readable companion: watcher_rules.md. Reference implementation: watcher_reference.py.
+# Tests: test_watcher_reference.py. Market hours/holidays come from risk_rules.yaml config.market_hours.
+# The watcher NEVER places, modifies or cancels orders (paper or live). Every alert says so.
+# All timestamps quoted; never let YAML auto-convert.
+watcher_version: "1.1.7"   # labels track spec VERSION from 1.1.3; 1.1.7: the duplicate top-level target_precedence is removed (scope.target_precedence is the only source), no rule change; 1.1.6: explicit top-level target_precedence (numbered steps of watcher_rules.md, removed in 1.1.7), a real approval only while approved_at < now < expires_at (open window, = INV-06 at filled_at), naive / unparsable times fail closed with an INV id (no crash), fail-closed rule aggregate (unrecognised result string or UNKNOWN without severity = VETO); 1.1.5: a review failing INV-16 is VETO for the watcher (an approval on it is never real), executed / closed ideas keep their status, a revoked approval rejects every pre-execution ticket, a real approval needs an approved_pending / approved idea, scope.target_precedence, SCOPE-h..r; 1.1.4: a revoked approval maps the ticket to rejected (shadow), scope.approval_status, SCOPE-e..g; 1.1.3: `detail` listed in alert_fields, approval state read only from approvals[].status (no `decision` field)
+
+config:
+  alert_text: "alert only, no order"       # must appear in every alert message
+  levels: [info, warn, exit_signal]        # ascending severity
+  poll_seconds: 300                        # 5 min during NY regular hours
+  fast_poll_seconds: 60                    # 1 min when near stop/target or last hour of expiry day
+  fast_poll_last_hour_minutes: 60
+  cooldown_minutes: 30                     # per (rule, target); exit_signal escalations bypass it
+  quote_max_age_seconds: 900               # W06
+  max_spread_pct_of_mid: "0.25"            # W06
+  wide_spread_polls: 3                     # W06 consecutive polls
+  near_level_pct: "0.10"                   # W01 warn band, fraction of |entry - level|
+  default_tick_size: "0.01"                # W01 rounding when the input gives none
+  iv_warn_change: "0.20"                   # W03 |iv/entry_iv - 1| >= 0.20
+  iv_exit_change_long_premium: "-0.35"     # W03 long premium (debit) only
+  time_stop_warn_extra_days: 2             # W04 warn when DTE <= time-stop DTE + 2
+  time_stop_exit_at: "10:00"               # W04 NY, on the time-stop date
+  expiry_exit_at: "14:00"                  # W04 NY, on expiry day while any leg is open
+  assignment_warn_dte: 5                   # W05
+  assignment_min_extrinsic: "0.05"         # W05
+  event_kinds: [CPI, PPI, FOMC, NFP, earnings]   # W07
+
+scope:
+  watched: "paper_positions with status open; tickets with idea status approved_pending (watched as if entered at the ticket limit)"
+  shadow: "tickets whose review/idea is vetoed or rejected: NO intraday polling and NO W01-W07 alerts; one info 'shadow' end-of-day summary at/after the NY close of each trading day"
+  ignored: "closed positions, expired/cancelled tickets"
+  # spec 1.1.4 ruling: approval status -> ticket target (watcher_reference.target_from_session / APPROVAL_STATUS_TARGET),
+  # read ONLY from approvals[].status (there is no `decision` field). real = approved_pending with approved: true (only if
+  # inside approved_at < now < expires_at (spec 1.1.6: open window; 1.1.3-1.1.5: approved_at <= now), INV-05 clean and, spec 1.1.5, its review INV-16 clean; an active approval
+  # failing those is hypothetical, or vetoed when its review fails INV-16); hypothetical = approved_pending with
+  # approved: false (a watched paper what-if); rejected = shadow only (no intraday alerts, SHADOW_EOD summary).
+  # Applied inside target_precedence below (VETO first; revoked -> rejected unless a real approval exists).
+  approval_status:
+    active: real
+    revoked: rejected
+    expired: hypothetical
+    consumed: hypothetical
+    none: hypothetical       # missing: no approval for the ticket
+  # spec 1.1.5 ruling: full precedence of target_from_session (watcher_reference.TARGET_PRECEDENCE); first match wins.
+  #   1 vetoed:   the ticket's latest review (by evaluated_at) is blocked, any approval of the ticket points at a blocked
+  #               review, or the idea is vetoed. blocked = recorded VETO, VETO derived from the rule results (VETO or
+  #               hard UNKNOWN), no results, OR INV-16 inconsistent (stored overall verdict / blocking ids / flag ids !=
+  #               risk_reference.overall(results), e.g. tampered_pass: a stored PASS over FLAG results). Any
+  #               schema_version (fail closed).
+  #   2 terminal: the idea is executed or closed -> keeps that status (not watched as a ticket; the trade is watched by
+  #               the position rules). A revoked approval does NOT relabel it.
+  #   3 rejected: pre-execution idea (proposed, simulated, approved_pending, approved, rejected, any other non-terminal
+  #               status, or no idea): the idea is rejected, or any approval of the ticket is revoked and there is no
+  #               real approval (5).
+  #   4 otherwise: idea approved_pending / approved / no idea -> approved_pending, real (approved: true) if a real
+  #               approval (5) exists, else hypothetical; any other non-approved idea (proposed, simulated, ...) keeps
+  #               its status and is not watched.
+  #   5 real approval: the idea is approved_pending or approved AND the approval is active, inside its window, INV-05
+  #               clean and INV-16 clean. An active approval on a proposed / simulated idea (or with no idea) is never real.
+  target_precedence: [vetoed, terminal, rejected, approved_pending, idea_status]
+
+# spec 1.1.7 (Moodle): the 1.1.6 top-level `target_precedence` list duplicated scope.target_precedence and is removed;
+# scope.target_precedence is the ONLY machine-readable precedence (ids in order, first match wins), with the numbered
+# steps 1, 2, 3, 4a, 4b of watcher_rules.md "Approval state" (comment above) and watcher_reference.TARGET_PRECEDENCE.
+# Step 5 is not a target: it defines the real approval used by steps 3 and 4a (kept below, not a duplicate).
+# Tests: test_release_v1_1_6.py / test_release_v1_1_7.py.
+real_approval:
+  step: "5"
+  when: "the idea is approved_pending or approved (APPROVED_IDEA_STATUSES) and an approval of the ticket has status active, approved_at < now < expires_at (instants, any UTC offset; spec 1.1.6 open window, the same rule as INV-06 at filled_at), passes INV-05 and its review passes INV-16; a naive or unparsable now / approval time means no real approval (fail closed, INV-06-TIME-NAIVE / -INVALID in the target's errors)"
+
+polling:
+  rule: "Only while the NY regular session is open (America/New_York, 09:30-16:00, 13:00 early close, no weekends/NYSE holidays). Closed -> no poll (next_poll = null)."
+  interval: "fast_poll_seconds if W01 is within its warn band or already beyond a level, or now >= (expiry-day close - 60 min) on the expiry date of any open leg; else poll_seconds"
+
+dedupe:
+  key: "(rule_id, target_id, level)"
+  rule: >-
+    An alert is sent only if its level is higher than the highest level already sent for (rule_id, target_id) this session
+    (same level again = duplicate, lower = no de-escalation alert). Within cooldown_minutes after the last alert sent for
+    (rule_id, target_id), a new alert is held back unless it escalates to exit_signal. Suppressed or held-back alerts do
+    not update the state. The shadow summary is deduped per (target_id, NY date).
+
+alert_fields: [rule_id, level, target_id, value, threshold, quote_as_of, at, detail, message]
+message_format: "[{level}] {rule_id} {target_id}: {detail} | value={value} threshold={threshold} quote_as_of={quote_as_of} | alert only, no order"
+
+definitions:
+  mid: "(bid + ask) / 2, exact Decimal"
+  mark: "per-share net value of the structure at mid: sum(sign * ratio * mid), sign +1 buy / -1 sell. Debit structure: mark = value to sell it (positive). Credit structure: mark = cost to buy it back = -sum(...)."
+  premium: "long if ticket limit_price.price_type is debit, short if credit"
+  rounding: "stop/target rounded to tick_size (input mark_levels.tick_size, else default_tick_size), nearest, half up"
+  beyond: "mark is at or beyond level when (mark - level) * (level - entry) >= 0 (works for debit stops below entry and credit stops above entry)"
+  dte: "expiry - NY date(now); time-stop DTE = expiry - NY date(time_stop)"
+  quote_as_of: "oldest as_of among the quotes the alert used"
+  stale: "any of underlying.last, legs[].bid, legs[].ask has status != ok, or is older than quote_max_age_seconds during market hours"
+
+rules:
+  - id: W01_MARK_VS_STOP_TARGET
+    inputs: ["legs[].bid", "legs[].ask", "mark_levels.entry", "mark_levels.stop", "mark_levels.target", "mark_levels.tick_size"]
+    warn: "|mark - level| <= near_level_pct * |entry - level| and not yet beyond (for the rounded stop or target)"
+    exit_signal: "mark at or beyond the rounded stop or target"
+    unknown: "a leg quote unusable -> no W01 alert (W06 reports the data problem)"
+  - id: W02_UNDERLYING_LEVELS
+    inputs: ["underlying.last", "underlying.prev_last", "underlying.bars_5m", "underlying.levels"]
+    info: "prev_last -> last crosses (touches or passes) a breakeven"
+    warn: "prev_last -> last crosses a stop level intraday (stop_below: last <= stop; stop_above: last >= stop)"
+    exit_signal: "the latest completed 5-min bar (end <= now) closes beyond a stop level (strictly)"
+  - id: W03_IV_VS_ENTRY
+    inputs: ["legs[].iv", "legs[].entry_iv", "premium"]
+    change: "iv / entry_iv - 1 per leg; the leg with the largest |change| is reported"
+    info: "UNKNOWN: entry_iv missing for any leg, or current iv unusable"
+    warn: "|change| >= 0.20"
+    exit_signal: "premium long and change <= -0.35"
+  - id: W04_TIME
+    inputs: ["now", "time_stop", "legs[].expiry"]
+    warn: "DTE <= time-stop DTE + 2"
+    exit_signal: "time_stop set and now >= 10:00 NY on the time-stop date (persists on later days while open); OR now on an open leg's expiry date and NY time >= 14:00"
+    no_time_stop: "time_stop null -> warn at DTE <= 2 (time-stop DTE taken as 0), expiry-day rule only"
+  - id: W05_SHORT_LEG_ASSIGNMENT
+    inputs: ["legs[side=sell]", "underlying.last", "ex_dividend"]
+    itm: "call S > K, put S < K; extrinsic = mid - intrinsic"
+    warn: "short leg ITM and DTE <= 5"
+    exit_signal: "short leg ITM with extrinsic < 0.05; OR short call ITM on the trading day before ex_dividend.date with extrinsic < ex_dividend.amount"
+  - id: W06_DATA_HEALTH
+    inputs: ["underlying.last", "legs[].bid", "legs[].ask", "state.wide_streak"]
+    warn: "any quote stale (see definitions) during market hours; OR a leg's (ask-bid)/mid > 0.25 for 3 consecutive polls (mid <= 0 counts as wide)"
+    effect: "while any quote is stale, exit_signal alerts from W01-W05 are suppressed (not sent, not recorded) - they fire on the first fresh poll"
+  - id: W07_EVENT_EVE
+    inputs: ["events", "hold_window", "underlying.symbol"]
+    info: "NY date(now) is the trading day before an event's NY date, kind in event_kinds (earnings only for this underlying), and the event lies inside [hold_window.start, hold_window.end]"
+
+# ---------------------------------------------------------------------------
+# Fixture: open JPM 340/350 bull call debit spread that triggers nothing. Tests apply set/append/remove (same syntax as risk_rules.yaml).
+fixture:
+  now: "2026-10-20T11:00:00-04:00"
+  target: {kind: position, id: pos-1, ticket_id: tk-1, status: open}
+  premium: long
+  mark_levels: {entry: 4.25, stop: 2.10, target: 7.00, tick_size: 0.05}
+  hold_window: {start: "2026-10-14T09:45:00-04:00", end: "2026-10-27T16:00:00-04:00"}
+  time_stop: "2026-10-27T16:00:00-04:00"
+  underlying:
+    symbol: JPM
+    last: {value: 345.00, status: ok, as_of: "2026-10-20T10:59:00-04:00"}
+    prev_last: 345.50
+    bars_5m: [{end: "2026-10-20T10:55:00-04:00", close: 345.20}]
+    levels: {stop_below: 336.00, stop_above: null, breakevens: [344.25]}
+  legs:
+    - {leg_id: leg-1, type: call, side: buy, strike: 340, expiry: "2026-10-30", ratio: 1,
+       bid: {value: 7.00, status: ok, as_of: "2026-10-20T10:59:00-04:00"}, ask: {value: 7.40, status: ok, as_of: "2026-10-20T10:59:00-04:00"},
+       iv: {value: 0.26, status: ok, as_of: "2026-10-20T10:59:00-04:00"}, entry_iv: 0.25}
+    - {leg_id: leg-2, type: call, side: sell, strike: 350, expiry: "2026-10-30", ratio: 1,
+       bid: {value: 2.90, status: ok, as_of: "2026-10-20T10:59:00-04:00"}, ask: {value: 3.10, status: ok, as_of: "2026-10-20T10:59:00-04:00"},
+       iv: {value: 0.24, status: ok, as_of: "2026-10-20T10:59:00-04:00"}, entry_iv: 0.24}
+  ex_dividend: null
+  events:
+    - {event_id: ev-cpi-nov, kind: CPI, underlying: null, at: "2026-11-10T08:30:00-05:00"}
+
+# Each test: optional set/append/remove on the fixture, optional `state` (dedupe/cooldown/streaks before the poll).
+# expect.alerts: [[rule_id, level], ...] = exact list of alerts sent by this poll (sorted by rule_id).
+# expect.next_poll: seconds or null. expect.state: subset check of the returned state.
+tests:
+  - {id: BASE-a, desc: "fixture: nothing triggers, 5-min poll", expect: {alerts: [], next_poll: 300}}
+  # polling / scope
+  - {id: POLL-a, desc: "Saturday: market closed -> no poll, no alerts", set: {now: "2026-10-24T11:00:00-04:00"}, expect: {alerts: [], next_poll: null}}
+  - {id: POLL-b, desc: "08:00 NY premarket -> no poll", set: {now: "2026-10-20T08:00:00-04:00"}, expect: {alerts: [], next_poll: null}}
+  - {id: POLL-c, desc: "DST gap week: 14:35 Berlin = 09:35 NY -> polling", set: {now: "2026-10-26T14:35:00+01:00", time_stop: "2026-10-29T16:00:00-04:00", underlying.last.as_of: "2026-10-26T09:34:00-04:00", legs.0.bid.as_of: "2026-10-26T09:34:00-04:00", legs.0.ask.as_of: "2026-10-26T09:34:00-04:00", legs.1.bid.as_of: "2026-10-26T09:34:00-04:00", legs.1.ask.as_of: "2026-10-26T09:34:00-04:00", underlying.bars_5m: []}, expect: {alerts: [], next_poll: 300}}
+  - {id: POLL-d, desc: "expiry day 15:10 NY = last hour -> 1-min poll (and W04 exit)", set: {now: "2026-10-30T15:10:00-04:00", time_stop: "2026-10-30T15:30:00-04:00", hold_window.end: "2026-10-30T15:30:00-04:00", underlying.last.as_of: "2026-10-30T15:09:00-04:00", legs.0.bid.as_of: "2026-10-30T15:09:00-04:00", legs.0.ask.as_of: "2026-10-30T15:09:00-04:00", legs.1.bid.as_of: "2026-10-30T15:09:00-04:00", legs.1.ask.as_of: "2026-10-30T15:09:00-04:00", underlying.bars_5m: []}, expect: {alerts: [[W04_TIME, exit_signal]], next_poll: 60}}
+  - {id: SCOPE-a, desc: "approved_pending ticket is watched like a position", set: {target: {kind: ticket, id: tk-1, ticket_id: tk-1, status: approved_pending}, legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {alerts: [[W01_MARK_VS_STOP_TARGET, exit_signal]], next_poll: 60}}
+  - {id: SCOPE-b, desc: "vetoed ticket: no intraday alerts even at the stop", set: {target: {kind: ticket, id: tk-1, ticket_id: tk-1, status: vetoed}, legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {alerts: [], next_poll: null}}
+  - {id: SCOPE-c, desc: "rejected ticket after the close: one info shadow summary", set: {now: "2026-10-20T16:05:00-04:00", target: {kind: ticket, id: tk-1, ticket_id: tk-1, status: rejected}}, expect: {alerts: [[SHADOW_EOD, info]], next_poll: null}}
+  - {id: SCOPE-d, desc: "shadow summary deduped per day", set: {now: "2026-10-20T16:20:00-04:00", target: {kind: ticket, id: tk-1, ticket_id: tk-1, status: vetoed}}, state: {sent: {"SHADOW_EOD|tk-1|2026-10-20": "info"}}, expect: {alerts: [], next_poll: null}}
+  # spec 1.1.4: `approval_status` builds the target from a session record (session_fixtures.approved_record without a
+  # position, approval ap-1 set to that status, status_changed_at 12:40; `none` removes it) via
+  # watcher_reference.target_from_session at 2026-10-13 13:00 NY (inside ap-1's window); expect.target_status checks it.
+  - {id: SCOPE-e, desc: "revoked approval -> rejected ticket (1.1.4, fail closed): no intraday alerts even at the stop", approval_status: revoked, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: rejected, alerts: [], next_poll: null}}
+  - {id: SCOPE-f, desc: "revoked approval -> rejected ticket after the close: one info shadow summary", approval_status: revoked, set: {now: "2026-10-20T16:05:00-04:00"}, expect: {target_status: rejected, alerts: [[SHADOW_EOD, info]], next_poll: null}}
+  - {id: SCOPE-g, desc: "expired approval stays hypothetical (approved_pending, watched): exit_signal at the stop", approval_status: expired, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: approved_pending, alerts: [[W01_MARK_VS_STOP_TARGET, exit_signal]], next_poll: 60}}
+  # spec 1.1.5: `review_tamper` (session_fixtures.TAMPER_KINDS) makes ap-1's review fail INV-16; `idea_status` sets the
+  # idea's current_status; `approval_status` defaults to active; expect.target_approved checks the target's `approved`.
+  # Same session record and now as SCOPE-e..g.
+  - {id: SCOPE-h, desc: "stored PASS over VETO results (INV-16) with an active approval -> vetoed: no intraday alerts even at the stop", review_tamper: pass_over_veto, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: vetoed, alerts: [], next_poll: null}}
+  - {id: SCOPE-i, desc: "stored PASS over FLAG results (INV-16, optpipe tampered_pass) with an active approval -> vetoed (1.1.5; was a real approval): no intraday alerts even at the stop", review_tamper: pass_over_flag, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: vetoed, alerts: [], next_poll: null}}
+  - {id: SCOPE-j, desc: "stored PASS over FLAG results -> vetoed after the close: one info shadow summary", review_tamper: pass_over_flag, set: {now: "2026-10-20T16:05:00-04:00"}, expect: {target_status: vetoed, alerts: [[SHADOW_EOD, info]], next_poll: null}}
+  - {id: SCOPE-k, desc: "flag_rule_ids missing a flag (INV-16-FLAGS) under an active approval -> vetoed: no intraday alerts", review_tamper: flag_ids_mismatch, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: vetoed, alerts: [], next_poll: null}}
+  - {id: SCOPE-l, desc: "revoked approval with idea status proposed -> rejected (1.1.5; was proposed, unwatched): no intraday alerts even at the stop", approval_status: revoked, idea_status: proposed, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: rejected, alerts: [], next_poll: null}}
+  - {id: SCOPE-m, desc: "revoked approval with idea status proposed -> rejected after the close: one info shadow summary (1.1.5; was none)", approval_status: revoked, idea_status: proposed, set: {now: "2026-10-20T16:05:00-04:00"}, expect: {target_status: rejected, alerts: [[SHADOW_EOD, info]], next_poll: null}}
+  - {id: SCOPE-n, desc: "active in-window approval with idea status proposed -> stays proposed, NEVER really approved: not watched, no alerts", approval_status: active, idea_status: proposed, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: proposed, target_approved: false, alerts: [], next_poll: null}}
+  - {id: SCOPE-o, desc: "revoked approval with idea status executed -> keeps executed (terminal; watched by the position rules): no ticket alerts at the stop", approval_status: revoked, idea_status: executed, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: executed, target_approved: false, alerts: [], next_poll: null}}
+  - {id: SCOPE-p, desc: "revoked approval with idea status executed -> keeps executed after the close: no shadow summary", approval_status: revoked, idea_status: executed, set: {now: "2026-10-20T16:05:00-04:00"}, expect: {target_status: executed, alerts: [], next_poll: null}}
+  - {id: SCOPE-q, desc: "revoked approval with idea status simulated -> rejected (1.1.5; was simulated, unwatched): no intraday alerts even at the stop", approval_status: revoked, idea_status: simulated, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: rejected, alerts: [], next_poll: null}}
+  - {id: SCOPE-r, desc: "control: active in-window approval with idea status approved -> really approved, watched: exit_signal at the stop", approval_status: active, idea_status: approved, set: {legs.0.bid.value: 2.10, legs.0.ask.value: 2.30, legs.1.bid.value: 0.05, legs.1.ask.value: 0.15}, expect: {target_status: approved_pending, target_approved: true, alerts: [[W01_MARK_VS_STOP_TARGET, exit_signal]], next_poll: 60}}
+  # W01 mark: mid 7.20 - 3.00 = 4.20 in the fixture
+  - {id: W01-a, desc: "mark 2.30 within 10% of 2.15 stop distance (<= 2.315) -> warn, fast poll", set: {legs.0.bid.value: 3.80, legs.0.ask.value: 3.90, legs.1.bid.value: 1.50, legs.1.ask.value: 1.60}, expect: {alerts: [[W01_MARK_VS_STOP_TARGET, warn]], next_poll: 60}}
+  - {id: W01-b, desc: "mark exactly at stop 2.10 (3.60 - 1.50) -> exit_signal", set: {legs.0.bid.value: 3.55, legs.0.ask.value: 3.65, legs.1.bid.value: 1.50, legs.1.ask.value: 1.50}, expect: {alerts: [[W01_MARK_VS_STOP_TARGET, exit_signal]], next_poll: 60}}
+  - {id: W01-c, desc: "mark 7.05 beyond target 7.00 -> exit_signal", set: {legs.0.bid.value: 9.00, legs.0.ask.value: 9.10, legs.1.bid.value: 1.95, legs.1.ask.value: 2.05}, expect: {alerts: [[W01_MARK_VS_STOP_TARGET, exit_signal]]}}
+  - {id: W01-d, desc: "raw stop 2.124 rounds to tick 0.05 -> 2.10; mark 2.12 is NOT beyond (warn only)", set: {mark_levels.stop: 2.124, legs.0.bid.value: 3.62, legs.0.ask.value: 3.62, legs.1.bid.value: 1.50, legs.1.ask.value: 1.50}, expect: {alerts: [[W01_MARK_VS_STOP_TARGET, warn]]}}
+  - {id: W01-e, desc: "credit spread (sell 340C / buy 350C): cost to close 5.15 - 2.20 = 2.95 >= stop 2.90 -> exit_signal", set: {premium: short, mark_levels: {entry: 1.50, stop: 2.90, target: 0.30, tick_size: 0.05}, legs.0.side: sell, legs.1.side: buy, legs.0.bid.value: 5.10, legs.0.ask.value: 5.20, legs.1.bid.value: 2.15, legs.1.ask.value: 2.25}, expect: {alerts: [[W01_MARK_VS_STOP_TARGET, exit_signal]]}}
+  # dedupe / cooldown
+  - {id: DD-a, desc: "same warn already sent -> duplicate suppressed", set: {legs.0.bid.value: 3.80, legs.0.ask.value: 3.90, legs.1.bid.value: 1.50, legs.1.ask.value: 1.60}, state: {sent: {"W01_MARK_VS_STOP_TARGET|pos-1": "warn"}, last_at: {"W01_MARK_VS_STOP_TARGET|pos-1": "2026-10-20T09:40:00-04:00"}}, expect: {alerts: [], next_poll: 60}}
+  - {id: DD-b, desc: "escalation warn -> exit_signal bypasses 30-min cooldown (warn sent 10:50)", set: {legs.0.bid.value: 3.55, legs.0.ask.value: 3.65, legs.1.bid.value: 1.50, legs.1.ask.value: 1.50}, state: {sent: {"W01_MARK_VS_STOP_TARGET|pos-1": "warn"}, last_at: {"W01_MARK_VS_STOP_TARGET|pos-1": "2026-10-20T10:50:00-04:00"}}, expect: {alerts: [[W01_MARK_VS_STOP_TARGET, exit_signal]], state: {sent: {"W01_MARK_VS_STOP_TARGET|pos-1": "exit_signal"}}}}
+  - {id: DD-c, desc: "info -> warn escalation inside cooldown (info 10:45) is held back", set: {legs.0.iv.value: 0.31}, state: {sent: {"W03_IV_VS_ENTRY|pos-1": "info"}, last_at: {"W03_IV_VS_ENTRY|pos-1": "2026-10-20T10:45:00-04:00"}}, expect: {alerts: [], state: {sent: {"W03_IV_VS_ENTRY|pos-1": "info"}}}}
+  - {id: DD-d, desc: "same escalation after cooldown (info 10:30, now 11:00) is sent", set: {legs.0.iv.value: 0.31}, state: {sent: {"W03_IV_VS_ENTRY|pos-1": "info"}, last_at: {"W03_IV_VS_ENTRY|pos-1": "2026-10-20T10:30:00-04:00"}}, expect: {alerts: [[W03_IV_VS_ENTRY, warn]]}}
+  - {id: DD-e, desc: "de-escalation exit_signal -> warn: nothing", set: {legs.0.bid.value: 3.80, legs.0.ask.value: 3.90, legs.1.bid.value: 1.50, legs.1.ask.value: 1.60}, state: {sent: {"W01_MARK_VS_STOP_TARGET|pos-1": "exit_signal"}, last_at: {"W01_MARK_VS_STOP_TARGET|pos-1": "2026-10-20T09:40:00-04:00"}}, expect: {alerts: []}}
+  # W02 underlying
+  - {id: W02-a, desc: "intraday cross below stop 336 (prev 336.40 -> 335.90) -> warn", set: {underlying.prev_last: 336.40, underlying.last.value: 335.90, underlying.bars_5m: [{end: "2026-10-20T10:55:00-04:00", close: 336.30}], legs.0.bid.value: 3.40, legs.0.ask.value: 3.60, legs.1.bid.value: 0.40, legs.1.ask.value: 0.50}, expect: {alerts: [[W02_UNDERLYING_LEVELS, warn]]}}
+  - {id: W02-b, desc: "5-min bar closed 335.80 beyond stop -> exit_signal", set: {underlying.prev_last: 335.70, underlying.last.value: 335.60, underlying.bars_5m: [{end: "2026-10-20T10:55:00-04:00", close: 335.80}], legs.0.bid.value: 3.40, legs.0.ask.value: 3.60, legs.1.bid.value: 0.40, legs.1.ask.value: 0.50}, expect: {alerts: [[W02_UNDERLYING_LEVELS, exit_signal]]}}
+  - {id: W02-c, desc: "bar ending after now is not complete -> only the intraday warn", set: {underlying.prev_last: 336.40, underlying.last.value: 335.60, underlying.bars_5m: [{end: "2026-10-20T11:05:00-04:00", close: 335.80}], legs.0.bid.value: 3.40, legs.0.ask.value: 3.60, legs.1.bid.value: 0.40, legs.1.ask.value: 0.50}, expect: {alerts: [[W02_UNDERLYING_LEVELS, warn]]}}
+  - {id: W02-d, desc: "cross of breakeven 344.25 (344.60 -> 344.10) -> info", set: {underlying.prev_last: 344.60, underlying.last.value: 344.10}, expect: {alerts: [[W02_UNDERLYING_LEVELS, info]]}}
+  # W03 IV (leg-1 entry 0.25)
+  - {id: W03-a, desc: "IV 0.30 = +20% exactly -> warn", set: {legs.0.iv.value: 0.30}, expect: {alerts: [[W03_IV_VS_ENTRY, warn]]}}
+  - {id: W03-b, desc: "long premium IV 0.1625 = -35% -> exit_signal", set: {legs.0.iv.value: 0.1625}, expect: {alerts: [[W03_IV_VS_ENTRY, exit_signal]]}}
+  - {id: W03-c, desc: "short premium (credit 340/350 call spread) IV -40% -> warn only", set: {premium: short, mark_levels: {entry: 4.00, stop: 8.00, target: 1.00, tick_size: 0.05}, legs.0.side: sell, legs.1.side: buy, legs.0.iv.value: 0.15}, expect: {alerts: [[W03_IV_VS_ENTRY, warn]]}}
+  - {id: W03-d, desc: "no entry IV -> info UNKNOWN", set: {legs.1.entry_iv: null}, expect: {alerts: [[W03_IV_VS_ENTRY, info]]}}
+  # W04 time (time stop 10-27 -> time-stop DTE 3, warn at DTE <= 5)
+  - {id: W04-a, desc: "10-25 is Sunday; Fri 10-23 DTE 7 -> nothing; Mon 10-26 DTE 4 -> warn", set: {now: "2026-10-26T11:00:00-04:00", underlying.last.as_of: "2026-10-26T10:59:00-04:00", legs.0.bid.as_of: "2026-10-26T10:59:00-04:00", legs.0.ask.as_of: "2026-10-26T10:59:00-04:00", legs.1.bid.as_of: "2026-10-26T10:59:00-04:00", legs.1.ask.as_of: "2026-10-26T10:59:00-04:00", underlying.bars_5m: []}, expect: {alerts: [[W04_TIME, warn]], next_poll: 300}}
+  - {id: W04-b, desc: "time-stop date 09:59 -> warn only; 10:00 -> exit_signal", set: {now: "2026-10-27T10:00:00-04:00", underlying.last.as_of: "2026-10-27T09:59:00-04:00", legs.0.bid.as_of: "2026-10-27T09:59:00-04:00", legs.0.ask.as_of: "2026-10-27T09:59:00-04:00", legs.1.bid.as_of: "2026-10-27T09:59:00-04:00", legs.1.ask.as_of: "2026-10-27T09:59:00-04:00", underlying.bars_5m: []}, expect: {alerts: [[W04_TIME, exit_signal]]}}
+  - {id: W04-c, desc: "time-stop date 09:59 -> warn", set: {now: "2026-10-27T09:59:00-04:00", underlying.last.as_of: "2026-10-27T09:58:00-04:00", legs.0.bid.as_of: "2026-10-27T09:58:00-04:00", legs.0.ask.as_of: "2026-10-27T09:58:00-04:00", legs.1.bid.as_of: "2026-10-27T09:58:00-04:00", legs.1.ask.as_of: "2026-10-27T09:58:00-04:00", underlying.bars_5m: []}, expect: {alerts: [[W04_TIME, warn]]}}
+  - {id: W04-d, desc: "no time stop: expiry day 13:59 -> warn (DTE 0 <= 2)", set: {now: "2026-10-30T13:59:00-04:00", time_stop: null, hold_window.end: "2026-10-30T16:00:00-04:00", underlying.last.as_of: "2026-10-30T13:58:00-04:00", legs.0.bid.as_of: "2026-10-30T13:58:00-04:00", legs.0.ask.as_of: "2026-10-30T13:58:00-04:00", legs.1.bid.as_of: "2026-10-30T13:58:00-04:00", legs.1.ask.as_of: "2026-10-30T13:58:00-04:00", underlying.bars_5m: []}, expect: {alerts: [[W04_TIME, warn]], next_poll: 300}}
+  - {id: W04-e, desc: "no time stop: expiry day 14:00 -> exit_signal", set: {now: "2026-10-30T14:00:00-04:00", time_stop: null, hold_window.end: "2026-10-30T16:00:00-04:00", underlying.last.as_of: "2026-10-30T13:59:00-04:00", legs.0.bid.as_of: "2026-10-30T13:59:00-04:00", legs.0.ask.as_of: "2026-10-30T13:59:00-04:00", legs.1.bid.as_of: "2026-10-30T13:59:00-04:00", legs.1.ask.as_of: "2026-10-30T13:59:00-04:00", underlying.bars_5m: []}, expect: {alerts: [[W04_TIME, exit_signal]]}}
+  - {id: W04-f, desc: "time stop passed (10-27) but still open on 10-28 -> exit_signal persists", set: {now: "2026-10-28T11:00:00-04:00", underlying.last.as_of: "2026-10-28T10:59:00-04:00", legs.0.bid.as_of: "2026-10-28T10:59:00-04:00", legs.0.ask.as_of: "2026-10-28T10:59:00-04:00", legs.1.bid.as_of: "2026-10-28T10:59:00-04:00", legs.1.ask.as_of: "2026-10-28T10:59:00-04:00", underlying.bars_5m: []}, expect: {alerts: [[W04_TIME, exit_signal]]}}
+  # W05 short 350C (S=345 OTM in fixture)
+  - {id: W05-a, desc: "short 350C ITM (S 352) with DTE 10 -> nothing from W05; extrinsic 3.00-2.00=1.00", set: {mark_levels: {entry: 4.25, stop: 2.10, target: 20.00, tick_size: 0.05}, underlying.last.value: 352.00, underlying.prev_last: 352.10, underlying.bars_5m: [{end: "2026-10-20T10:55:00-04:00", close: 352.00}], legs.0.bid.value: 13.00, legs.0.ask.value: 13.20, legs.1.bid.value: 2.95, legs.1.ask.value: 3.05}, expect: {alerts: []}}
+  - {id: W05-b, desc: "ITM and DTE 4 (10-26) -> warn", set: {mark_levels: {entry: 4.25, stop: 2.10, target: 20.00, tick_size: 0.05}, now: "2026-10-26T11:00:00-04:00", time_stop: "2026-10-29T16:00:00-04:00", hold_window.end: "2026-10-29T16:00:00-04:00", underlying.last: {value: 352.00, status: ok, as_of: "2026-10-26T10:59:00-04:00"}, underlying.prev_last: 352.10, underlying.bars_5m: [], legs.0.bid: {value: 12.20, status: ok, as_of: "2026-10-26T10:59:00-04:00"}, legs.0.ask: {value: 12.40, status: ok, as_of: "2026-10-26T10:59:00-04:00"}, legs.1.bid: {value: 2.40, status: ok, as_of: "2026-10-26T10:59:00-04:00"}, legs.1.ask: {value: 2.50, status: ok, as_of: "2026-10-26T10:59:00-04:00"}}, expect: {alerts: [[W05_SHORT_LEG_ASSIGNMENT, warn]]}}
+  - {id: W05-c, desc: "ITM extrinsic 2.03-2.00 = 0.03 < 0.05 -> exit_signal", set: {mark_levels: {entry: 4.25, stop: 2.10, target: 20.00, tick_size: 0.05}, underlying.last.value: 352.00, underlying.prev_last: 352.10, underlying.bars_5m: [{end: "2026-10-20T10:55:00-04:00", close: 352.00}], legs.0.bid.value: 12.00, legs.0.ask.value: 12.10, legs.1.bid.value: 2.02, legs.1.ask.value: 2.04}, expect: {alerts: [[W05_SHORT_LEG_ASSIGNMENT, exit_signal]]}}
+  - {id: W05-d, desc: "day before ex-div (ex 10-21), short call ITM, extrinsic 1.00 < dividend 1.50 -> exit_signal", set: {mark_levels: {entry: 4.25, stop: 2.10, target: 20.00, tick_size: 0.05}, ex_dividend: {date: "2026-10-21", amount: 1.50}, underlying.last.value: 352.00, underlying.prev_last: 352.10, underlying.bars_5m: [{end: "2026-10-20T10:55:00-04:00", close: 352.00}], legs.0.bid.value: 13.00, legs.0.ask.value: 13.20, legs.1.bid.value: 2.95, legs.1.ask.value: 3.05}, expect: {alerts: [[W05_SHORT_LEG_ASSIGNMENT, exit_signal]]}}
+  # W06 data health
+  - {id: W06-a, desc: "leg-2 bid 16 min old -> warn", set: {legs.1.bid.as_of: "2026-10-20T10:44:00-04:00"}, expect: {alerts: [[W06_DATA_HEALTH, warn]]}}
+  - {id: W06-b, desc: "3rd consecutive wide poll (leg-2 2.00/3.10 = 43%) -> warn; 2nd -> nothing", set: {legs.1.bid.value: 2.00}, state: {wide_streak: {leg-2: 2}}, expect: {alerts: [[W06_DATA_HEALTH, warn]], state: {wide_streak: {leg-2: 3}}}}
+  - {id: W06-c, desc: "2nd consecutive wide poll -> nothing yet", set: {legs.1.bid.value: 2.00}, state: {wide_streak: {leg-2: 1}}, expect: {alerts: [], state: {wide_streak: {leg-2: 2}}}}
+  - {id: W06-d, desc: "stale underlying (30 min old) suppresses the W01 exit_signal (mark at stop) but W06 warns", set: {legs.0.bid.value: 3.55, legs.0.ask.value: 3.65, legs.1.bid.value: 1.50, legs.1.ask.value: 1.50, underlying.last.as_of: "2026-10-20T10:30:00-04:00"}, expect: {alerts: [[W06_DATA_HEALTH, warn]], state: {sent: {"W06_DATA_HEALTH|pos-1": "warn"}}}}
+  # W07 events
+  - {id: W07-a, desc: "Mon 10-26: CPI Tue 10-27 08:30 inside hold window -> info", append: {events: [{event_id: ev-cpi, kind: CPI, underlying: null, at: "2026-10-27T08:30:00-04:00"}]}, set: {now: "2026-10-26T11:00:00-04:00", time_stop: "2026-10-29T16:00:00-04:00", hold_window.end: "2026-10-29T16:00:00-04:00", underlying.last.as_of: "2026-10-26T10:59:00-04:00", legs.0.bid.as_of: "2026-10-26T10:59:00-04:00", legs.0.ask.as_of: "2026-10-26T10:59:00-04:00", legs.1.bid.as_of: "2026-10-26T10:59:00-04:00", legs.1.ask.as_of: "2026-10-26T10:59:00-04:00", underlying.bars_5m: []}, expect: {alerts: [[W07_EVENT_EVE, info]]}}
+  - {id: W07-b, desc: "Fri 10-23: JPM earnings Mon 10-26 (prev trading day is Fri) -> info", append: {events: [{event_id: ev-jpm-earn, kind: earnings, underlying: JPM, at: "2026-10-26T07:00:00-04:00"}]}, set: {now: "2026-10-23T11:00:00-04:00", underlying.last.as_of: "2026-10-23T10:59:00-04:00", legs.0.bid.as_of: "2026-10-23T10:59:00-04:00", legs.0.ask.as_of: "2026-10-23T10:59:00-04:00", legs.1.bid.as_of: "2026-10-23T10:59:00-04:00", legs.1.ask.as_of: "2026-10-23T10:59:00-04:00", underlying.bars_5m: []}, expect: {alerts: [[W07_EVENT_EVE, info]]}}
+  - {id: W07-c, desc: "other underlying's earnings eve (WFC 10-21) and a PPI on 10-21 before the hold window starts (10-22) -> nothing", append: {events: [{event_id: ev-wfc, kind: earnings, underlying: WFC, at: "2026-10-21T07:00:00-04:00"}, {event_id: ev-ppi, kind: PPI, underlying: null, at: "2026-10-21T08:30:00-04:00"}]}, set: {target: {kind: ticket, id: tk-1, ticket_id: tk-1, status: approved_pending}, hold_window.start: "2026-10-22T09:30:00-04:00"}, expect: {alerts: []}}
+  - {id: W07-d, desc: "same PPI with the window starting 10-14 -> info", append: {events: [{event_id: ev-ppi, kind: PPI, underlying: null, at: "2026-10-21T08:30:00-04:00"}]}, expect: {alerts: [[W07_EVENT_EVE, info]]}}

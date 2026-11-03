@@ -1,0 +1,1945 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "market_snapshot.schema.json",
+  "title": "market_snapshot (spec 1.1.7 and 1.1.8): Oodle's pre-open market-data pack, one ticker_snapshot per ticker per day plus a pack_index",
+  "description": "PAPER ONLY. Read-only market data for the app (the app never fetches; Sol R6). Rules MD-01..MD-15 in market_data_rules.yaml (YAML wins over market_data_rules.md); the JSON Schema here is MD-03, the rest is checked by validate_market_snapshot.py. No personal or account fields: additionalProperties false everywhere. Spec 1.1.8: schema_version 1.1.8 documents use the *V118 defs and CatalystLog (catalysts.json); 1.1.7 documents use the unchanged 1.1.7 defs and validate exactly as before.",
+  "oneOf": [
+    {
+      "$ref": "#/$defs/TickerSnapshot"
+    },
+    {
+      "$ref": "#/$defs/PackIndex"
+    },
+    {
+      "$ref": "#/$defs/TickerSnapshotV118"
+    },
+    {
+      "$ref": "#/$defs/PackIndexV118"
+    },
+    {
+      "$ref": "#/$defs/CatalystLog"
+    }
+  ],
+  "x-rules": "market_data_rules.yaml",
+  "$defs": {
+    "TickerSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "pack_id",
+        "pack_built_at",
+        "data_label",
+        "ticker",
+        "watchlist",
+        "last_price",
+        "option_liquidity",
+        "iv",
+        "iv_rank",
+        "implied_move",
+        "earnings_date",
+        "earnings_time"
+      ],
+      "properties": {
+        "schema_version": {
+          "enum": [
+            "1.1.7"
+          ]
+        },
+        "pack_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "pack_built_at": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset; naive = MD-04-TIME-NAIVE"
+        },
+        "data_label": {
+          "enum": [
+            "EXAMPLE",
+            "TEST",
+            "MARKET"
+          ],
+          "description": "EXAMPLE / TEST data is never market data"
+        },
+        "kind": {
+          "const": "ticker_snapshot"
+        },
+        "ticker": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9.-]{0,9}$",
+          "description": "identity, not a sourced value; file name = <ticker>.json"
+        },
+        "watchlist": {
+          "enum": [
+            "eugene",
+            "street",
+            "fixture"
+          ]
+        },
+        "candidate_status": {
+          "enum": [
+            "idea",
+            "candidate"
+          ],
+          "default": "idea",
+          "description": "absent = idea. street must be idea (MD-10): a street ticker is an idea source only and becomes a candidate only by passing R01-R13 in a session record"
+        },
+        "last_price": {
+          "$ref": "#/$defs/PriceField"
+        },
+        "option_liquidity": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "contracts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Contract"
+              },
+              "maxItems": 50
+            },
+            "summary": {
+              "$ref": "#/$defs/LiquiditySummary"
+            }
+          }
+        },
+        "iv": {
+          "$ref": "#/$defs/NonNegField"
+        },
+        "iv_rank": {
+          "$ref": "#/$defs/IvRankField"
+        },
+        "implied_move": {
+          "$ref": "#/$defs/NonNegField"
+        },
+        "earnings_date": {
+          "$ref": "#/$defs/EarningsDateField"
+        },
+        "earnings_time": {
+          "$ref": "#/$defs/EarningsTimeField"
+        }
+      }
+    },
+    "PackIndex": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "pack_id",
+        "pack_built_at",
+        "data_label",
+        "date",
+        "tickers"
+      ],
+      "properties": {
+        "schema_version": {
+          "enum": [
+            "1.1.7"
+          ]
+        },
+        "pack_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "pack_built_at": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset; naive = MD-04-TIME-NAIVE"
+        },
+        "data_label": {
+          "enum": [
+            "EXAMPLE",
+            "TEST",
+            "MARKET"
+          ],
+          "description": "EXAMPLE / TEST data is never market data"
+        },
+        "kind": {
+          "const": "pack_index"
+        },
+        "date": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "= the date dir name = NY date of pack_built_at (MD-01-DATE)"
+        },
+        "tickers": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ticker",
+              "file",
+              "watchlist"
+            ],
+            "properties": {
+              "ticker": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9.-]{0,9}$"
+              },
+              "file": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9.-]{0,9}\\.json$"
+              },
+              "watchlist": {
+                "enum": [
+                  "eugene",
+                  "street",
+                  "fixture"
+                ]
+              },
+              "candidate_status": {
+                "enum": [
+                  "idea",
+                  "candidate"
+                ],
+                "default": "idea"
+              }
+            }
+          }
+        },
+        "sources_terms": {
+          "type": "array",
+          "maxItems": 50,
+          "description": "optional: every source used and its terms basis (MD-12)",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "domain",
+              "basis",
+              "automated"
+            ],
+            "properties": {
+              "source": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$"
+              },
+              "domain": {
+                "type": "string",
+                "pattern": "^[a-z0-9.-]{1,100}$"
+              },
+              "basis": {
+                "enum": [
+                  "robots_and_terms_allow",
+                  "public_government_data",
+                  "issuer_public_release",
+                  "manual_read_once"
+                ]
+              },
+              "automated": {
+                "type": "boolean",
+                "description": "true = read by Oodle's script; false = read once by hand"
+              },
+              "terms_url": {
+                "type": "string",
+                "pattern": "^https?://[^\\s@]+$",
+                "maxLength": 300
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 300
+              }
+            }
+          }
+        }
+      }
+    },
+    "Contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_id",
+        "right",
+        "strike",
+        "expiry",
+        "open_interest",
+        "volume",
+        "bid",
+        "ask",
+        "spread"
+      ],
+      "properties": {
+        "contract_id": {
+          "type": "string",
+          "pattern": "^[A-Z0-9][A-Z0-9 ._-]{0,31}$"
+        },
+        "right": {
+          "enum": [
+            "call",
+            "put"
+          ]
+        },
+        "strike": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "expiry": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "open_interest": {
+          "$ref": "#/$defs/CountField"
+        },
+        "volume": {
+          "$ref": "#/$defs/CountField"
+        },
+        "bid": {
+          "$ref": "#/$defs/NonNegField"
+        },
+        "ask": {
+          "$ref": "#/$defs/NonNegField"
+        },
+        "spread": {
+          "$ref": "#/$defs/NonNegField"
+        },
+        "spread_pct_of_mid": {
+          "$ref": "#/$defs/NonNegField"
+        }
+      }
+    },
+    "LiquiditySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "open_interest",
+        "volume",
+        "spread_pct_of_mid"
+      ],
+      "properties": {
+        "expiry": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "open_interest": {
+          "$ref": "#/$defs/CountField"
+        },
+        "volume": {
+          "$ref": "#/$defs/CountField"
+        },
+        "spread_pct_of_mid": {
+          "$ref": "#/$defs/NonNegField"
+        }
+      }
+    },
+    "SourceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "url"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://[^\\s@/]+(/[^\\s@]*)?$",
+          "maxLength": 300
+        },
+        "as_of": {
+          "type": "string",
+          "maxLength": 40
+        }
+      }
+    },
+    "PriceField": {
+      "type": "object",
+      "description": "price in USD (> 0)",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "as_of",
+        "delayed",
+        "status"
+      ],
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null or absent = UNKNOWN (MD-06)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$",
+          "description": "source id (listed in index.json sources_terms when present, MD-12); null only for UNKNOWN"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://[^\\s@]+$",
+          "maxLength": 300
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset: the instant the value describes (for a delayed quote, the delayed quote's own time). Naive = MD-04-TIME-NAIVE"
+        },
+        "delayed": {
+          "type": "boolean"
+        },
+        "delay_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "required iff delayed (MD-08)"
+        },
+        "status": {
+          "enum": [
+            "OK",
+            "STALE",
+            "UNKNOWN",
+            "UNCONFIRMED"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "NonNegField": {
+      "type": "object",
+      "description": "non-negative number (IV and implied move as fractions: 0.25 = 25 %)",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "as_of",
+        "delayed",
+        "status"
+      ],
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null or absent = UNKNOWN (MD-06)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$",
+          "description": "source id (listed in index.json sources_terms when present, MD-12); null only for UNKNOWN"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://[^\\s@]+$",
+          "maxLength": 300
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset: the instant the value describes (for a delayed quote, the delayed quote's own time). Naive = MD-04-TIME-NAIVE"
+        },
+        "delayed": {
+          "type": "boolean"
+        },
+        "delay_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "required iff delayed (MD-08)"
+        },
+        "status": {
+          "enum": [
+            "OK",
+            "STALE",
+            "UNKNOWN",
+            "UNCONFIRMED"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "CountField": {
+      "type": "object",
+      "description": "count (contracts)",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "as_of",
+        "delayed",
+        "status"
+      ],
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null or absent = UNKNOWN (MD-06)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$",
+          "description": "source id (listed in index.json sources_terms when present, MD-12); null only for UNKNOWN"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://[^\\s@]+$",
+          "maxLength": 300
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset: the instant the value describes (for a delayed quote, the delayed quote's own time). Naive = MD-04-TIME-NAIVE"
+        },
+        "delayed": {
+          "type": "boolean"
+        },
+        "delay_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "required iff delayed (MD-08)"
+        },
+        "status": {
+          "enum": [
+            "OK",
+            "STALE",
+            "UNKNOWN",
+            "UNCONFIRMED"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "IvRankField": {
+      "type": "object",
+      "description": "IV rank 0-100; UNKNOWN is normal (no free source, Oodle 2026-11-03)",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "as_of",
+        "delayed",
+        "status"
+      ],
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null or absent = UNKNOWN (MD-06)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$",
+          "description": "source id (listed in index.json sources_terms when present, MD-12); null only for UNKNOWN"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://[^\\s@]+$",
+          "maxLength": 300
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset: the instant the value describes (for a delayed quote, the delayed quote's own time). Naive = MD-04-TIME-NAIVE"
+        },
+        "delayed": {
+          "type": "boolean"
+        },
+        "delay_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "required iff delayed (MD-08)"
+        },
+        "status": {
+          "enum": [
+            "OK",
+            "STALE",
+            "UNKNOWN",
+            "UNCONFIRMED"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "EarningsDateField": {
+      "type": "object",
+      "description": "next earnings date (YYYY-MM-DD, NY)",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "as_of",
+        "delayed",
+        "status"
+      ],
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null or absent = UNKNOWN (MD-06)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$",
+          "description": "source id (listed in index.json sources_terms when present, MD-12); null only for UNKNOWN"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://[^\\s@]+$",
+          "maxLength": 300
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset: the instant the value describes (for a delayed quote, the delayed quote's own time). Naive = MD-04-TIME-NAIVE"
+        },
+        "delayed": {
+          "type": "boolean"
+        },
+        "delay_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "required iff delayed (MD-08)"
+        },
+        "status": {
+          "enum": [
+            "OK",
+            "STALE",
+            "UNKNOWN",
+            "UNCONFIRMED"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceRef"
+          },
+          "maxItems": 10,
+          "description": "independent sources; OK needs >= 2 distinct registrable domains (MD-07)"
+        }
+      }
+    },
+    "EarningsTimeField": {
+      "type": "object",
+      "description": "BMO / AMC; unknown or null = UNKNOWN",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "as_of",
+        "delayed",
+        "status"
+      ],
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "enum": [
+                "BMO",
+                "AMC",
+                "unknown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null or absent = UNKNOWN (MD-06)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$",
+          "description": "source id (listed in index.json sources_terms when present, MD-12); null only for UNKNOWN"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://[^\\s@]+$",
+          "maxLength": 300
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset: the instant the value describes (for a delayed quote, the delayed quote's own time). Naive = MD-04-TIME-NAIVE"
+        },
+        "delayed": {
+          "type": "boolean"
+        },
+        "delay_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "required iff delayed (MD-08)"
+        },
+        "status": {
+          "enum": [
+            "OK",
+            "STALE",
+            "UNKNOWN",
+            "UNCONFIRMED"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceRef"
+          },
+          "maxItems": 10,
+          "description": "independent sources; OK needs >= 2 distinct registrable domains (MD-07)"
+        }
+      }
+    },
+    "PriceFieldV118": {
+      "type": "object",
+      "description": "price in USD (> 0) (1.1.8: optional as_of_basis, MD-13)",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "as_of",
+        "delayed",
+        "status"
+      ],
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null or absent = UNKNOWN (MD-06)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$",
+          "description": "source id (listed in index.json sources_terms when present, MD-12); null only for UNKNOWN"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://[^\\s@]+$",
+          "maxLength": 300
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset: the instant the value describes (for a delayed quote, the delayed quote's own time). Naive = MD-04-TIME-NAIVE"
+        },
+        "as_of_basis": {
+          "enum": [
+            "quote_time",
+            "last_trade",
+            "fetch_minus_delay",
+            "published"
+          ],
+          "description": "1.1.8 (MD-13): what as_of measures. quote_time = the quote's own timestamp; last_trade = the time of the last trade (accepted as a conservative fallback when the source shows no quote time: a last-trade time is never newer than the quote); fetch_minus_delay = fetch time minus the source's declared delay (only with delayed true, MD-13-DELAY); published = a publication time (news, releases, calendars). Required for price and option-chain fields that carry a value (MD-13-MISSING)."
+        },
+        "delayed": {
+          "type": "boolean"
+        },
+        "delay_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "required iff delayed (MD-08)"
+        },
+        "status": {
+          "enum": [
+            "OK",
+            "STALE",
+            "UNKNOWN",
+            "UNCONFIRMED"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "NonNegFieldV118": {
+      "type": "object",
+      "description": "non-negative number (IV and implied move as fractions: 0.25 = 25 %) (1.1.8: optional as_of_basis, MD-13)",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "as_of",
+        "delayed",
+        "status"
+      ],
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null or absent = UNKNOWN (MD-06)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$",
+          "description": "source id (listed in index.json sources_terms when present, MD-12); null only for UNKNOWN"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://[^\\s@]+$",
+          "maxLength": 300
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset: the instant the value describes (for a delayed quote, the delayed quote's own time). Naive = MD-04-TIME-NAIVE"
+        },
+        "as_of_basis": {
+          "enum": [
+            "quote_time",
+            "last_trade",
+            "fetch_minus_delay",
+            "published"
+          ],
+          "description": "1.1.8 (MD-13): what as_of measures. quote_time = the quote's own timestamp; last_trade = the time of the last trade (accepted as a conservative fallback when the source shows no quote time: a last-trade time is never newer than the quote); fetch_minus_delay = fetch time minus the source's declared delay (only with delayed true, MD-13-DELAY); published = a publication time (news, releases, calendars). Required for price and option-chain fields that carry a value (MD-13-MISSING)."
+        },
+        "delayed": {
+          "type": "boolean"
+        },
+        "delay_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "required iff delayed (MD-08)"
+        },
+        "status": {
+          "enum": [
+            "OK",
+            "STALE",
+            "UNKNOWN",
+            "UNCONFIRMED"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "CountFieldV118": {
+      "type": "object",
+      "description": "count (contracts) (1.1.8: optional as_of_basis, MD-13)",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "as_of",
+        "delayed",
+        "status"
+      ],
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null or absent = UNKNOWN (MD-06)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$",
+          "description": "source id (listed in index.json sources_terms when present, MD-12); null only for UNKNOWN"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://[^\\s@]+$",
+          "maxLength": 300
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset: the instant the value describes (for a delayed quote, the delayed quote's own time). Naive = MD-04-TIME-NAIVE"
+        },
+        "as_of_basis": {
+          "enum": [
+            "quote_time",
+            "last_trade",
+            "fetch_minus_delay",
+            "published"
+          ],
+          "description": "1.1.8 (MD-13): what as_of measures. quote_time = the quote's own timestamp; last_trade = the time of the last trade (accepted as a conservative fallback when the source shows no quote time: a last-trade time is never newer than the quote); fetch_minus_delay = fetch time minus the source's declared delay (only with delayed true, MD-13-DELAY); published = a publication time (news, releases, calendars). Required for price and option-chain fields that carry a value (MD-13-MISSING)."
+        },
+        "delayed": {
+          "type": "boolean"
+        },
+        "delay_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "required iff delayed (MD-08)"
+        },
+        "status": {
+          "enum": [
+            "OK",
+            "STALE",
+            "UNKNOWN",
+            "UNCONFIRMED"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "IvRankFieldV118": {
+      "type": "object",
+      "description": "IV rank 0-100; UNKNOWN is normal (no free source, Oodle 2026-11-03) (1.1.8: optional as_of_basis, MD-13)",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "as_of",
+        "delayed",
+        "status"
+      ],
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 100
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null or absent = UNKNOWN (MD-06)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$",
+          "description": "source id (listed in index.json sources_terms when present, MD-12); null only for UNKNOWN"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://[^\\s@]+$",
+          "maxLength": 300
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset: the instant the value describes (for a delayed quote, the delayed quote's own time). Naive = MD-04-TIME-NAIVE"
+        },
+        "as_of_basis": {
+          "enum": [
+            "quote_time",
+            "last_trade",
+            "fetch_minus_delay",
+            "published"
+          ],
+          "description": "1.1.8 (MD-13): what as_of measures. quote_time = the quote's own timestamp; last_trade = the time of the last trade (accepted as a conservative fallback when the source shows no quote time: a last-trade time is never newer than the quote); fetch_minus_delay = fetch time minus the source's declared delay (only with delayed true, MD-13-DELAY); published = a publication time (news, releases, calendars). Required for price and option-chain fields that carry a value (MD-13-MISSING)."
+        },
+        "delayed": {
+          "type": "boolean"
+        },
+        "delay_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "required iff delayed (MD-08)"
+        },
+        "status": {
+          "enum": [
+            "OK",
+            "STALE",
+            "UNKNOWN",
+            "UNCONFIRMED"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        }
+      }
+    },
+    "EarningsDateFieldV118": {
+      "type": "object",
+      "description": "next earnings date (YYYY-MM-DD, NY) (1.1.8: optional as_of_basis, MD-13)",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "as_of",
+        "delayed",
+        "status"
+      ],
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null or absent = UNKNOWN (MD-06)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$",
+          "description": "source id (listed in index.json sources_terms when present, MD-12); null only for UNKNOWN"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://[^\\s@]+$",
+          "maxLength": 300
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset: the instant the value describes (for a delayed quote, the delayed quote's own time). Naive = MD-04-TIME-NAIVE"
+        },
+        "as_of_basis": {
+          "enum": [
+            "quote_time",
+            "last_trade",
+            "fetch_minus_delay",
+            "published"
+          ],
+          "description": "1.1.8 (MD-13): what as_of measures. quote_time = the quote's own timestamp; last_trade = the time of the last trade (accepted as a conservative fallback when the source shows no quote time: a last-trade time is never newer than the quote); fetch_minus_delay = fetch time minus the source's declared delay (only with delayed true, MD-13-DELAY); published = a publication time (news, releases, calendars). Required for price and option-chain fields that carry a value (MD-13-MISSING)."
+        },
+        "delayed": {
+          "type": "boolean"
+        },
+        "delay_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "required iff delayed (MD-08)"
+        },
+        "status": {
+          "enum": [
+            "OK",
+            "STALE",
+            "UNKNOWN",
+            "UNCONFIRMED"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceRefV118"
+          },
+          "maxItems": 10,
+          "description": "independent sources; OK needs >= 2 sources whose (origin, origin_entity) differ (MD-07, 1.1.8: by origin, not by domain)"
+        }
+      }
+    },
+    "EarningsTimeFieldV118": {
+      "type": "object",
+      "description": "BMO / AMC; unknown or null = UNKNOWN (1.1.8: optional as_of_basis, MD-13)",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "as_of",
+        "delayed",
+        "status"
+      ],
+      "properties": {
+        "value": {
+          "anyOf": [
+            {
+              "enum": [
+                "BMO",
+                "AMC",
+                "unknown"
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null or absent = UNKNOWN (MD-06)"
+        },
+        "source": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$",
+          "description": "source id (listed in index.json sources_terms when present, MD-12); null only for UNKNOWN"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://[^\\s@]+$",
+          "maxLength": 300
+        },
+        "as_of": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset: the instant the value describes (for a delayed quote, the delayed quote's own time). Naive = MD-04-TIME-NAIVE"
+        },
+        "as_of_basis": {
+          "enum": [
+            "quote_time",
+            "last_trade",
+            "fetch_minus_delay",
+            "published"
+          ],
+          "description": "1.1.8 (MD-13): what as_of measures. quote_time = the quote's own timestamp; last_trade = the time of the last trade (accepted as a conservative fallback when the source shows no quote time: a last-trade time is never newer than the quote); fetch_minus_delay = fetch time minus the source's declared delay (only with delayed true, MD-13-DELAY); published = a publication time (news, releases, calendars). Required for price and option-chain fields that carry a value (MD-13-MISSING)."
+        },
+        "delayed": {
+          "type": "boolean"
+        },
+        "delay_minutes": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1440,
+          "description": "required iff delayed (MD-08)"
+        },
+        "status": {
+          "enum": [
+            "OK",
+            "STALE",
+            "UNKNOWN",
+            "UNCONFIRMED"
+          ]
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceRefV118"
+          },
+          "maxItems": 10,
+          "description": "independent sources; OK needs >= 2 sources whose (origin, origin_entity) differ (MD-07, 1.1.8: by origin, not by domain)"
+        }
+      }
+    },
+    "SourceRefV118": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "url",
+        "origin",
+        "origin_entity"
+      ],
+      "properties": {
+        "source": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$"
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^https?://[^\\s@/]+(/[^\\s@]*)?$",
+          "maxLength": 300
+        },
+        "as_of": {
+          "type": "string",
+          "maxLength": 40
+        },
+        "origin": {
+          "enum": [
+            "issuer",
+            "exchange",
+            "broker",
+            "data_vendor",
+            "news",
+            "other"
+          ]
+        },
+        "origin_entity": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._&:'-]{0,79}$",
+          "description": "the originating entity (issuer: its ticker; others: a name, e.g. Nasdaq, Zacks); compared case-insensitively"
+        }
+      },
+      "description": "1.1.8 source reference: origin = who originates the fact; origin_entity = which one (for origin issuer: the ticker symbol). Two references with the same (origin, origin_entity) are ONE source (MD-07); an issuer release on its IR site, GlobeNewswire, PR Newswire, Business Wire or gcs-web.com is origin issuer (MD-07-ORIGIN)."
+    },
+    "ContractV118": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_id",
+        "right",
+        "strike",
+        "expiry",
+        "open_interest",
+        "volume",
+        "bid",
+        "ask",
+        "spread"
+      ],
+      "properties": {
+        "contract_id": {
+          "type": "string",
+          "pattern": "^[A-Z0-9][A-Z0-9 ._-]{0,31}$"
+        },
+        "right": {
+          "enum": [
+            "call",
+            "put"
+          ]
+        },
+        "strike": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "expiry": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "open_interest": {
+          "$ref": "#/$defs/CountFieldV118"
+        },
+        "volume": {
+          "$ref": "#/$defs/CountFieldV118"
+        },
+        "bid": {
+          "$ref": "#/$defs/NonNegFieldV118"
+        },
+        "ask": {
+          "$ref": "#/$defs/NonNegFieldV118"
+        },
+        "spread": {
+          "$ref": "#/$defs/NonNegFieldV118"
+        },
+        "spread_pct_of_mid": {
+          "$ref": "#/$defs/NonNegFieldV118"
+        }
+      }
+    },
+    "LiquiditySummaryV118": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "open_interest",
+        "volume",
+        "spread_pct_of_mid"
+      ],
+      "properties": {
+        "expiry": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+        },
+        "open_interest": {
+          "$ref": "#/$defs/CountFieldV118"
+        },
+        "volume": {
+          "$ref": "#/$defs/CountFieldV118"
+        },
+        "spread_pct_of_mid": {
+          "$ref": "#/$defs/NonNegFieldV118"
+        }
+      }
+    },
+    "TickerSnapshotV118": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "pack_id",
+        "pack_built_at",
+        "data_label",
+        "ticker",
+        "watchlist",
+        "last_price",
+        "option_liquidity",
+        "iv",
+        "iv_rank",
+        "implied_move",
+        "earnings_date",
+        "earnings_time"
+      ],
+      "properties": {
+        "schema_version": {
+          "enum": [
+            "1.1.8"
+          ]
+        },
+        "pack_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "pack_built_at": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset; naive = MD-04-TIME-NAIVE"
+        },
+        "data_label": {
+          "enum": [
+            "EXAMPLE",
+            "TEST",
+            "MARKET"
+          ],
+          "description": "EXAMPLE / TEST data is never market data"
+        },
+        "kind": {
+          "const": "ticker_snapshot"
+        },
+        "ticker": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9.-]{0,9}$",
+          "description": "identity, not a sourced value; file name = <ticker>.json"
+        },
+        "watchlist": {
+          "enum": [
+            "eugene",
+            "street",
+            "fixture"
+          ]
+        },
+        "candidate_status": {
+          "enum": [
+            "idea",
+            "candidate"
+          ],
+          "default": "idea",
+          "description": "absent = idea. street must be idea (MD-10): a street ticker is an idea source only and becomes a candidate only by passing R01-R13 in a session record"
+        },
+        "last_price": {
+          "$ref": "#/$defs/PriceFieldV118"
+        },
+        "option_liquidity": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "contracts": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/ContractV118"
+              },
+              "maxItems": 50
+            },
+            "summary": {
+              "$ref": "#/$defs/LiquiditySummaryV118"
+            }
+          }
+        },
+        "iv": {
+          "$ref": "#/$defs/NonNegFieldV118"
+        },
+        "iv_rank": {
+          "$ref": "#/$defs/IvRankFieldV118"
+        },
+        "implied_move": {
+          "$ref": "#/$defs/NonNegFieldV118"
+        },
+        "earnings_date": {
+          "$ref": "#/$defs/EarningsDateFieldV118"
+        },
+        "earnings_time": {
+          "$ref": "#/$defs/EarningsTimeFieldV118"
+        }
+      },
+      "description": "spec 1.1.8 ticker_snapshot: as TickerSnapshot plus as_of_basis (MD-13) and origin-tagged earnings sources (MD-07)"
+    },
+    "PackIndexV118": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version",
+        "kind",
+        "pack_id",
+        "pack_built_at",
+        "data_label",
+        "date",
+        "tickers"
+      ],
+      "properties": {
+        "schema_version": {
+          "enum": [
+            "1.1.8"
+          ]
+        },
+        "pack_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "pack_built_at": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset; naive = MD-04-TIME-NAIVE"
+        },
+        "data_label": {
+          "enum": [
+            "EXAMPLE",
+            "TEST",
+            "MARKET"
+          ],
+          "description": "EXAMPLE / TEST data is never market data"
+        },
+        "kind": {
+          "const": "pack_index"
+        },
+        "date": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "= the date dir name = NY date of pack_built_at (MD-01-DATE)"
+        },
+        "tickers": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "ticker",
+              "file",
+              "watchlist"
+            ],
+            "properties": {
+              "ticker": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9.-]{0,9}$"
+              },
+              "file": {
+                "type": "string",
+                "pattern": "^[A-Z][A-Z0-9.-]{0,9}\\.json$"
+              },
+              "watchlist": {
+                "enum": [
+                  "eugene",
+                  "street",
+                  "fixture"
+                ]
+              },
+              "candidate_status": {
+                "enum": [
+                  "idea",
+                  "candidate"
+                ],
+                "default": "idea"
+              }
+            }
+          }
+        },
+        "sources_terms": {
+          "type": "array",
+          "maxItems": 50,
+          "description": "optional: every source used and its terms basis (MD-12)",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "source",
+              "domain",
+              "basis",
+              "automated"
+            ],
+            "properties": {
+              "source": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$"
+              },
+              "domain": {
+                "type": "string",
+                "pattern": "^[a-z0-9.-]{1,100}$"
+              },
+              "basis": {
+                "enum": [
+                  "robots_and_terms_allow",
+                  "public_government_data",
+                  "issuer_public_release",
+                  "manual_read_once",
+                  "robots_only_no_terms"
+                ],
+                "description": "robots_only_no_terms (1.1.8): the site has no terms page and only robots.txt permits access (e.g. Finviz); no terms_url then"
+              },
+              "automated": {
+                "type": "boolean",
+                "description": "true = read by Oodle's script; false = read once by hand"
+              },
+              "terms_url": {
+                "type": "string",
+                "pattern": "^https?://[^\\s@]+$",
+                "maxLength": 300
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "delayed": {
+                "type": "boolean",
+                "description": "1.1.8: the source itself is delayed (MD-14)"
+              },
+              "delay_minutes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1440,
+                "description": "required iff delayed true; every field from this source must be delayed by at least this (MD-14-DELAY)"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "basis": {
+                      "const": "robots_only_no_terms"
+                    }
+                  },
+                  "required": [
+                    "basis"
+                  ]
+                },
+                "then": {
+                  "not": {
+                    "required": [
+                      "terms_url"
+                    ]
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "delayed": {
+                      "const": true
+                    }
+                  },
+                  "required": [
+                    "delayed"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "delay_minutes"
+                  ]
+                },
+                "else": {
+                  "not": {
+                    "required": [
+                      "delay_minutes"
+                    ]
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "sources_not_used": {
+          "type": "array",
+          "maxItems": 50,
+          "description": "1.1.8, optional: sources Oodle looked at and did not use, and why. Names and domains only, no e-mail addresses (MD-09); a name also listed in sources_terms is MD-12-CONFLICT",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "domain",
+              "reason"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9_.:-]{0,63}$"
+              },
+              "domain": {
+                "type": "string",
+                "pattern": "^[a-z0-9.-]{1,100}$"
+              },
+              "reason": {
+                "enum": [
+                  "terms_forbid",
+                  "login_required",
+                  "paid",
+                  "contact_email_required",
+                  "other"
+                ]
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 300
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "reason": {
+                      "const": "other"
+                    }
+                  },
+                  "required": [
+                    "reason"
+                  ]
+                },
+                "then": {
+                  "required": [
+                    "note"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      },
+      "description": "spec 1.1.8 pack_index: as PackIndex plus robots_only_no_terms, per-source delay declaration (MD-14) and sources_not_used"
+    },
+    "CatalystLog": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "1.1.8: market-data/<date>/catalysts.json (listed in pack.sha256; 1.1.8 packs only). Catalysts and per-ticker context; rules MD-15 (and MD-04, MD-07, MD-09, MD-11, MD-12)",
+      "required": [
+        "schema_version",
+        "kind",
+        "pack_id",
+        "pack_built_at",
+        "data_label",
+        "date",
+        "catalysts"
+      ],
+      "properties": {
+        "schema_version": {
+          "enum": [
+            "1.1.8"
+          ]
+        },
+        "kind": {
+          "const": "catalyst_log"
+        },
+        "pack_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+        },
+        "pack_built_at": {
+          "type": "string",
+          "maxLength": 40,
+          "description": "ISO 8601 with UTC offset; naive = MD-04-TIME-NAIVE"
+        },
+        "data_label": {
+          "enum": [
+            "EXAMPLE",
+            "TEST",
+            "MARKET"
+          ],
+          "description": "EXAMPLE / TEST data is never market data"
+        },
+        "date": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "= index.json date (MD-11-PACK)"
+        },
+        "catalysts": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "$ref": "#/$defs/CatalystEntry"
+          }
+        },
+        "ticker_context": {
+          "type": "array",
+          "maxItems": 500,
+          "items": {
+            "$ref": "#/$defs/TickerContext"
+          }
+        }
+      }
+    },
+    "CatalystEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ticker",
+        "catalyst_type",
+        "event_date",
+        "status",
+        "sources"
+      ],
+      "properties": {
+        "ticker": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Z][A-Z0-9.-]{0,9}$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "null = macro / market-wide"
+        },
+        "catalyst_type": {
+          "enum": [
+            "earnings",
+            "fomc",
+            "macro_release",
+            "investor_day",
+            "conference",
+            "fda",
+            "analyst_action",
+            "other"
+          ]
+        },
+        "event_date": {
+          "anyOf": [
+            {
+              "type": "string",
+              "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "America/New_York calendar date; null only with status UNKNOWN (MD-15-UNKNOWN / -VALUE)"
+        },
+        "event_time": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "maxLength": 40,
+          "description": "optional ISO 8601 date-time WITH a UTC offset (naive = MD-15-TIME-NAIVE); its NY date must equal event_date (MD-15-DATE). Absent or null = date-only"
+        },
+        "status": {
+          "enum": [
+            "CONFIRMED",
+            "UNCONFIRMED",
+            "UNKNOWN"
+          ]
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SourceRefV118"
+          },
+          "maxItems": 10,
+          "description": "CONFIRMED needs >= 2 sources whose (origin, origin_entity) differ (MD-15-UNCONFIRMED); a dated entry needs >= 1 (MD-15-UNSOURCED)"
+        },
+        "note": {
+          "type": "string",
+          "maxLength": 300
+        }
+      }
+    },
+    "TickerContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ticker"
+      ],
+      "description": "optional per-ticker context (one entry per ticker, MD-15-DUPLICATE)",
+      "properties": {
+        "ticker": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9.-]{0,9}$"
+        },
+        "sector": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z ,&/-]{0,59}$"
+        },
+        "prior_close": {
+          "$ref": "#/$defs/PriceFieldV118",
+          "description": "a sourced field (MD-06, MD-13; not MD-05: a prior close is not a live quote)"
+        },
+        "analyst_actions": {
+          "type": "array",
+          "maxItems": 50,
+          "items": {
+            "$ref": "#/$defs/AnalystAction"
+          }
+        }
+      }
+    },
+    "AnalystAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "firm",
+        "action",
+        "from",
+        "to",
+        "date",
+        "source"
+      ],
+      "properties": {
+        "firm": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._&:'-]{0,79}$"
+        },
+        "action": {
+          "enum": [
+            "upgrade",
+            "downgrade",
+            "initiate",
+            "reiterate",
+            "target_raise",
+            "target_cut",
+            "other"
+          ]
+        },
+        "from": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 40,
+              "pattern": "^[^@]*$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "prior rating or target; null if none"
+        },
+        "to": {
+          "anyOf": [
+            {
+              "type": "string",
+              "maxLength": 40,
+              "pattern": "^[^@]*$"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "new rating or target; null if none"
+        },
+        "date": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "not after the pack's NY date (MD-04-FUTURE)"
+        },
+        "source": {
+          "$ref": "#/$defs/SourceRefV118"
+        }
+      }
+    }
+  }
+}

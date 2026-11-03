@@ -4,7 +4,7 @@ Regenerate: .venv/bin/python scripts/gen_models.py
 """
 from __future__ import annotations
 
-SCHEMA_SHA256 = "24412d3f169d97057e0619b705c719e04bc7bda34f7502e3e01d7b51454cba8f"
+SCHEMA_SHA256 = "dc113f570a32cd1aa0d41c740698753f826c807756eb0396496243c65bef7423"
 SCHEMA_SOURCE = "<spec>/session.schema.json"
 
 from datetime import date as date_aliased
@@ -38,6 +38,8 @@ class SchemaVersion(Enum):
     field_1_1_4 = '1.1.4'
     field_1_1_5 = '1.1.5'
     field_1_1_6 = '1.1.6'
+    field_1_1_7 = '1.1.7'
+    field_1_1_8 = '1.1.8'
 
 
 class NyBerlinOffsetHours(IntEnum):
@@ -1349,7 +1351,7 @@ class PaperUSOptionsTradingSessionRecord(BaseModel):
     )
     schema_version: SchemaVersion = Field(
         ...,
-        description="1.0.0 = v1 record; 1.1.0 = may use v1.1 additions (run phase 'closed', trace_ref, premarket_scans/global_snapshots, raw tick fields); 1.1.1 = same shape as 1.1.0 plus the stricter checks INV-13 credit directions and INV-14 vertical consistency; 1.1.2 = same shape and checks as 1.1.1 plus INV-15 vertical stop/target comparison direction. Integer open_interest applies to all (integral floats like 472.0 still validate). 1.1.3 = same shape as 1.1.2 plus stricter checks on 1.1.3 records only: INV-03 leg/contract/fill uniqueness, INV-04 fill/leg_mark leg and contract resolution, INV-05 flag acknowledgement and specific error ids, INV-06 approval status/ticket/terms at fills, INV-16 overall verdict = aggregate of rule results. Records 1.0.0-1.1.2 validate exactly as before (same error strings). 1.1.4 = same shape and checks as 1.1.3 (no new invariants; spec 1.1.4 changed tests, fixtures and the watcher approval mapping only); everything described as '1.1.3 records' below applies to 1.1.4 records too, and 1.1.3 records validate exactly as before. 1.1.5 = same shape and checks as 1.1.3 / 1.1.4 (no new invariants; spec 1.1.5 changed the watcher target mapping only); everything described as '1.1.3 records' below applies to 1.1.5 records too, and 1.1.4 and older records validate exactly as before. 1.1.6 = same shape as 1.1.5 plus stricter checks on 1.1.6 records only (SOL-ACCEPT-001): INV-06 open fill window approved_at < filled_at < expires_at (a fill exactly at expires_at or at approved_at is invalid; 1.1.3-1.1.5 keep the closed window), naive / unparsable approval and fill times are INV-05-TIME-NAIVE / INV-06-TIME-NAIVE (-INVALID) errors, never a crash, the new INV-17 (one approval opens at most one position, INV-17-REUSE) and the fail-closed INV-16 recompute (an unrecognised result or UNKNOWN without severity is blocking); everything described as '1.1.3 records' below applies to 1.1.6 records too, and 1.1.5 and older records validate exactly as before (same error strings).",
+        description="1.0.0 = v1 record; 1.1.0 = may use v1.1 additions (run phase 'closed', trace_ref, premarket_scans/global_snapshots, raw tick fields); 1.1.1 = same shape as 1.1.0 plus the stricter checks INV-13 credit directions and INV-14 vertical consistency; 1.1.2 = same shape and checks as 1.1.1 plus INV-15 vertical stop/target comparison direction. Integer open_interest applies to all (integral floats like 472.0 still validate). 1.1.3 = same shape as 1.1.2 plus stricter checks on 1.1.3 records only: INV-03 leg/contract/fill uniqueness, INV-04 fill/leg_mark leg and contract resolution, INV-05 flag acknowledgement and specific error ids, INV-06 approval status/ticket/terms at fills, INV-16 overall verdict = aggregate of rule results. Records 1.0.0-1.1.2 validate exactly as before (same error strings). 1.1.4 = same shape and checks as 1.1.3 (no new invariants; spec 1.1.4 changed tests, fixtures and the watcher approval mapping only); everything described as '1.1.3 records' below applies to 1.1.4 records too, and 1.1.3 records validate exactly as before. 1.1.5 = same shape and checks as 1.1.3 / 1.1.4 (no new invariants; spec 1.1.5 changed the watcher target mapping only); everything described as '1.1.3 records' below applies to 1.1.5 records too, and 1.1.4 and older records validate exactly as before. 1.1.6 = same shape as 1.1.5 plus stricter checks on 1.1.6 records only (SOL-ACCEPT-001): INV-06 open fill window approved_at < filled_at < expires_at (a fill exactly at expires_at or at approved_at is invalid; 1.1.3-1.1.5 keep the closed window), naive / unparsable approval and fill times are INV-05-TIME-NAIVE / INV-06-TIME-NAIVE (-INVALID) errors, never a crash, the new INV-17 (one approval opens at most one position, INV-17-REUSE) and the fail-closed INV-16 recompute (an unrecognised result or UNKNOWN without severity is blocking); everything described as '1.1.3 records' below applies to 1.1.6 records too, and 1.1.5 and older records validate exactly as before (same error strings). 1.1.7 = same shape and checks as 1.1.6 (spec 1.1.7 adds the market_snapshot pack files and removes a duplicate watcher YAML key; no record change), and 1.1.6 and older records validate exactly as before. 1.1.8 = same shape and checks as 1.1.7 (spec 1.1.8 changes only the market_snapshot pack files: as_of_basis, origin-based earnings independence, catalysts.json; no record change), and 1.1.7 and older records validate exactly as before.",
     )
     session: Session
     sources: list[Source]
@@ -1361,12 +1363,12 @@ class PaperUSOptionsTradingSessionRecord(BaseModel):
     premarket_scan: PremarketScanModel
     premarket_scans: list[PremarketScan] | None = Field(
         None,
-        description="(v1.1, 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 / 1.1.4 / 1.1.5 / 1.1.6 records only) one premarket scan per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'premarket_scan', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+        description="(v1.1, 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 / 1.1.4 / 1.1.5 / 1.1.6 / 1.1.7 / 1.1.8 records only) one premarket scan per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'premarket_scan', if present, is kept for v1 readers and must be one of these entries (same run_id).",
     )
     global_snapshot: GlobalSnapshotModel
     global_snapshots: list[GlobalSnapshot] | None = Field(
         None,
-        description="(v1.1, 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 / 1.1.4 / 1.1.5 / 1.1.6 records only) one global snapshot per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'global_snapshot', if present, is kept for v1 readers and must be one of these entries (same run_id).",
+        description="(v1.1, 1.1.0 / 1.1.1 / 1.1.2 / 1.1.3 / 1.1.4 / 1.1.5 / 1.1.6 / 1.1.7 / 1.1.8 records only) one global snapshot per run, keyed by run_id (unique; each must reference an existing runs[].run_id, INV-12). 'global_snapshot', if present, is kept for v1 readers and must be one of these entries (same run_id).",
     )
     event_calendar: EventCalendar = Field(
         ...,

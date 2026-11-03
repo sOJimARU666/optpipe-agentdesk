@@ -178,4 +178,6 @@ def test_schema_accepts_1_1_2_only_as_listed():
     assert vs.validate(ex("1.1.4")) == []   # spec 1.1.4 lists 1.1.4 (was the unlisted probe before 1.1.4)
     assert vs.validate(ex("1.1.5")) == []   # spec 1.1.5 lists 1.1.5 (was the unlisted probe before 1.1.5)
     assert vs.validate(ex("1.1.6")) == []   # spec 1.1.6 lists 1.1.6 (was the unlisted probe before 1.1.6)
-    assert any(x.startswith("schema schema_version") for x in vs.validate(ex("1.1.7")))
+    assert vs.validate(ex("1.1.7")) == []   # spec 1.1.7 lists 1.1.7 (was the unlisted probe before 1.1.7)
+    assert vs.validate(ex("1.1.8")) == []   # spec 1.1.8 lists 1.1.8
+    assert any(x.startswith("schema schema_version") for x in vs.validate(ex("1.1.9")))

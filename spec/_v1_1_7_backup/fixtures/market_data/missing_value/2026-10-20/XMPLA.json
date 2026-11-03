@@ -1,0 +1,82 @@
+{
+  "schema_version": "1.1.7",
+  "kind": "ticker_snapshot",
+  "pack_id": "EXAMPLE-2026-10-20",
+  "pack_built_at": "2026-10-20T09:00:00-04:00",
+  "data_label": "EXAMPLE",
+  "ticker": "XMPLA",
+  "watchlist": "eugene",
+  "last_price": {
+    "value": 20.0,
+    "source": "example_quotes",
+    "as_of": "2026-10-20T08:50:00-04:00",
+    "delayed": true,
+    "delay_minutes": 15,
+    "status": "OK",
+    "url": "https://quotes.example.com/q"
+  },
+  "option_liquidity": {
+    "summary": {
+      "open_interest": {
+        "value": 150,
+        "source": "example_chain",
+        "as_of": "2026-10-19T16:00:00-04:00",
+        "delayed": false,
+        "status": "STALE",
+        "url": "https://chain.example.com/c"
+      },
+      "volume": {
+        "value": 12,
+        "source": "example_chain",
+        "as_of": "2026-10-19T16:00:00-04:00",
+        "delayed": false,
+        "status": "STALE",
+        "url": "https://chain.example.com/c"
+      },
+      "spread_pct_of_mid": {
+        "value": 14.0,
+        "source": "example_chain",
+        "as_of": "2026-10-19T16:00:00-04:00",
+        "delayed": false,
+        "status": "STALE",
+        "url": "https://chain.example.com/c"
+      }
+    }
+  },
+  "iv": {
+    "value": null,
+    "source": null,
+    "as_of": null,
+    "delayed": false,
+    "status": "UNKNOWN"
+  },
+  "iv_rank": {
+    "value": null,
+    "source": null,
+    "as_of": null,
+    "delayed": false,
+    "status": "UNKNOWN",
+    "note": "EXAMPLE: no free IV-rank source"
+  },
+  "implied_move": {
+    "value": null,
+    "source": null,
+    "as_of": null,
+    "delayed": false,
+    "status": "UNKNOWN"
+  },
+  "earnings_date": {
+    "value": null,
+    "source": null,
+    "as_of": null,
+    "delayed": false,
+    "status": "UNKNOWN"
+  },
+  "earnings_time": {
+    "value": null,
+    "source": null,
+    "as_of": null,
+    "delayed": false,
+    "status": "UNKNOWN"
+  }
+}
