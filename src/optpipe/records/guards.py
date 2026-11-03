@@ -230,12 +230,12 @@ def open_window(rec: Any) -> bool:
 
 
 def position_errors(p: dict, ap: dict | None, tk: dict | None = None, rv: dict | None = None,
-                    open_window: bool = True) -> list[str]:
+                    open_win: bool = True) -> list[str]:
     """INV-06 (spec 1.1.3 ids) for one paper position against its approval (status, ticket, terms, review, window).
 
     Window (SOL-ACCEPT-001 G4, spec 1.1.6): by default an opening fill is valid only while approved_at < filled_at <
     expires_at (open at both ends, instants compared whatever the UTC offset): a fill exactly at approved_at is
-    INV-06-BEFORE, exactly at expires_at INV-06-EXPIRED. open_window=False is the frozen 1.1.3-1.1.5 closed window
+    INV-06-BEFORE, exactly at expires_at INV-06-EXPIRED. open_win=False is the frozen 1.1.3-1.1.5 closed window
     (approved_at <= filled_at <= expires_at), used by check_record for records labelled 1.1.3, 1.1.4 or 1.1.5."""
     if ap is None:
         return []          # unresolved approval_id: the spec's INV-04 reports it
@@ -264,7 +264,7 @@ def position_errors(p: dict, ap: dict | None, tk: dict | None = None, rv: dict |
     t0, t1 = _ts(ap.get("approved_at")), _ts(ap.get("expires_at"))
     for f in opens:
         ft = _ts(f.get("filled_at"))
-        if open_window:     # spec 1.1.6 wording, so merge() dedupes it against the validator's string
+        if open_win:        # spec 1.1.6 wording, so merge() dedupes it against the validator's string
             if ft is None or t0 is None or ft <= t0:
                 out.append(f"INV-06-BEFORE {f.get('fill_id', '?')} filled at {_ny(f.get('filled_at'))} not after approval "
                            f"{aid} at {_ny(ap.get('approved_at'))} (valid only while approved_at < filled_at < expires_at)")
@@ -319,9 +319,10 @@ def _check_record(rec: dict) -> list[str]:
     for p in pos:
         ap = approvals.get(_key(p.get("approval_id")))
         errs += position_errors(p, ap, tickets.get(_key(p.get("ticket_id"))), reviews.get(_key((ap or {}).get("review_id"))),
-                                open_window=open_window(rec))
-    if open_window(rec):    # spec 1.1.6 rules (1.1.3-1.1.5 records keep their own: no INV-17, closed window)
-        errs += reuse_errors(pos)
+                                open_win=open_window(rec))
+    # INV-17-REUSE for EVERY schema_version (#17 review): relabelling a record 1.1.5 must not let one approval open
+    # two positions. Only the INV-06 window stays version-dependent (1.1.3-1.1.5 keep their frozen closed window).
+    errs += reuse_errors(pos)
     return errs
 
 

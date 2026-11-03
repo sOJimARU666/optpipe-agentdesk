@@ -181,6 +181,25 @@ def test_consumed_approval_second_position_inv17_reuse(example, tmp_path, capsys
     assert "INV-17-REUSE" in ids, errs
 
 
+@pytest.mark.parametrize("old", ["1.1.3", "1.1.4", "1.1.5"])
+def test_relabelled_old_record_two_positions_inv17_reuse(example, tmp_path, capsys, old):
+    """Negative (#17 review): relabelling a record 1.1.3 / 1.1.4 / 1.1.5 must not let one approval open two paper
+    positions: optpipe's guards report INV-17-REUSE for every schema_version and `optpipe validate` exits 1."""
+    r = _two_positions(_rec(example, pair("12:30:00"), version=old))
+    ids, errs = _guard(r)
+    assert "INV-17-REUSE" in ids, errs
+    rc, ids, out = _validate(tmp_path, capsys, r)
+    assert rc == 1 and "INV-17-REUSE" in ids, out
+
+
+@pytest.mark.parametrize("at", ["12:20:00", "16:00:00"])
+def test_relabelled_old_record_keeps_closed_window_with_inv17(example, at):
+    """Control: running INV-17 on a 1.1.5 record leaves its frozen closed window alone (a fill exactly at
+    approved_at / expires_at is still not a window error); only the reuse is reported."""
+    ids, errs = _guard(_two_positions(_rec(example, pair(at), version="1.1.5")))
+    assert not ids & WINDOW and ids == {"INV-17-REUSE"}, errs
+
+
 def test_one_position_per_approval_ok(example, tmp_path, capsys):
     """Control."""
     ids, errs = _guard(_rec(example, pair("12:30:00")))
