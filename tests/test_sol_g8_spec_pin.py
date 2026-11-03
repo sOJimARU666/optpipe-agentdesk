@@ -169,9 +169,9 @@ def test_unreadable_pin_source_fails_closed(tmp_path, monkeypatch, capsys, how):
     from optpipe import spec_pin
     p = tmp_path / "sync_spec.py"
     if how == "not_literal":
-        p.write_text('EXPECTED_VERSION = "1." + "1.6"\nEXPECTED_MANIFEST_SHA256 = "%s"\n' % SPEC_1_1_6[1])
+        p.write_text('EXPECTED_VERSION = "1." + "1.8"\nEXPECTED_MANIFEST_SHA256 = "%s"\n' % SPEC_PIN[1])
     elif how == "bad_sha":
-        p.write_text('EXPECTED_VERSION = "1.1.6"\nEXPECTED_MANIFEST_SHA256 = "xyz"\n')
+        p.write_text('EXPECTED_VERSION = "1.1.8"\nEXPECTED_MANIFEST_SHA256 = "xyz"\n')
     v, sha, why = spec_pin.load_pin(p)
     assert v is None and sha is None and why
     monkeypatch.setattr(spec_pin, "EXPECTED_VERSION", v)

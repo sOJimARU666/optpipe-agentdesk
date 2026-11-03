@@ -67,11 +67,11 @@ def test_sync_writes_manifest_files_and_pin_record(pinned, source):
     assert not (pinned / ".venv").exists() and not (pinned / "_v1_backup" / "risk_rules.yaml").exists()
     assert {k: v["version"] for k, v in pin["frozen_releases"].items()} == {
         "_v1_1_0_backup": "1.1.0", "_v1_1_1_backup": "1.1.1", "_v1_1_2_backup": "1.1.2", "_v1_1_3_backup": "1.1.3",
-        "_v1_1_4_backup": "1.1.4", "_v1_1_5_backup": "1.1.5"}
+        "_v1_1_4_backup": "1.1.4", "_v1_1_5_backup": "1.1.5", "_v1_1_6_backup": "1.1.6", "_v1_1_7_backup": "1.1.7"}
     for sub in sync_spec.FROZEN_RELEASES:                  # copied by their own manifest, byte-identical
         for name, digest in sync_spec.parse_manifest((source / sub / "MANIFEST.sha256").read_text()).items():
             assert sync_spec.sha256(pinned / sub / name) == digest
-    assert sync_spec.verify_pinned(pinned)["version"] == "1.1.6"
+    assert sync_spec.verify_pinned(pinned)["version"] == "1.1.8"
 
 
 @pytest.mark.parametrize("tamper", ["edit_file", "edit_manifest", "extra_file", "missing_file", "edit_v1", "edit_pin",

@@ -269,7 +269,7 @@ def test_cli_valid_pack(monkeypatch, capsys):
     assert out.startswith("OK: spec/fixtures/market_data/valid/2026-10-20 valid (market_snapshot pack, "
                           "schema_version 1.1.8, data_label EXAMPLE, 4 ticker(s)")
     assert "JPM      NO IDEA: MD-20-SCOPE" in out           # EXAMPLE data is never a real idea
-    assert "/home/" not in out + err and "/workspace/" not in out + err
+    assert str(ROOT) not in out + err and str(Path.home()) not in out + err     # repo-relative display only
 
 
 def test_cli_env_var_and_exit_codes(monkeypatch, capsys, tmp_path):
