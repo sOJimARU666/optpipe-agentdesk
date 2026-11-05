@@ -361,7 +361,8 @@ def test_cli_once_and_arg_checks(pipeline_output, tmp_path, capsys):
     from optpipe.cli import main
     sess = str(pipeline_output["out"] / "session-2026-10-13.json")
     assert main(["watch", "--session", sess, "--out", str(tmp_path)]) == 2
-    assert main(["watch", "--session", sess, "--live", "--clock", "2026-10-13T10:00:00-04:00"]) == 2
+    assert main(["watch", "--session", sess, "--data-dir", str(tmp_path), "--clock", "2026-10-13T10:00:00-04:00",
+                 "--replay", str(TAPE)]) == 2   # both --replay and --data-dir: refuse
     rc = main(["watch", "--session", sess, "--replay", str(TAPE), "--clock", "2026-10-13T08:00:00-04:00", "--once",
                "--out", str(tmp_path)])
     assert rc == 0
@@ -384,5 +385,6 @@ def test_watcher_package_is_alert_only_and_get_only():
                                       "sendmail"}, (p.name, n.attr)
             if isinstance(n, ast.FunctionDef):
                 assert not any(w in n.name.lower() for w in ("order", "execute", "notify", "send")), (p.name, n.name)
-    for cls in (rt.ReplayTape, rt.LiveNasdaqSource):
-        assert cls.method == "GET"
+    assert rt.ReplayTape.method == "GET"
+    assert rt.PackQuoteSource.method == "file"          # PR B: packs replace --live (LiveNasdaqSource stays for PR C)
+    assert rt.LiveNasdaqSource.method == "GET"          # still GET-only; unreachable from the CLI

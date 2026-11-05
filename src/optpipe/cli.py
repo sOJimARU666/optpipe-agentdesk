@@ -1,9 +1,9 @@
 """CLI entry point. PAPER ONLY - there is no command that places, sends or routes an order.
 
-  optpipe run [--fixtures DIR] [--inputs FILE] [--as-of TS] [--out DIR] [--append] [--live]
+  optpipe run [--fixtures DIR | --data-dir ROOT] [--inputs FILE] [--as-of TS] [--out DIR] [--append]
   optpipe serve [--out DIR] [--host 127.0.0.1] [--port 8765]   # read-only dashboard, loopback only
-  optpipe watch [--session FILE | --date D] (--replay TAPE [--clock TS] [--until TS] | --live) [--once] [--out DIR]
-                                     paper-only watcher: alerts only, quotes GET-only and only while NY is open
+  optpipe watch [--session FILE | --date D] (--replay TAPE [--clock TS] [--until TS] | --data-dir ROOT) [--once] [--out DIR]
+                                     paper-only watcher: alerts only; quotes from a replay tape or an Oodle pack
   optpipe spec-check                 what was found in Doodle's spec folder + ruleset placeholders
   optpipe validate FILE.json         run Doodle's validate_session.py on a record
   optpipe show FILE.json             print the Markdown for a record
@@ -79,12 +79,13 @@ def watch(a, settings) -> int:
     from .risk import load_ruleset
     from .risk.engine import Calendar
     from .spec import discover
-    from .watcher.runtime import (LiveNasdaqSource, RealClock, ReplayTape, SimClock, Watcher, get_engine,
+    from .watcher.runtime import (PackQuoteSource, RealClock, ReplayTape, SimClock, Watcher, get_engine,
                                   validate_watch, verify_sidecar, write_watch)
-    if bool(a.replay) == bool(a.live):
-        print("choose exactly one of --replay TAPE or --live", file=sys.stderr); return 2
-    if a.live and a.clock:
-        print("--clock is for replay only (live uses the real clock)", file=sys.stderr); return 2
+    from . import marketdata as md
+    data_dir = Path(a.data_dir) if getattr(a, "data_dir", None) else md.data_root_from_env()
+    if bool(a.replay) == bool(data_dir):
+        print("choose exactly one of --replay TAPE or --data-dir ROOT (else $OPTPIPE_MARKET_DATA_DIR)",
+              file=sys.stderr); return 2
     sp = discover(settings.spec_path)
     rules = sp.watcher_rules()
     if rules is None:
@@ -111,8 +112,16 @@ def watch(a, settings) -> int:
         print(f"optpipe watch: refusing to watch {sess.name}: the session record does not validate "
               f"({len(verrs)} error(s))\n  " + "\n  ".join(verrs), file=sys.stderr)
         return 2
-    if a.live:
-        src, clock = LiveNasdaqSource(settings.http.user_agent, settings.http.timeout_s), RealClock()
+    if data_dir is not None:
+        src = PackQuoteSource(data_dir, spec=sp)
+        clock = RealClock() if not a.clock else None
+        if a.clock:
+            start = datetime.fromisoformat(a.clock)
+            if start.tzinfo is None:
+                print("--clock needs a UTC offset", file=sys.stderr); return 2
+            clock = SimClock(start)
+        else:
+            clock = RealClock()
     else:
         src = ReplayTape(a.replay)
         start = datetime.fromisoformat(a.clock) if a.clock else datetime.fromisoformat(f"{day}T07:00:00").replace(tzinfo=NY)
@@ -198,14 +207,16 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="optpipe", description="Paper-only options research pipeline (no orders, ever)")
     ap.add_argument("--config", help="settings.yaml path")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    r = sub.add_parser("run", help="run one pipeline pass (offline from fixtures by default)")
-    r.add_argument("--fixtures", default=str(DEFAULT_FIXTURES), help="fixture dir (offline)")
+    r = sub.add_parser("run", help="run one pipeline pass (offline from fixtures by default, or from an Oodle pack)")
+    r.add_argument("--fixtures", default=None, help=f"fixture dir (offline; default {DEFAULT_FIXTURES} when no --data-dir)")
+    r.add_argument("--data-dir", help="Oodle market-data root (YYYY-MM-DD dirs); else $OPTPIPE_MARKET_DATA_DIR. "
+                                      "Mutually exclusive with --fixtures. Pack mode replaces the retired live HTTP path.")
     r.add_argument("--inputs", help="session inputs YAML (default: <fixtures>/session_inputs.yaml)")
-    r.add_argument("--as-of", help="ISO timestamp with offset; default: inputs as_of (fixtures) or now (live)")
+    r.add_argument("--as-of", help="ISO timestamp with offset; default: inputs as_of (fixtures/packs) or now")
     r.add_argument("--out", default=str(REPO_ROOT / "out"))
     r.add_argument("--append", action="store_true", help="add this run to an existing session file for the date")
-    r.add_argument("--live", action="store_true",
-                   help="EXPERIMENTAL: read-only HTTP GETs to Finviz/Nasdaq instead of fixtures")
+    r.add_argument("--allow-example", action="store_true",
+                   help="allow EXAMPLE/TEST pack labels (tests / demos only; never a real idea)")
     sub.add_parser("spec-check", help="report Doodle's spec folder status")
     for name in ("show", "validate"):
         sub.add_parser(name).add_argument("file")
@@ -221,7 +232,8 @@ def main(argv: list[str] | None = None) -> int:
     w.add_argument("--clock", help="simulated start time, ISO with offset (replay only; default 07:00 NY of the date)")
     w.add_argument("--until", help="stop time, ISO with offset (default 17:00 NY of the start date)")
     w.add_argument("--once", action="store_true", help="a single wake at --clock")
-    w.add_argument("--live", action="store_true", help="EXPERIMENTAL: real clock + read-only Nasdaq GETs while open")
+    w.add_argument("--data-dir", help="Oodle market-data root for pack quotes (else $OPTPIPE_MARKET_DATA_DIR); "
+                                      "mutually exclusive with --replay. Pack quotes replace the retired live HTTP path (PR B).")
     w.add_argument("--engine", default="spec", help="rule engine name (pluggable; default: spec)")
     m = sub.add_parser("market-data", help="verify one of Oodle's market-data packs (fail closed; file I/O only)")
     m.add_argument("--data-dir", help="market-data root holding YYYY-MM-DD dirs (else $OPTPIPE_MARKET_DATA_DIR; "
@@ -294,17 +306,26 @@ def main(argv: list[str] | None = None) -> int:
     if verr:                                   # fail closed before anything is run or written (FIX-SEC-001 P0-5)
         print(f"optpipe run: refusing to run without Doodle's session validator.\n{verr}", file=sys.stderr)
         return 2
-    fixtures = None if a.live else Path(a.fixtures)
+    from . import marketdata as md
+    data_dir = Path(a.data_dir) if a.data_dir else md.data_root_from_env()
+    if a.fixtures is not None and data_dir is not None:
+        print("choose one of --fixtures or --data-dir (else $OPTPIPE_MARKET_DATA_DIR)", file=sys.stderr); return 2
+    if data_dir is None:
+        fixtures = Path(a.fixtures) if a.fixtures else DEFAULT_FIXTURES
+    else:
+        fixtures = None
     ip = a.inputs or (fixtures / "session_inputs.yaml" if fixtures and (fixtures / "session_inputs.yaml").exists() else None)
     inputs = load_inputs(ip)
     as_of = (datetime.fromisoformat(a.as_of) if a.as_of else
-             inputs.as_of if (inputs.as_of and not a.live) else datetime.now(timezone.utc))
+             inputs.as_of if inputs.as_of else datetime.now(timezone.utc))
     existing = trace = None
     if a.append:
         jp, _, tp = paths(a.out, as_of.astimezone(NY).date().isoformat())
         if jp.exists():
             existing, trace = read_session_for_append(jp), read_trace(tp)
-    rec, trace = run_session(settings, inputs, as_of, fixtures, existing, trace)
+    allow = ("MARKET", "EXAMPLE", "TEST") if a.allow_example else ("MARKET",)
+    rec, trace = run_session(settings, inputs, as_of, fixtures, existing, trace,
+                             data_dir=data_dir, allow_labels=allow)
     w = write_session(rec, trace, a.out)
     print(summary(rec, trace))
     from .orchestrator import validate_file
@@ -312,7 +333,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"wrote {w.json}  sha256 {w.json_sha256}  (schema {rec['schema_version']}, trace_ref -> {w.trace.name})\n"
           f"wrote {w.trace}  sha256 {w.trace_sha256}\nwrote {w.md}")
     if ferrs is not None:                      # always a list now; a missing validator is an error in it
-        print(f"validate_session {w.json.name}: " + (f"OK as {rec['schema_version']} (schema + invariants INV-01..{ {'1.1.6': '17', '1.1.5': '16', '1.1.4': '16', '1.1.3': '16', '1.1.2': '15', '1.1.1': '14'}.get(rec['schema_version'], '13') })" if not ferrs
+        print(f"validate_session {w.json.name}: " + (f"OK as {rec['schema_version']} (schema + invariants INV-01..{ {'1.1.8': '17', '1.1.7': '17', '1.1.6': '17', '1.1.5': '16', '1.1.4': '16', '1.1.3': '16', '1.1.2': '15', '1.1.1': '14'}.get(rec['schema_version'], '13') })" if not ferrs
                                                      else f"{len(ferrs)} error(s)\n  " + "\n  ".join(ferrs[:20])))
     v = trace.runs[-1].validation
     from .records.guards import guard_crashed

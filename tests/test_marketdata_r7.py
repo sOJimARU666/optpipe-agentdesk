@@ -348,7 +348,7 @@ def test_md20_example_data_is_never_a_real_idea():
 
 
 @pytest.mark.parametrize("ticker,want", [
-    ("JPM", {"MD-20-CRITICAL", "MD-20-CONFLICT"}),   # every contract STALE; BMO has no catalyst event_time
+    ("JPM", {"MD-20-CRITICAL", "MD-20-UNVERIFIED"}),  # every contract STALE; BMO has no catalyst event_time
     ("WDC", {"MD-20-CRITICAL"}),          # earnings_date UNCONFIRMED, no contracts
     ("XMPLA", {"MD-20-CRITICAL"}),        # earnings_date UNKNOWN
     ("XMPLB", {"MD-20-CRITICAL"}),

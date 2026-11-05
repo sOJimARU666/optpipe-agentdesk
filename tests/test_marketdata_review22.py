@@ -93,7 +93,7 @@ def test_moodle_probe_earnings_time_amc_is_no_idea(tmp_path):
     r = load(d)
     assert r.ok, r.errors
     why = md.no_idea_reasons(r, "JPM", now=NOW, allow_labels=("EXAMPLE",))
-    assert ids(why) == {"MD-20-CONFLICT"} and "JPM.earnings_time: AMC is not corroborated" in why[0], why
+    assert ids(why) == {"MD-20-UNVERIFIED"} and "JPM.earnings_time: AMC is not corroborated" in why[0], why
 
 
 def test_earnings_time_contradicting_catalyst_event_time_fails_the_pack(tmp_path):
@@ -121,11 +121,13 @@ def test_earnings_time_session_twins(tmp_path, t, value, ok):
         assert md.no_idea_reasons(r, "JPM", now=NOW, allow_labels=("EXAMPLE",)) == []
 
 
-def test_unknown_earnings_time_is_not_a_conflict():
+def test_unknown_earnings_time_is_no_idea_under_r07():
+    """Moodle to-do (b): UNKNOWN / null earnings_time is MD-20-CRITICAL (R07 cannot place the event). Fail closed."""
     r = load(FIX / "valid" / DATE)                                  # WDC 'unknown', XMPLA null
     assert r.ok
     for t in ("WDC", "XMPLA"):
-        assert not any("earnings_time" in e for e in md.no_idea_reasons(r, t, now=NOW, allow_labels=("EXAMPLE",)))
+        why = md.no_idea_reasons(r, t, now=NOW, allow_labels=("EXAMPLE",))
+        assert "MD-20-CRITICAL" in ids(why) and any("earnings_time" in e for e in why), why
 
 
 # ------------------------------------------------------------------ required 3: critical lists

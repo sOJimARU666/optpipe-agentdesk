@@ -26,14 +26,17 @@ PROPOSED in trading/proposals/R7-acceptance-proposal.md (MD-16..MD-20; proposal 
   MD-20-CONFLICT   an earnings_date that is not the next CONFIRMED earnings date in catalysts.json, an earnings_time
                    that contradicts the matching earnings entry's event_time session, or two earnings entries
                    (CONFIRMED / UNCONFIRMED) for one ticker on different dates within 30 days: the pack fails closed.
-                   A disagreement with an UNCONFIRMED entry only, or an earnings_time catalysts.json cannot check
-                   (no event_time), is a NO IDEA reason for that ticker.
+                   A disagreement with an UNCONFIRMED entry only is a NO IDEA reason for that ticker.
+  MD-20-UNVERIFIED an earnings_time BMO / AMC that catalysts.json cannot check (no matching event_time): NO IDEA for
+                   that ticker (PR B: split out of MD-20-CONFLICT, Moodle to-do a; nothing contradicts it, it is
+                   just not corroborated).
   MD-20-CRITICAL / -NO-IDEA / -SCOPE  no_idea_reasons(): critical UNKNOWN, stale, future or conflicting inputs, a
                    pack that is not ok, or data that is not MARKET (EXAMPLE / TEST) mean NO IDEA.
 Every MD-16..MD-21 id in a returned error carries "(proposed)", and MD-00-SPEC / MD-00-ROOT carry "(app)" (label_ids).
-Not covered here (deferred): MD-18 provenance binding (builder / ingest record), MD-19 per-feed freshness (macro,
-history), R07 catalyst coverage and R08 macro catalysts (PR B), a 2027 calendar, the MD-21 replay harness, and the
-consumers (discovery / research / watcher: PR B).
+Not covered here: MD-18 provenance binding (builder / ingest record; not in PR B either). The MD-19 per-feed
+freshness windows, the versioned calendar (2026 + 2027), R07 / R08 and the replay pack selection are in
+optpipe.mdfeeds and optpipe.nyse_calendar (PR B); the consumers are optpipe.providers.pack (discovery / research)
+and optpipe.watcher.runtime.PackQuoteSource (watcher).
 Root: there is no default data root. load_date(root, date) / load_pack(date_dir, root=...) require one; None is
 MD-00-ROOT (exit 2) and nothing is opened.
 The path to the date dir is opened one component at a time from "/" with O_NOFOLLOW (no symlinked ancestor, no
@@ -53,6 +56,7 @@ API
       2 unreadable, crash or spec not pinned)
   field_usable(field) -> bool; usable_value(field)
   no_idea_reasons(result, ticker, *, now, allow_labels=("MARKET",)) -> list[str]   # [] = the inputs are usable
+  usable_contracts(result, ticker, *, now) -> list[dict]   # only these may feed an idea
   data_root_from_env() -> Optional[Path]; label_ids(errors); error_id(error)
 """
 from __future__ import annotations
@@ -854,17 +858,36 @@ def _field_reason(path: str, leaf: str, f, now: datetime, skew: timedelta, limit
     return None
 
 
+def usable_contracts(res: PackResult, ticker: str, *, now: datetime,
+                     skew_seconds: float = DEFAULT_SKEW_SECONDS) -> list[dict]:
+    """the ticker's pack contracts whose EVERY CONTRACT_CRITICAL field is OK, valued, not future and fresh at `now`
+    (Moodle to-do c: an idea may use only these; one usable contract never makes another one usable).
+    [] when the pack is not ok, the clock is naive or anything is odd (fail closed)."""
+    try:
+        if not res.ok or not isinstance(res.quote_limit, timedelta) or not isinstance(now, datetime) \
+                or now.tzinfo is None or now.utcoffset() is None:
+            return []
+        d = res.snapshots.get(ticker)
+        contracts = ((d or {}).get("option_liquidity") or {}).get("contracts") or [] if isinstance(d, dict) else []
+        skew = timedelta(seconds=skew_seconds)
+        return [c for c in contracts if isinstance(c, dict)
+                and not any(_field_reason("c", k, c.get(k), now, skew, res.quote_limit) for k in CONTRACT_CRITICAL)]
+    except Exception:  # noqa: BLE001 - fail closed
+        return []
+
+
 def no_idea_reasons(res: PackResult, ticker: str, *, now: datetime, skew_seconds: float = DEFAULT_SKEW_SECONDS,
                     allow_labels: tuple = ("MARKET",)) -> list[str]:
     """[] only if every critical idea input for `ticker` is usable at `now`; otherwise the reasons: NO IDEA.
     This never makes a candidate: R01..R13 still decide in the session record. Fail closed on anything odd.
 
     Checked here: IDEA_TOP_FIELDS (last_price, earnings_date) OK, fresh and not future; earnings_date vs UNCONFIRMED
-    catalysts; earnings_time (if BMO / AMC) corroborated by a matching catalysts.json earnings event_time; at least
-    one contract with every CONTRACT_CRITICAL field usable. A caller (PR B) MUST then use only such a contract: one
+    catalysts; earnings_time BMO / AMC corroborated by a matching catalysts.json earnings event_time (else
+    MD-20-UNVERIFIED), and an UNKNOWN / null earnings_time is MD-20-CRITICAL (PR B decision, fail closed); at least
+    one contract with every CONTRACT_CRITICAL field usable. A caller MUST then use only usable_contracts(): one
     usable contract does not make the ticker's other contracts usable.
-    NOT checked here (deferred to PR B, where the consumer and its hold window exist): R07 catalyst coverage to the
-    hold-window end and R08 macro catalysts plus coverage. No consumer reads a pack yet, so nothing relies on them."""
+    The per-feed freshness windows (MD-19), the calendar and R07 / R08 against a hold window are in
+    optpipe.mdfeeds.decision_reasons(), which every consumer calls (it starts with this function)."""
     try:
         if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
             return label_ids(["MD-19-TZ now: naive clock (NO IDEA)"])
@@ -887,12 +910,15 @@ def no_idea_reasons(res: PackResult, ticker: str, *, now: datetime, skew_seconds
         if isinstance(et, dict) and et.get("value") in ("BMO", "AMC"):
             entries = _earnings_entries(res.catalysts, ticker, ed.get("value") if isinstance(ed, dict) else None)
             if not any(_session(c.get("event_time")) == et["value"] for c in entries):
-                out.append(f"MD-20-CONFLICT {ticker}.earnings_time: {et['value']} is not corroborated by a "
+                out.append(f"MD-20-UNVERIFIED {ticker}.earnings_time: {et['value']} is not corroborated by a "
                            "catalysts.json earnings event_time for the same date (cannot be checked: NO IDEA)")
-        contracts = (d.get("option_liquidity") or {}).get("contracts") or []
-        if not any(isinstance(c, dict)
-                   and not any(_field_reason("c", k, c.get(k), now, skew, limit) for k in CONTRACT_CRITICAL)
-                   for c in contracts):
+        else:
+            # PR B decision (Moodle to-do b): an UNKNOWN / null earnings_time is a critical UNKNOWN for R07 (BMO vs
+            # AMC decides on which side of a hold-window edge the event falls), so it is NO IDEA: fail closed.
+            shown = et.get("value") if isinstance(et, dict) else "missing"
+            out.append(f"MD-20-CRITICAL {ticker}.earnings_time: {shown} (UNKNOWN; R07 cannot place the event: "
+                       "fail closed)")
+        if not usable_contracts(res, ticker, now=now, skew_seconds=skew_seconds):
             out.append(f"MD-20-CRITICAL {ticker}.option_liquidity: no contract with usable, fresh "
                        f"{'/'.join(CONTRACT_CRITICAL)}")
         return label_ids(out)
