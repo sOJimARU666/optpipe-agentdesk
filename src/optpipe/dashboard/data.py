@@ -119,7 +119,7 @@ class OutDir:
                 if not integ.trace_ref_ok:
                     integ.problems.append("trace_ref in the record does not match the trace file")
             from ..records.store import verify_session_ref
-            ok, msg = verify_session_ref(jp, trace)
+            ok, msg = verify_session_ref(jp, trace, main)
             integ.session_ref_ok = ok
             if ok is False:
                 integ.problems.append(msg)

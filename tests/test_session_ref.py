@@ -24,7 +24,7 @@ def test_session_ref_is_filled_and_verifies(pipeline_output):
     assert ref["sha256"] == session_content_sha256(rec) and len(ref["sha256"]) == 64
     assert ref["sha256_covers"] == SESSION_REF_COVERS and "minus top-level trace_ref" in SESSION_REF_COVERS
     assert ref["schema_version"] == rec["schema_version"] == "1.1.6"
-    ok, msg = verify_session_ref(j, json.loads(t.read_text()))
+    ok, msg = verify_session_ref(j, json.loads(t.read_text()), rec)
     assert ok is True, msg
 
 
@@ -34,8 +34,17 @@ def test_tampered_record_fails(pipeline_output, tmp_path):
     rec["risk_reviews"][0]["review_id"] += "-x"           # any content edit
     bad = tmp_path / j.name
     bad.write_text(json.dumps(rec, indent=2))
-    ok, msg = verify_session_ref(bad, json.loads(t.read_text()))
+    ok, msg = verify_session_ref(bad, json.loads(t.read_text()), rec)
     assert ok is False and msg
+
+
+def test_session_ref_verification_does_not_read_the_record_path(pipeline_output):
+    j, t = _paths(pipeline_output)
+    rec = json.loads(j.read_text())
+    trace = json.loads(t.read_text())
+    missing = j.parent / "not-present" / j.name
+    ok, msg = verify_session_ref(missing, trace, rec)
+    assert ok is True, msg
 
 
 def test_trace_ref_and_formatting_do_not_affect_it(pipeline_output):
