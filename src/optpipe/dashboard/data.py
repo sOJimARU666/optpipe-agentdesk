@@ -84,7 +84,10 @@ class OutDir:
     def _session_path(self, date: str, suffix: str) -> Path:
         root = self.root.resolve()
         path = (root / f"session-{date}{suffix}").resolve()
-        if not path.is_relative_to(root):
+        root_prefix = str(root)
+        if not root_prefix.endswith(root.anchor):
+            root_prefix += root.anchor
+        if not str(path).startswith(root_prefix):
             raise KeyError(date)
         return path
 
