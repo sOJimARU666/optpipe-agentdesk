@@ -89,10 +89,20 @@ class OutDir:
     def load(self, date: str) -> Session:
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
             raise KeyError(date)
-        jp = self.root / f"session-{date}.json"
-        vp = self.root / f"session-{date}.v1_1.json"
-        tp = self.root / f"session-{date}.trace.json"
+        root = self.root.resolve()
+
+        def contained(path: Path) -> Path:
+            try:
+                path.resolve().relative_to(root)
+            except ValueError:
+                raise KeyError(date) from None
+            return path
+
+        jp = contained(self.root / f"session-{date}.json")
+        vp = contained(self.root / f"session-{date}.v1_1.json")
+        tp = contained(self.root / f"session-{date}.trace.json")
         sp = tp.with_name(tp.name + ".sha256")
+        sp = contained(sp)
         if not jp.exists():
             raise KeyError(date)
         main = json.loads(jp.read_text())
@@ -125,8 +135,9 @@ class OutDir:
                 integ.problems.append(msg)
         else:
             integ.problems.append(f"{tp.name} not found")
-        wp = self.root / f"session-{date}.watch.json"
+        wp = contained(self.root / f"session-{date}.watch.json")
         wsp = wp.with_name(wp.name + ".sha256")
+        wsp = contained(wsp)
         watch = None
         if wp.exists():
             wb = wp.read_bytes()
@@ -140,8 +151,9 @@ class OutDir:
                 integ.watch_session_ok = wref == sha256_bytes(jp.read_bytes())
                 if not integ.watch_session_ok:
                     integ.problems.append(f"{wp.name} was made from a different {jp.name} (re-run optpipe watch)")
+        md = contained(self.root / f"session-{date}.md")
         files = {k: p.name for k, p in (("v1", jp), ("v1_1", vp), ("trace", tp), ("sha256", sp),
-                                        ("md", self.root / f"session-{date}.md"), ("watch", wp),
+                                        ("md", md), ("watch", wp),
                                         ("watch_sha256", wsp)) if p.exists()}
         return Session(date, rec, origin, trace, integ, files, watch)
 

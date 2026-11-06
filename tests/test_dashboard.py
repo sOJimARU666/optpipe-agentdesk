@@ -58,6 +58,24 @@ def test_empty_out_dir(tmp_path):
     assert r.status_code == 200 and "No sessions yet" in r.text
 
 
+@pytest.mark.parametrize("date", ["../pyproject.toml", "/etc/passwd", "2026/10/13"])
+def test_outdir_rejects_non_date_path(tmp_path, date):
+    with pytest.raises(KeyError):
+        OutDir(tmp_path).load(date)
+
+
+def test_outdir_rejects_sidecar_symlink_outside_root(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / f"session-{DATE}.json").write_text("{}")
+    outside = tmp_path / "outside.sha256"
+    outside.write_text("external data")
+    (out / f"session-{DATE}.watch.json.sha256").symlink_to(outside)
+
+    with pytest.raises(KeyError):
+        OutDir(out).load(DATE)
+
+
 def test_paper_banner_and_healthz(client):
     assert client.get("/healthz").text.startswith("ok")
     for page in ("today", "tickets", "timeline"):
