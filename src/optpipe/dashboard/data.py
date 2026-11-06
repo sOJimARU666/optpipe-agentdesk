@@ -89,6 +89,9 @@ class OutDir:
     def load(self, date: str) -> Session:
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
             raise KeyError(date)
+        safe_date = next((candidate for candidate in self.dates() if candidate == date), None)
+        if safe_date is None:
+            raise KeyError(date)
         root = self.root.resolve()
 
         def contained(path: Path) -> Path:
@@ -98,9 +101,9 @@ class OutDir:
                 raise KeyError(date) from None
             return path
 
-        jp = contained(self.root / f"session-{date}.json")
-        vp = contained(self.root / f"session-{date}.v1_1.json")
-        tp = contained(self.root / f"session-{date}.trace.json")
+        jp = contained(self.root / f"session-{safe_date}.json")
+        vp = contained(self.root / f"session-{safe_date}.v1_1.json")
+        tp = contained(self.root / f"session-{safe_date}.trace.json")
         sp = tp.with_name(tp.name + ".sha256")
         sp = contained(sp)
         if not jp.exists():
@@ -135,7 +138,7 @@ class OutDir:
                 integ.problems.append(msg)
         else:
             integ.problems.append(f"{tp.name} not found")
-        wp = contained(self.root / f"session-{date}.watch.json")
+        wp = contained(self.root / f"session-{safe_date}.watch.json")
         wsp = wp.with_name(wp.name + ".sha256")
         wsp = contained(wsp)
         watch = None
@@ -151,7 +154,7 @@ class OutDir:
                 integ.watch_session_ok = wref == sha256_bytes(jp.read_bytes())
                 if not integ.watch_session_ok:
                     integ.problems.append(f"{wp.name} was made from a different {jp.name} (re-run optpipe watch)")
-        md = contained(self.root / f"session-{date}.md")
+        md = contained(self.root / f"session-{safe_date}.md")
         files = {k: p.name for k, p in (("v1", jp), ("v1_1", vp), ("trace", tp), ("sha256", sp),
                                         ("md", md), ("watch", wp),
                                         ("watch_sha256", wsp)) if p.exists()}
