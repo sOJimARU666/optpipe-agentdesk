@@ -3,12 +3,11 @@
 PAPER ONLY, pure data + date arithmetic, no network. All logic is in America/New_York (MD-19-TZ (proposed)): NY wall
 times are built through zoneinfo, never from a fixed offset.
 
-Why app-side: spec 1.1.8's risk_rules.yaml market_hours lists 2026 only and the risk_reference Calendar has no
-coverage bound, so a 2027 holiday would be treated as a trading day. Moving the calendar into the spec (one versioned
-artefact with covers_from / covers_to) needs a spec / risk release (proposal Q-5); until then this module is the
-market-data consumers' calendar and the risk engine is NOT changed. Outside [COVERS_FROM, COVERS_TO] every answer is
-None (UNKNOWN), and the consumers turn that into NO IDEA (fail closed). A test pins the 2026 part to the spec's
-risk_rules.yaml market_hours, so the two cannot drift silently.
+Why app-side: spec 1.1.8's risk_rules.yaml market_hours lists 2026 only. Moving that file (one versioned artefact
+with covers_from / covers_to) needs a spec release (proposal Q-5, still OPEN; this module does not edit spec/).
+optpipe.risk.engine.Calendar unions this table onto the spec list, so a 2027 holiday is not a session and
+2027-11-26 closes at 13:00. 2026 stays pinned to risk_rules.yaml. Outside [COVERS_FROM, COVERS_TO] every answer is
+None (UNKNOWN), and the consumers turn that into NO IDEA (fail closed).
 
 Sources (read 2026-11-03): 2026 = spec 1.1.8 risk_rules.yaml config.market_hours; 2026 and 2027 checked against
 https://www.nyse.com/markets/hours-calendars ("Holidays & Trading Hours", 2026 / 2027 / 2028 table and its early-close

@@ -199,9 +199,11 @@ the `earnings_date` agrees with any UNCONFIRMED entry, a BMO / AMC `earnings_tim
 `event_time` (catalysts.json has none for the example JPM entry, only a note, so that ticker is NO IDEA: the time
 cannot be checked), and at least one contract has usable, fresh `bid`, `ask`, `open_interest` and
 `spread_pct_of_mid` (ideas use only `usable_contracts()`). **R07 / R08** run in `optpipe.mdfeeds.decision_reasons()`
-once a hold-window end is known (earnings coverage through the next CONFIRMED date; macro calendars from the pack's
-catalysts.json). An UNKNOWN / null `earnings_time` is MD-20-CRITICAL (R07 cannot place the event). An uncorroborated
-BMO/AMC is MD-20-UNVERIFIED (not CONFLICT).
+when a hold-window end is set. A pack run sets that end to the planner's far DTE (clamped by R13 `hold_max_days`)
+before discovery, so a FOMC-only pack is NO IDEA. R07 places BMO before the open and AMC after the close.
+Macro age is the catalysts source `as_of`, not `pack_built_at`. An UNKNOWN / null / STALE `earnings_time` is
+MD-20-CRITICAL (R07 cannot place the event). An uncorroborated OK BMO/AMC is MD-20-UNVERIFIED (not CONFLICT).
+MD-18 provenance stays OPEN: `pack.sha256` is directory integrity only.
 
 **Record version:** session records are written as `1.1.8` (`records/compat.py` `V11`); they carry the 1.1.8
 `risk_ruleset_version` and `watcher_rules_version` labels. Spec 1.1.7 / 1.1.8 are label-only for the rules (same checks

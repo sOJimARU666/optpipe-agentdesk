@@ -11,6 +11,8 @@ to-do c): get_chain returns those, and only those, for a ticker that passes mdfe
 """
 from __future__ import annotations
 
+import math
+import re
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -20,6 +22,9 @@ from ..models.common import (Bias, Event, EventKind, EventTiming, OptionChain, O
                              ScreenResult, ScreenRow, UnderlyingQuote)
 from ..providers.base import DataUnavailable
 from ..providers.macro import CalendarSnapshot, MacroEvent
+
+
+_USE_PACK_HOLD = object()
 
 
 def _val(f) -> Any:
@@ -34,6 +39,52 @@ def _right(s: str) -> Right:
     return Right.CALL if str(s).lower().startswith("c") else Right.PUT
 
 
+def _iv_number(f) -> Optional[float]:
+    """The pack's quoted IV when the field carries a finite number (OK or STALE). None when it is absent."""
+    if not isinstance(f, dict):
+        return None
+    v = f.get("value")
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
+        return None
+    return float(v)
+
+
+_KIND_WORD = re.compile(r"\b(CPI|PPI|NFP|FOMC)\b", re.I)
+
+
+def _macro_kind(c: dict) -> Optional[str]:
+    """FOMC is catalyst_type fomc. CPI / PPI / NFP have no schema enum value; a macro_release note names the kind."""
+    raw = str(c.get("catalyst_type") or "").upper()
+    if raw in mdfeeds.MACRO_KINDS:
+        return raw
+    if raw == "MACRO_RELEASE":
+        m = _KIND_WORD.search(str(c.get("note") or ""))
+        if m and m.group(1).upper() in ("CPI", "PPI", "NFP"):
+            return m.group(1).upper()
+    return None
+
+
+def _source_read_times(c: dict) -> list[datetime]:
+    srcs = c.get("sources") if isinstance(c.get("sources"), list) else []
+    out = []
+    for s in srcs:
+        if isinstance(s, dict):
+            t = md._aware(str(s.get("as_of") or ""))
+            if t is not None:
+                out.append(t)
+    return out
+
+
+class PackMacroCalendars:
+    """MacroCalendarProvider over catalysts.json. Research calls get_calendars; R08 reads the snapshot list."""
+
+    def __init__(self, snaps: list):
+        self.snaps = list(snaps)
+
+    def get_calendars(self, as_of: datetime):
+        return list(self.snaps), ["macro calendars: Oodle pack catalysts.json (source as_of, not pack_built_at)"]
+
+
 class PackMarket:
     """QuoteProvider + OptionChainProvider + EventProvider + ScreenerProvider over one loaded pack.
 
@@ -46,8 +97,10 @@ class PackMarket:
                  skew_seconds: float = md.DEFAULT_SKEW_SECONDS):
         self.res, self.now = res, now
         self.hold_end, self.macro = hold_end, macro
+        self.macro_provider = PackMacroCalendars(macro or [])
         self.risk_market_hours = risk_market_hours
         self.allow_labels, self.skew_seconds = allow_labels, skew_seconds
+        self.iv_store = None
         self.notes: list[str] = []
         if not res.ok:
             self.notes.append(f"pack not ok: {md.error_id(res.errors[0]) if res.errors else 'unknown'}")
@@ -56,14 +109,28 @@ class PackMarket:
     def load(cls, root, date: str, *, now: datetime, **kw) -> "PackMarket":
         return cls(md.load_date(root, date, now=now, spec=kw.pop("spec", None)), now=now, **kw)
 
-    def reasons(self, ticker: str, hold_end: Optional[datetime] = None) -> list[str]:
+    def _history_dates(self, ticker: str) -> list[date]:
+        store = self.iv_store
+        if store is None:
+            return []
+        out = []
+        for o in store.load(ticker):
+            try:
+                out.append(date.fromisoformat(str(o["date"])))
+            except (KeyError, TypeError, ValueError):
+                continue
+        return out
+
+    def reasons(self, ticker: str, hold_end: Any = _USE_PACK_HOLD) -> list[str]:
+        """R07/R08 use the pack hold end unless the caller passes a datetime or an explicit None (skip)."""
+        end = self.hold_end if hold_end is _USE_PACK_HOLD else hold_end
         return mdfeeds.decision_reasons(
-            self.res, ticker, now=self.now, hold_end=hold_end if hold_end is not None else self.hold_end,
+            self.res, ticker, now=self.now, hold_end=end,
             macro=self.macro if self.macro is not None else [],
             risk_market_hours=self.risk_market_hours, skew_seconds=self.skew_seconds,
-            allow_labels=self.allow_labels)
+            allow_labels=self.allow_labels, iv_history_dates=self._history_dates(ticker))
 
-    def usable(self, ticker: str, hold_end: Optional[datetime] = None) -> bool:
+    def usable(self, ticker: str, hold_end: Any = _USE_PACK_HOLD) -> bool:
         return not self.reasons(ticker, hold_end=hold_end)
 
     def _snap(self, symbol: str) -> dict:
@@ -72,16 +139,32 @@ class PackMarket:
             raise DataUnavailable(f"pack: {symbol} not in the pack")
         return d
 
+    def _quote_is_fresh(self, f) -> bool:
+        """True when the field already passed the pack staleness window at self.now. Research must not then
+        mark it stale solely because a pack quote is not a Nasdaq realtime flag."""
+        if not md.field_usable(f) or self.res.quote_limit is None or not isinstance(self.now, datetime) \
+                or self.now.tzinfo is None:
+            return False
+        t = _as_of(f)
+        if t is None or t > self.now:
+            return False
+        return (self.now - t) <= self.res.quote_limit
+
     def get_quote(self, symbol: str) -> UnderlyingQuote:
         if not self.res.ok:
             raise DataUnavailable(f"pack not ok ({md.error_id(self.res.errors[0]) if self.res.errors else '?'})")
-        d = self._snap(symbol)
+        sym = symbol.upper()
+        why = self.reasons(sym)
+        if why:
+            raise DataUnavailable(f"pack: {sym} NO IDEA: {md.error_id(why[0])}"
+                                  + (f" (+{len(why) - 1} more)" if len(why) > 1 else ""))
+        d = self._snap(sym)
         lp = d.get("last_price")
-        prior, _ = mdfeeds.prior_close(self.res, symbol.upper(), now=self.now)
+        prior, _ = mdfeeds.prior_close(self.res, sym, now=self.now)
         return UnderlyingQuote(
-            symbol=symbol.upper(), last=_val(lp), quote_time=_as_of(lp),
+            symbol=sym, last=_val(lp), quote_time=_as_of(lp),
             prev_close=_val(prior) if prior else None, prev_close_time=_as_of(prior) if prior else None,
-            is_realtime=False, source=f"pack:{self.res.date}", fetched_at=self.now,
+            is_realtime=self._quote_is_fresh(lp), source=f"urn:optpipe:pack:{self.res.date}", fetched_at=self.now,
             market_status=None)
 
     def get_chain(self, symbol: str, quote: Optional[UnderlyingQuote] = None) -> OptionChain:
@@ -95,6 +178,7 @@ class PackMarket:
             raise DataUnavailable(f"pack: {sym} NO IDEA: {md.error_id(why[0])}"
                                   + (f" (+{len(why) - 1} more)" if len(why) > 1 else ""))
         contracts = md.usable_contracts(self.res, sym, now=self.now, skew_seconds=self.skew_seconds)
+        snap = self._snap(sym)
         quotes, expiries = [], set()
         for c in contracts:
             try:
@@ -108,10 +192,11 @@ class PackMarket:
                 underlying=sym, expiry=exp, strike=float(c["strike"]), right=right,
                 bid=_val(bid), ask=_val(ask), open_interest=int(_val(oi)) if _val(oi) is not None else None,
                 volume=int(_val(c.get("volume"))) if _val(c.get("volume")) is not None else None,
+                iv=_iv_number(c.get("iv")) if isinstance(c.get("iv"), dict) else _iv_number(snap.get("iv")),
                 quote_time=t, quote_basis=QuoteBasis.REALTIME))
             expiries.add(exp)
         return OptionChain(underlying=sym, expiries=sorted(expiries), quotes=quotes,
-                           quote_basis=QuoteBasis.REALTIME, source=f"pack:{self.res.date}",
+                           quote_basis=QuoteBasis.REALTIME, source=f"urn:optpipe:pack:{self.res.date}",
                            fetched_at=self.now, note="usable_contracts only (PR B)")
 
     def get_events(self, symbol: str) -> list[Event]:
@@ -138,13 +223,13 @@ class PackMarket:
                 timing = EventTiming.AMC
             out.append(Event(kind=EventKind.EARNINGS, date=ed, symbol=sym, timing=timing,
                              description=c.get("note") or f"earnings {c.get('status')}",
-                             source=f"pack:{self.res.date}/catalysts.json"))
+                             source=f"urn:optpipe:pack:{self.res.date}/catalysts.json"))
         return out
 
     def get_screen(self, screen: str) -> ScreenResult:
         """Pack index tickers: screen name is 'pack_<watchlist>' (e.g. pack_eugene) or 'pack' for every ticker."""
         if not self.res.ok:
-            return ScreenResult(screen=screen, status="error", source=f"pack:{self.res.date}",
+            return ScreenResult(screen=screen, status="error", source=f"urn:optpipe:pack:{self.res.date}",
                                 note=md.error_id(self.res.errors[0]) if self.res.errors else "pack not ok")
         want = None if screen in ("pack", "pack_all") else screen.removeprefix("pack_")
         rows = []
@@ -159,7 +244,7 @@ class PackMarket:
             d = self.res.snapshots.get(t) or {}
             rows.append(ScreenRow(ticker=t, price=_val(d.get("last_price"))))
         return ScreenResult(screen=screen, status="ok" if rows else "empty", rows=rows,
-                            source=f"pack:{self.res.date}", fetched_at=self.now)
+                            source=f"urn:optpipe:pack:{self.res.date}", fetched_at=self.now)
 
 
 def pack_macro_from_catalysts(res: md.PackResult, *, now: datetime) -> list[CalendarSnapshot]:
@@ -170,15 +255,13 @@ def pack_macro_from_catalysts(res: md.PackResult, *, now: datetime) -> list[Cale
     """
     if not res.ok or not isinstance(res.catalysts, dict):
         return []
-    built = mdfeeds.built_at(res) or now
     by: dict[str, list] = {k: [] for k in mdfeeds.MACRO_KINDS}
+    reads: dict[str, list] = {k: [] for k in mdfeeds.MACRO_KINDS}
     for c in res.catalysts.get("catalysts") or []:
         if not isinstance(c, dict) or c.get("ticker") is not None:
             continue
-        kind = str(c.get("catalyst_type") or "").upper()
-        if kind == "FOMC":
-            kind = "FOMC"
-        elif kind not in by:
+        kind = _macro_kind(c)
+        if kind not in by:
             continue
         try:
             ed = date.fromisoformat(c["event_date"])
@@ -190,15 +273,26 @@ def pack_macro_from_catalysts(res: md.PackResult, *, now: datetime) -> list[Cale
             at = at.replace(tzinfo=ZoneInfo("America/New_York"))
         by[kind].append(MacroEvent(kind=kind, at=at, description=c.get("note") or kind,
                                    note=c.get("status")))
+        reads[kind].extend(_source_read_times(c))
     out = []
     for kind, evs in by.items():
         if not evs:
             continue
+        times = reads[kind]
+        future = [t for t in times if t > now]
+        # age is the source read, never pack_built_at. No usable as_of → macro_coverage says the read is unusable.
+        # Any future read is reported as future. Otherwise the oldest read fails the 7-day check if one source is stale.
+        if not times:
+            fetched = ""
+        elif future:
+            fetched = min(future).isoformat()
+        else:
+            fetched = min(times).isoformat()
         last = max(e.at.date() for e in evs)
         out.append(CalendarSnapshot(
             kind=kind,
             source={"id": f"src-pack-{kind.lower()}", "url": f"urn:optpipe:pack:{res.date}/catalysts.json",
-                    "kind": "calendar", "fetched_at": built.isoformat(), "publisher": "Oodle pack"},
+                    "kind": "economic_calendar", "fetched_at": fetched, "publisher": "Oodle pack"},
             events=sorted(evs, key=lambda e: e.at), checked_through=last,
             formula=f"pack catalysts.json {kind} through {last.isoformat()}"))
     return out

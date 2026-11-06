@@ -243,17 +243,43 @@ class PackQuoteSource:
         from .. import mdfeeds
         from ..providers.pack import PackMarket, pack_macro_from_catalysts
         d = now.astimezone(__import__("zoneinfo").ZoneInfo("America/New_York")).date().isoformat()
-        if d not in self._cache:
-            res = mdfeeds.select_pack(self.root, now, spec=self.spec)
-            if not res.ok:
-                self._cache[d] = None
-            else:
-                self._cache[d] = PackMarket(res, now=now, macro=pack_macro_from_catalysts(res, now=now),
-                                            allow_labels=self.allow_labels)
-        m = self._cache[d]
-        if m is not None:
-            m.now = now                 # decision clock advances across wakes
+        cached = self._cache.get(d)
+        if cached is not None:
+            built = mdfeeds.built_at(cached.res)
+            # an earlier clock on a pack built later must not be served from the success cache
+            if built is not None and now < built:
+                return None
+            cached.now = now
+            return cached
+        res = mdfeeds.select_pack(self.root, now, spec=self.spec)
+        if not res.ok:
+            # do not cache the failure: MD-19-FUTURE-PACK at 08:00 must not poison 09:05 on this object
+            return None
+        m = PackMarket(res, now=now, macro=pack_macro_from_catalysts(res, now=now),
+                       allow_labels=self.allow_labels)
+        self._cache[d] = m
         return m
+
+    @staticmethod
+    def _hold_end(now, contracts):
+        """Close of the latest requested expiry, else a 45-day prospective hold so R07/R08 still run."""
+        from datetime import date
+        from .. import mdfeeds, nyse_calendar as cal
+        ends = []
+        for cid in contracts or []:
+            if not isinstance(cid, str) or len(cid) < 15:
+                continue
+            yymmdd = cid[:-9][-6:]
+            try:
+                exp = date(2000 + int(yymmdd[0:2]), int(yymmdd[2:4]), int(yymmdd[4:6]))
+            except ValueError:
+                continue
+            close = cal.close_at(exp)
+            if close is not None:
+                ends.append(close)
+        if ends:
+            return max(ends)
+        return mdfeeds.prospective_hold_end(now, horizon_days=45)
 
     def snapshot(self, now, symbols, contracts):
         self.calls.append({"method": "file", "at": now.isoformat(), "symbols": list(symbols)})
@@ -261,6 +287,8 @@ class PackQuoteSource:
         und, opts = {}, {}
         m = self._market(now)
         want = set(contracts)
+        if m is not None:
+            m.hold_end = self._hold_end(now, contracts)
         if m is None or not m.res.ok:
             for s in symbols:
                 und[s] = {"last": _f(None, None, "src-pack"), "bars_5m": []}

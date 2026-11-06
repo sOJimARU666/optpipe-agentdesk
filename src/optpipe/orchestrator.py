@@ -336,12 +336,24 @@ class Orchestrator:
             screens = ["pack"]                          # every ticker in the pack index
             screener = self.pack
             quotes = chains = events = self.pack
-            macro = self.pack.macro
-            # only tickers that pass decision_reasons at as_of (no hold_end yet) become research picks;
-            # research then re-checks with the idea's hold_end via get_chain -> usable_contracts
+            macro = self.pack.macro_provider          # has get_calendars; the list alone is not a provider
+            # Gate every idea on the planner's far DTE (clamped by R13 hold_max). R07/R08 do not run when
+            # hold_end is None, so the pack path always supplies one. FOMC-only stays fail-closed.
+            from . import mdfeeds
+            horizon = s.planner.preferred_dte_max
+            hi = self.rules.config.hold_max_days
+            if hi is not None:
+                horizon = min(horizon, int(hi))
+            self.pack.hold_end = mdfeeds.prospective_hold_end(as_of, horizon_days=horizon)
+            self.pack.iv_store = self.p.iv_store
             for t in list((self.pack.res.index or {}).get("tickers") or []):
                 sym = t.get("ticker") if isinstance(t, dict) else None
-                if sym and (why := self.pack.reasons(sym, hold_end=None)):
+                if not sym:
+                    continue
+                if self.pack.hold_end is None:
+                    notes.append(f"NO IDEA {sym}: hold end is outside the app calendar (R07/R08 UNKNOWN)")
+                    continue
+                if why := self.pack.reasons(sym):
                     notes.append(f"NO IDEA {sym}: {why[0]}" + (f" (+{len(why)-1} more)" if len(why) > 1 else ""))
         else:
             screens = s.discovery.screens
@@ -350,8 +362,10 @@ class Orchestrator:
             macro = self.p.macro
         discovery = DiscoveryAgent(screener, self.p.global_provider,
                                    s.discovery.finviz_filters, inputs.earnings_reports, [settings_src, *manual_sources])
+        # Pack mode picks from the pack index. The settings watchlist is the fixture/Finviz universe.
         disc = self._step(discovery, DiscoveryInput(
-            as_of=as_of, run_id=run_id, screens=screens, watchlist=s.watchlist,
+            as_of=as_of, run_id=run_id, screens=screens,
+            watchlist=[] if self.pack is not None else s.watchlist,
             manual_candidates=inputs.manual_candidates, max_candidates=s.discovery.max_candidates))
         notes += disc.notes
         if self.pack is not None:

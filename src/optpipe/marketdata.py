@@ -80,6 +80,10 @@ MAX_ENTRIES = 520                                # proposed MD-16-ENTRIES (500 t
 MAX_PACK_BYTES = 64 * 1024 * 1024                # proposed MD-16-TOTAL
 DEFAULT_SKEW_SECONDS = 0                         # spec 1.1.8 sets no market-data skew: fail closed
 MAX_SAFE_INT = 2 ** 53
+# MD-18 is not implemented in PR B. pack.sha256 checks that the directory bytes match the manifest the
+# producer wrote. That is integrity of those bytes, not a trusted external manifest, fetch log, or pre-use
+# ingest record. A later PR may close it; until then this stays OPEN.
+MD18_PROVENANCE = "OPEN"
 FATAL_IDS = frozenset({"MD-01-DIR", "MD-01-UNREADABLE", "MD-03-JSON", "MD-00-CRASH", "MD-00-SPEC", "MD-00-ROOT"})
 # ids that are NOT spec 1.1.8 ids are labelled in every error string the module returns, so a later spec that adopts
 # or renumbers them cannot be confused with these: MD-16..MD-21 are Doodle's R7 PROPOSAL, MD-00-SPEC / MD-00-ROOT are
@@ -135,6 +139,44 @@ def error_id(e: str) -> str:
     head, _, rest = e.partition(" ")
     tag = rest.split(" ", 1)[0]
     return f"{head} {tag}" if tag in ("(proposed)", "(app)") else head
+
+
+class FrozenMap(dict):
+    """A dict that rejects writes. isinstance(..., dict) stays true so existing pack readers keep working."""
+
+    def _ro(self, *_a, **_k):
+        raise TypeError("pack snapshot is immutable after load")
+
+    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = __ior__ = _ro
+
+
+class FrozenList(list):
+    """A list that rejects writes. isinstance(..., list) stays true."""
+
+    def _ro(self, *_a, **_k):
+        raise TypeError("pack snapshot is immutable after load")
+
+    __setitem__ = __delitem__ = append = extend = insert = pop = clear = reverse = sort = __iadd__ = _ro
+
+
+def _freeze(o):
+    """Deep-freeze JSON-shaped documents. MappingProxy would break isinstance(dict) checks in the consumers."""
+    if isinstance(o, dict) and type(o) is not FrozenMap:
+        m = dict.__new__(FrozenMap)
+        dict.__init__(m, ((k, _freeze(v)) for k, v in o.items()))
+        return m
+    if isinstance(o, list) and type(o) is not FrozenList:
+        fl = list.__new__(FrozenList)
+        list.extend(fl, (_freeze(v) for v in o))
+        return fl
+    return o
+
+
+def _freeze_documents(res: "PackResult") -> None:
+    """Index, ticker snapshots and catalysts are read-only after a load. errors stays a list."""
+    res.index = _freeze(res.index) if isinstance(res.index, dict) else res.index
+    res.snapshots = _freeze(res.snapshots) if isinstance(res.snapshots, dict) else FrozenMap()
+    res.catalysts = _freeze(res.catalysts) if isinstance(res.catalysts, dict) else res.catalysts
 
 
 def field_usable(f) -> bool:
@@ -358,20 +400,27 @@ def _no_root(date) -> PackResult:
         f"MD-00-ROOT no market-data root given (pass --data-dir or set ${ENV_DATA_DIR}); nothing was opened"]))
 
 
+def _wall_clock(tz=timezone.utc) -> datetime:
+    """The only wall-clock read in this module. Replay and pack runs pass `now` and never call it."""
+    return datetime.now(tz)
+
+
 def load_pack(date_dir, *, root, now: Optional[datetime] = None, skew_seconds: float = DEFAULT_SKEW_SECONDS,
               spec=None) -> PackResult:
     """load + verify + validate one date dir under `root` (REQUIRED: MD-17-ROOT always applies; None is MD-00-ROOT,
     exit 2, nothing opened). Never raises: any exception is MD-00-CRASH (fail closed)."""
     if root is None or str(root) == "":
-        return _no_root(Path(str(date_dir)).name)
-    try:
-        if now is None:
-            now = datetime.now(timezone.utc)
-        res = _load(Path(date_dir), Path(root), now, skew_seconds, spec)
-    except Exception as ex:  # noqa: BLE001 - fail closed, never a pass
-        res = PackResult(date=Path(str(date_dir)).name,
-                         errors=[f"MD-00-CRASH {Path(str(date_dir)).name}: loader raised {type(ex).__name__}: {ex}"])
-    label_ids(res.errors)
+        res = _no_root(Path(str(date_dir)).name)
+    else:
+        try:
+            if now is None:
+                now = _wall_clock(timezone.utc)
+            res = _load(Path(date_dir), Path(root), now, skew_seconds, spec)
+        except Exception as ex:  # noqa: BLE001 - fail closed, never a pass
+            res = PackResult(date=Path(str(date_dir)).name,
+                             errors=[f"MD-00-CRASH {Path(str(date_dir)).name}: loader raised {type(ex).__name__}: {ex}"])
+        label_ids(res.errors)
+    _freeze_documents(res)
     return res
 
 
@@ -907,11 +956,15 @@ def no_idea_reasons(res: PackResult, ticker: str, *, now: datetime, skew_seconds
         if isinstance(ed, dict) and ed.get("value") is not None and other and {ed["value"]} != other:
             out.append(f"MD-20-CONFLICT {ticker}.earnings_date: {ed['value']} disagrees with UNCONFIRMED catalysts "
                        f"{sorted(other)}")
-        if isinstance(et, dict) and et.get("value") in ("BMO", "AMC"):
+        if isinstance(et, dict) and et.get("value") in ("BMO", "AMC") and field_usable(et):
             entries = _earnings_entries(res.catalysts, ticker, ed.get("value") if isinstance(ed, dict) else None)
             if not any(_session(c.get("event_time")) == et["value"] for c in entries):
                 out.append(f"MD-20-UNVERIFIED {ticker}.earnings_time: {et['value']} is not corroborated by a "
                            "catalysts.json earnings event_time for the same date (cannot be checked: NO IDEA)")
+        elif isinstance(et, dict) and et.get("value") in ("BMO", "AMC"):
+            # STALE / UNKNOWN / UNCONFIRMED with a session label is not corroboration. R07 cannot place the print.
+            out.append(f"MD-20-CRITICAL {ticker}.earnings_time: status {et.get('status')} value {et.get('value')} "
+                       "(only OK is usable; R07 cannot place the event: fail closed)")
         else:
             # PR B decision (Moodle to-do b): an UNKNOWN / null earnings_time is a critical UNKNOWN for R07 (BMO vs
             # AMC decides on which side of a hold-window edge the event falls), so it is NO IDEA: fail closed.

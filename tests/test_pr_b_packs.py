@@ -93,14 +93,24 @@ def test_mdfeeds_r07_r08_against_hold_end(tmp_path):
     edit_json(d, "catalysts.json", _jpm_event_time)
     r = load(d)
     m = PackMarket(r, now=NOW, allow_labels=("EXAMPLE",), macro=pack_macro_from_catalysts(r, now=NOW))
-    # hold through earnings day: OK for R07; hold past it: CRITICAL R07
-    hold_ok = cal.close_at(date(2026, 10, 21))
-    hold_past = cal.close_at(date(2026, 10, 23))
-    assert hold_ok and hold_past
-    assert not any("R07" in e for e in m.reasons("JPM", hold_end=hold_ok))
-    assert any("R07" in e for e in m.reasons("JPM", hold_end=hold_past))
-    # R08: pack has FOMC only -> other kinds missing -> CRITICAL R08
-    assert any("R08" in e for e in m.reasons("JPM", hold_end=hold_ok))
+    # BMO on 2026-10-21: a hold that reaches the open includes the print; the prior close does not.
+    before = cal.close_at(date(2026, 10, 20))
+    on_day = cal.close_at(date(2026, 10, 21))
+    after = cal.close_at(date(2026, 10, 22))
+    assert before and on_day and after
+    assert not any("R07" in e for e in m.reasons("JPM", hold_end=before))
+    assert any("R07" in e and "BMO" in e for e in m.reasons("JPM", hold_end=on_day))
+    # R08: pack has FOMC only -> other kinds missing -> CRITICAL R08 (even on a hold that passes R07)
+    assert any("R08" in e for e in m.reasons("JPM", hold_end=before))
+    # AMC: the print is after the close, so a hold through that close does not include it
+    d3 = copy_pack(tmp_path / "amc")
+    edit_json(d3, "JPM.json", lambda x: (_fresh_contract(x), x["earnings_time"].update(value="AMC")))
+    edit_json(d3, "catalysts.json", lambda doc: _jpm_event_time(doc, "2026-10-21T16:30:00-04:00"))
+    r3 = load(d3)
+    assert r3.ok, r3.errors
+    m3 = PackMarket(r3, now=NOW, allow_labels=("EXAMPLE",), macro=pack_macro_from_catalysts(r3, now=NOW))
+    assert not any("R07" in e for e in m3.reasons("JPM", hold_end=on_day))
+    assert any("R07" in e and "AMC" in e for e in m3.reasons("JPM", hold_end=after))
 
 
 def test_select_pack_uses_ny_date_and_injected_clock(tmp_path):
@@ -155,8 +165,11 @@ def test_pack_quote_source_reads_fixture_pack(tmp_path):
     # contract_id OCC for the fresh JPM 102 call 2026-10-23
     cid = occ_symbol("JPM", date(2026, 10, 23), "C", 102.0)
     snap = src.snapshot(NOW, ["JPM"], [cid])
-    assert snap["underlyings"]["JPM"]["last"]["value"] == 101.25
-    assert snap["options"][cid]["bid"]["value"] == 1.1
+    # the contract expires 2026-10-23, after BMO earnings on 2026-10-21, and the pack is FOMC-only:
+    # the watcher supplies that hold end, so the ticker is NO IDEA and cannot move a stop
+    assert snap["underlyings"]["JPM"]["last"]["value"] is None
+    assert snap["underlyings"]["JPM"]["last"]["status"] == "missing"
+    assert snap["options"][cid]["bid"]["value"] is None
     assert src.method == "file" and src.calls
 
 

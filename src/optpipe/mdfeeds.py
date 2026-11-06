@@ -120,9 +120,10 @@ def prior_close(res: PackResult, ticker: str, *, now: datetime) -> tuple[Optiona
         return None, (f"MD-19-STALE-PRIOR {ticker}.prior_close: the session {want_b} closed before B, but {want_d} "
                       "closed before D")
     close = cal.close_at(want_b)
-    if t is None or _ny_date(t) != want_b or t > close:
+    # the print is the official close, not any timestamp on that session's calendar date
+    if t is None or close is None or t != close:
         return None, (f"MD-19-STALE-PRIOR {ticker}.prior_close: as_of {f.get('as_of')} is not the {want_b} regular "
-                      f"close ({close.isoformat()})")
+                      f"close ({close.isoformat() if close else 'unknown'})")
     return f, None
 
 
@@ -230,10 +231,36 @@ def hold_end_for(expiry: date) -> Optional[datetime]:
     return cal.close_at(expiry)
 
 
+def _earnings_session(res: PackResult, ticker: str) -> Optional[str]:
+    """Usable BMO / AMC, else None. A STALE session label is not a placement (no_idea_reasons already says so)."""
+    d = res.snapshots.get(ticker) if isinstance(res.snapshots, dict) else None
+    et = d.get("earnings_time") if isinstance(d, dict) else None
+    if field_usable(et) and et.get("value") in ("BMO", "AMC"):
+        return et["value"]
+    return None
+
+
 def r07_reasons(res: PackResult, ticker: str, *, now: datetime, hold_end: datetime) -> list[str]:
+    """Earnings coverage ends at the print, not merely on the calendar date E.
+
+    BMO is before the open of E, so a hold that reaches that open includes the print and what follows it is not
+    in the pack. AMC is after the close of E, so a hold through that close does not include the print.
+    """
     e = earnings_coverage(res, ticker, now=now)
     if e is None:
         return [f"MD-20-CRITICAL R07 {ticker}: no usable next CONFIRMED earnings date (coverage UNKNOWN)"]
+    sess = _earnings_session(res, ticker)
+    if sess == "BMO":
+        if hold_end >= cal.ny_at(e, cal.OPEN):
+            return [f"MD-20-CRITICAL R07 {ticker}: earnings {e} BMO is before the open; a hold ending "
+                    f"{hold_end.isoformat()} includes the print and the next earnings date is not in the pack"]
+        return []
+    if sess == "AMC":
+        close_e = cal.close_at(e)
+        if close_e is None or hold_end > close_e:
+            return [f"MD-20-CRITICAL R07 {ticker}: earnings {e} AMC is after the close; the hold window ends "
+                    f"{_ny_date(hold_end)} and the next earnings date is not in the pack"]
+        return []
     if _ny_date(hold_end) > e:
         return [f"MD-20-CRITICAL R07 {ticker}: earnings coverage runs through {e} (the next CONFIRMED earnings; the "
                 f"one after it is not in the pack), the hold window ends {_ny_date(hold_end)}"]
@@ -270,18 +297,39 @@ def history_reasons(dates: Iterable[date], *, now: datetime, what: str = "iv_his
     return label_ids(out)
 
 
+def prospective_hold_end(now: datetime, *, horizon_days: int) -> Optional[datetime]:
+    """Official close of the last session on or before `now`'s NY date plus `horizon_days` calendar days.
+
+    That is the far end of the planner's DTE window, so R07 / R08 can gate an idea before a leg is chosen.
+    None when the walk leaves the app calendar (UNKNOWN).
+    """
+    if not _aware_now(now) or not isinstance(horizon_days, int) or isinstance(horizon_days, bool) or horizon_days < 0:
+        return None
+    target = _ny_date(now) + timedelta(days=horizon_days)
+    for _ in range(14):
+        if not cal.covers(target):
+            return None
+        close = cal.close_at(target)
+        if close is not None:
+            return close
+        target -= timedelta(days=1)
+    return None
+
+
 def decision_reasons(res: PackResult, ticker: str, *, now: datetime, hold_end: Optional[datetime] = None,
                      macro=None, risk_market_hours=None, skew_seconds: float = DEFAULT_SKEW_SECONDS,
-                     allow_labels: tuple = ("MARKET",)) -> list[str]:
+                     allow_labels: tuple = ("MARKET",), iv_history_dates: Optional[Iterable[date]] = None) -> list[str]:
     """[] only if `ticker` may feed an idea at `now`: marketdata.no_idea_reasons, then the calendar, the NY-date
-    binding, the earnings freshness windows and, with a hold_end, R07 (earnings coverage) and R08 (macro calendars,
-    `macro` = CalendarSnapshot list). Anything else is NO IDEA (fail closed, never raises)."""
+    binding, the earnings freshness windows, IV-history freshness (`iv_history_dates`) and, with a hold_end, R07
+    (earnings coverage, BMO/AMC placement) and R08 (macro calendars, `macro` = CalendarSnapshot list). Anything
+    else is NO IDEA (fail closed, never raises). An empty history is missing (R10), not by itself NO IDEA."""
     try:
         out = list(no_idea_reasons(res, ticker, now=now, skew_seconds=skew_seconds, allow_labels=allow_labels))
         if not _aware_now(now) or not res.ok:
             return out
         more = calendar_reasons(res, now=now, risk_market_hours=risk_market_hours)
         more += day_reasons(res, ticker, now=now) + earnings_reasons(res, ticker, now=now)
+        more += history_reasons(iv_history_dates or [], now=now, what=f"{ticker}.iv_history")
         if hold_end is not None:
             if not _aware_now(hold_end):
                 more.append(f"MD-19-TZ {ticker}: naive hold end")
