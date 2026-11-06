@@ -68,10 +68,11 @@ import math
 import os
 import re
 import stat
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field as dc_field
 from datetime import date as _date, datetime, timedelta, timezone
 from pathlib import Path
-from types import ModuleType
+from types import MappingProxyType, ModuleType
 from typing import Any, Optional
 
 ENV_DATA_DIR = "OPTPIPE_MARKET_DATA_DIR"        # there is NO default root: --data-dir or this env var (PR #22 review)
@@ -112,7 +113,7 @@ class PackResult:
 
     @property
     def schema_version(self) -> Optional[str]:
-        return self.index.get("schema_version") if isinstance(self.index, dict) else None
+        return self.index.get("schema_version") if isinstance(self.index, Mapping) else None
 
 
 def exit_code(errors: list[str]) -> int:
@@ -141,47 +142,38 @@ def error_id(e: str) -> str:
     return f"{head} {tag}" if tag in ("(proposed)", "(app)") else head
 
 
-class FrozenMap(dict):
-    """A dict that rejects writes. isinstance(..., dict) stays true so existing pack readers keep working."""
-
-    def _ro(self, *_a, **_k):
-        raise TypeError("pack snapshot is immutable after load")
-
-    __setitem__ = __delitem__ = clear = pop = popitem = setdefault = update = __ior__ = _ro
-
-
-class FrozenList(list):
-    """A list that rejects writes. isinstance(..., list) stays true."""
-
-    def _ro(self, *_a, **_k):
-        raise TypeError("pack snapshot is immutable after load")
-
-    __setitem__ = __delitem__ = append = extend = insert = pop = clear = reverse = sort = __iadd__ = _ro
+def is_seq(o) -> bool:
+    """A JSON array. Excludes str, which is a Sequence. Tuples are the frozen form of pack lists."""
+    return isinstance(o, Sequence) and not isinstance(o, (str, bytes, bytearray))
 
 
 def _freeze(o):
-    """Deep-freeze JSON-shaped documents. MappingProxy would break isinstance(dict) checks in the consumers."""
-    if isinstance(o, dict) and type(o) is not FrozenMap:
-        m = dict.__new__(FrozenMap)
-        dict.__init__(m, ((k, _freeze(v)) for k, v in o.items()))
-        return m
-    if isinstance(o, list) and type(o) is not FrozenList:
-        fl = list.__new__(FrozenList)
-        list.extend(fl, (_freeze(v) for v in o))
-        return fl
+    """Deep-freeze JSON documents as MappingProxy / tuple.
+
+    A dict subclass is not enough: dict.update(leaf, ...) uses the C implementation and writes through
+    an overridden __setitem__. MappingProxyType is not a dict, so that call raises.
+    """
+    if type(o) is MappingProxyType:
+        return o
+    if isinstance(o, Mapping):
+        return MappingProxyType({k: _freeze(v) for k, v in o.items()})
+    if isinstance(o, list):
+        return tuple(_freeze(v) for v in o)
+    if isinstance(o, tuple):
+        return tuple(_freeze(v) for v in o)
     return o
 
 
 def _freeze_documents(res: "PackResult") -> None:
     """Index, ticker snapshots and catalysts are read-only after a load. errors stays a list."""
-    res.index = _freeze(res.index) if isinstance(res.index, dict) else res.index
-    res.snapshots = _freeze(res.snapshots) if isinstance(res.snapshots, dict) else FrozenMap()
-    res.catalysts = _freeze(res.catalysts) if isinstance(res.catalysts, dict) else res.catalysts
+    res.index = _freeze(res.index) if isinstance(res.index, Mapping) else res.index
+    res.snapshots = _freeze(res.snapshots) if isinstance(res.snapshots, Mapping) else MappingProxyType({})
+    res.catalysts = _freeze(res.catalysts) if isinstance(res.catalysts, Mapping) else res.catalysts
 
 
 def field_usable(f) -> bool:
     """fail closed: only an OK field with a (finite) value may feed an idea; STALE / UNKNOWN / UNCONFIRMED never"""
-    if not (isinstance(f, dict) and f.get("status") == "OK" and f.get("value") is not None):
+    if not (isinstance(f, Mapping) and f.get("status") == "OK" and f.get("value") is not None):
         return False
     v = f["value"]
     return not (isinstance(v, float) and not math.isfinite(v))
@@ -260,7 +252,7 @@ def _walk_strict(x, where: str = "$") -> Optional[tuple[str, str]]:
     stack = [(x, where)]
     while stack:
         v, w = stack.pop()
-        if isinstance(v, dict):
+        if isinstance(v, Mapping):
             for k, c in v.items():
                 if isinstance(k, str) and CTRL.search(k):
                     return "MD-16-PATTERN", f"{w}: key {k!r} contains a control character"
@@ -298,7 +290,7 @@ def parse_json_strict(name: str, data: bytes, errors: list[str]):
     except (ValueError, RecursionError) as ex:
         errors.append(f"MD-03-JSON {name}: not UTF-8 JSON: {type(ex).__name__}: {ex}")
         return None
-    if not isinstance(doc, dict):
+    if not isinstance(doc, Mapping):
         errors.append(f"MD-03-JSON {name}: a JSON {type(doc).__name__}, not an object")
         return None
     bad = _walk_strict(doc)
@@ -576,7 +568,7 @@ def _peek_v118(vms, dfd: int, names: list[str], scan: dict) -> bool:
         return False
     data, _ = _read(dfd, idx, [], int(vms.RULES["layout"]["max_file_bytes"]), [MAX_PACK_BYTES], scan.get(idx))
     doc = parse_json_strict(idx, data, []) if data is not None else None
-    return isinstance(doc, dict) and doc.get("schema_version") == vms.V118
+    return isinstance(doc, Mapping) and doc.get("schema_version") == vms.V118
 
 
 def _load_fd(vms, dfd: int, dir_name: str, res: PackResult, now: datetime, skew: timedelta) -> None:
@@ -770,7 +762,7 @@ def _times(x, path: str = "$"):
     stack = [(x, path)]
     while stack:
         v, w = stack.pop()
-        if isinstance(v, dict):
+        if isinstance(v, Mapping):
             for k, c in v.items():
                 if k in ("as_of", "pack_built_at") and isinstance(c, str):
                     yield f"{w}.{k}", c
@@ -818,7 +810,7 @@ def _conflict_errors(docs, catalysts, pack_date: str) -> list[str]:
         entry's event_time (before 09:30 = BMO, from 16:00 = AMC, in between = neither).
     A ticker file that disagrees only with UNCONFIRMED entries, or an earnings_time that catalysts.json cannot check
     (no event_time), is a per-ticker NO IDEA reason in no_idea_reasons(), not a pack failure."""
-    if not isinstance(catalysts, dict):
+    if not isinstance(catalysts, Mapping):
         return []
     confirmed = _earnings_dates(catalysts, ("CONFIRMED",))
     dated = _earnings_dates(catalysts, ("CONFIRMED", "UNCONFIRMED"))
@@ -830,14 +822,14 @@ def _conflict_errors(docs, catalysts, pack_date: str) -> list[str]:
             out.append(f"MD-20-CONFLICT catalysts.json {t}: earnings entries on different dates within 30 days "
                        f"{[list(p) for p in close]} (CONFIRMED / UNCONFIRMED)")
     for fname, d in sorted(docs.items()):
-        if not isinstance(d, dict):
+        if not isinstance(d, Mapping):
             continue
         t, ed, et = d.get("ticker"), d.get("earnings_date"), d.get("earnings_time")
         nxt = _next_date(confirmed.get(t, ()), pack_date)
-        if isinstance(ed, dict) and ed.get("value") is not None and nxt is not None and ed["value"] != nxt:
+        if isinstance(ed, Mapping) and ed.get("value") is not None and nxt is not None and ed["value"] != nxt:
             out.append(f"MD-20-CONFLICT {fname} earnings_date: {ed['value']} ({ed.get('status')}) contradicts the "
                        f"next CONFIRMED catalysts.json earnings {nxt} (all CONFIRMED: {sorted(confirmed[t])})")
-        if isinstance(ed, dict) and isinstance(et, dict) and et.get("value") in ("BMO", "AMC"):
+        if isinstance(ed, Mapping) and isinstance(et, Mapping) and et.get("value") in ("BMO", "AMC"):
             for c in _earnings_entries(catalysts, t, ed.get("value")):
                 sess = _session(c.get("event_time"))
                 if sess is not None and sess != et["value"]:
@@ -853,7 +845,7 @@ def _next_date(dates, pack_date: str) -> Optional[str]:
 
 def _earnings_entries(catalysts, ticker, event_date) -> list[dict]:
     return [c for c in (catalysts or {}).get("catalysts") or []
-            if isinstance(c, dict) and c.get("catalyst_type") == "earnings" and c.get("ticker") == ticker
+            if isinstance(c, Mapping) and c.get("catalyst_type") == "earnings" and c.get("ticker") == ticker
             and c.get("status") in ("CONFIRMED", "UNCONFIRMED") and c.get("event_date") == event_date]
 
 
@@ -871,7 +863,7 @@ def _session(event_time) -> Optional[str]:
 def _earnings_dates(catalysts, statuses) -> dict[str, set]:
     out: dict[str, set] = {}
     for c in (catalysts or {}).get("catalysts") or []:
-        if isinstance(c, dict) and c.get("catalyst_type") == "earnings" and c.get("status") in statuses \
+        if isinstance(c, Mapping) and c.get("catalyst_type") == "earnings" and c.get("status") in statuses \
                 and isinstance(c.get("ticker"), str) and isinstance(c.get("event_date"), str):
             out.setdefault(c["ticker"], set()).add(c["event_date"])
     return out
@@ -892,7 +884,7 @@ QUOTE_LEAVES = frozenset({"last_price", "iv", "iv_rank", "implied_move", "open_i
 
 
 def _field_reason(path: str, leaf: str, f, now: datetime, skew: timedelta, limit: timedelta) -> Optional[str]:
-    if not isinstance(f, dict):
+    if not isinstance(f, Mapping):
         return f"MD-20-CRITICAL {path}: missing (UNKNOWN)"
     if not field_usable(f):
         return f"MD-20-CRITICAL {path}: status {f.get('status')} (only OK with a value is usable)"
@@ -917,9 +909,9 @@ def usable_contracts(res: PackResult, ticker: str, *, now: datetime,
                 or now.tzinfo is None or now.utcoffset() is None:
             return []
         d = res.snapshots.get(ticker)
-        contracts = ((d or {}).get("option_liquidity") or {}).get("contracts") or [] if isinstance(d, dict) else []
+        contracts = ((d or {}).get("option_liquidity") or {}).get("contracts") or [] if isinstance(d, Mapping) else []
         skew = timedelta(seconds=skew_seconds)
-        return [c for c in contracts if isinstance(c, dict)
+        return [c for c in contracts if isinstance(c, Mapping)
                 and not any(_field_reason("c", k, c.get(k), now, skew, res.quote_limit) for k in CONTRACT_CRITICAL)]
     except Exception:  # noqa: BLE001 - fail closed
         return []
@@ -940,35 +932,35 @@ def no_idea_reasons(res: PackResult, ticker: str, *, now: datetime, skew_seconds
     try:
         if not isinstance(now, datetime) or now.tzinfo is None or now.utcoffset() is None:
             return label_ids(["MD-19-TZ now: naive clock (NO IDEA)"])
-        if not res.ok or not isinstance(res.index, dict) or not isinstance(res.quote_limit, timedelta):
+        if not res.ok or not isinstance(res.index, Mapping) or not isinstance(res.quote_limit, timedelta):
             first = error_id(res.errors[0]) if res.errors else "not loaded"
             return label_ids([f"MD-20-NO-IDEA {ticker}: the pack is not ok ({first})"])
         label = res.index.get("data_label")
         if label not in allow_labels:
             return label_ids([f"MD-20-SCOPE {ticker}: data_label {label} is not market data for a real idea"])
         d = res.snapshots.get(ticker)
-        if not isinstance(d, dict):
+        if not isinstance(d, Mapping):
             return label_ids([f"MD-20-NO-IDEA {ticker}: not in the pack"])
         skew, limit = timedelta(seconds=skew_seconds), res.quote_limit
         out = [r for k in IDEA_TOP_FIELDS if (r := _field_reason(f"{ticker}.{k}", k, d.get(k), now, skew, limit))]
         ed, et = d.get("earnings_date"), d.get("earnings_time")
         other = _earnings_dates(res.catalysts, ("UNCONFIRMED",)).get(ticker, set())
-        if isinstance(ed, dict) and ed.get("value") is not None and other and {ed["value"]} != other:
+        if isinstance(ed, Mapping) and ed.get("value") is not None and other and {ed["value"]} != other:
             out.append(f"MD-20-CONFLICT {ticker}.earnings_date: {ed['value']} disagrees with UNCONFIRMED catalysts "
                        f"{sorted(other)}")
-        if isinstance(et, dict) and et.get("value") in ("BMO", "AMC") and field_usable(et):
-            entries = _earnings_entries(res.catalysts, ticker, ed.get("value") if isinstance(ed, dict) else None)
+        if isinstance(et, Mapping) and et.get("value") in ("BMO", "AMC") and field_usable(et):
+            entries = _earnings_entries(res.catalysts, ticker, ed.get("value") if isinstance(ed, Mapping) else None)
             if not any(_session(c.get("event_time")) == et["value"] for c in entries):
                 out.append(f"MD-20-UNVERIFIED {ticker}.earnings_time: {et['value']} is not corroborated by a "
                            "catalysts.json earnings event_time for the same date (cannot be checked: NO IDEA)")
-        elif isinstance(et, dict) and et.get("value") in ("BMO", "AMC"):
+        elif isinstance(et, Mapping) and et.get("value") in ("BMO", "AMC"):
             # STALE / UNKNOWN / UNCONFIRMED with a session label is not corroboration. R07 cannot place the print.
             out.append(f"MD-20-CRITICAL {ticker}.earnings_time: status {et.get('status')} value {et.get('value')} "
                        "(only OK is usable; R07 cannot place the event: fail closed)")
         else:
             # PR B decision (Moodle to-do b): an UNKNOWN / null earnings_time is a critical UNKNOWN for R07 (BMO vs
             # AMC decides on which side of a hold-window edge the event falls), so it is NO IDEA: fail closed.
-            shown = et.get("value") if isinstance(et, dict) else "missing"
+            shown = et.get("value") if isinstance(et, Mapping) else "missing"
             out.append(f"MD-20-CRITICAL {ticker}.earnings_time: {shown} (UNKNOWN; R07 cannot place the event: "
                        "fail closed)")
         if not usable_contracts(res, ticker, now=now, skew_seconds=skew_seconds):

@@ -226,8 +226,8 @@ def test_loader_imports_no_network_module():
     tree = ast.parse((ROOT / "src" / "optpipe" / "marketdata.py").read_text())
     mods = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     mods |= {(n.module or "").split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and n.level == 0}
-    assert mods <= {"__future__", "errno", "hashlib", "json", "math", "os", "re", "stat", "dataclasses",
-                    "datetime", "pathlib", "types", "typing", "zoneinfo"}, mods
+    assert mods <= {"__future__", "collections", "errno", "hashlib", "json", "math", "os", "re", "stat",
+                    "dataclasses", "datetime", "pathlib", "types", "typing", "zoneinfo"}, mods
     called = set()
     for n in ast.walk(tree):
         if isinstance(n, ast.Call):

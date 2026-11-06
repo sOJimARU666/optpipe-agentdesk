@@ -34,11 +34,12 @@ API
 """
 from __future__ import annotations
 
+from collections.abc import Mapping
 from datetime import date, datetime, timedelta
 from typing import Iterable, Optional
 
 from . import nyse_calendar as cal
-from .marketdata import (DEFAULT_SKEW_SECONDS, PackResult, _aware, field_usable, label_ids, load_date,
+from .marketdata import (DEFAULT_SKEW_SECONDS, PackResult, _aware, field_usable, is_seq, label_ids, load_date,
                          no_idea_reasons)
 
 MACRO_KINDS = ("FOMC", "CPI", "PPI", "NFP")
@@ -52,7 +53,7 @@ def _aware_now(now) -> bool:
 
 
 def built_at(res: PackResult) -> Optional[datetime]:
-    return _aware((res.index or {}).get("pack_built_at") or "") if isinstance(res.index, dict) else None
+    return _aware((res.index or {}).get("pack_built_at") or "") if isinstance(res.index, Mapping) else None
 
 
 def _ny_date(t: datetime) -> date:
@@ -88,7 +89,7 @@ def day_reasons(res: PackResult, ticker: str, *, now: datetime) -> list[str]:
     if _ny_date(b) == _ny_date(now):
         return []
     out = [f"MD-19-STALE-DAY {ticker}: pack built on NY date {_ny_date(b)}, decision on {_ny_date(now)}"]
-    ent = next((e for e in (res.index or {}).get("tickers") or [] if isinstance(e, dict) and e.get("ticker") == ticker),
+    ent = next((e for e in (res.index or {}).get("tickers") or [] if isinstance(e, Mapping) and e.get("ticker") == ticker),
                None)
     if ent and ent.get("watchlist") == "street":
         out.append(f"MD-19-STALE-STREET {ticker}: a street idea is valid on its pack's NY date {_ny_date(b)} only")
@@ -96,8 +97,8 @@ def day_reasons(res: PackResult, ticker: str, *, now: datetime) -> list[str]:
 
 
 def _ctx(res: PackResult, ticker: str) -> Optional[dict]:
-    for c in (res.catalysts or {}).get("ticker_context") or [] if isinstance(res.catalysts, dict) else []:
-        if isinstance(c, dict) and c.get("ticker") == ticker:
+    for c in (res.catalysts or {}).get("ticker_context") or [] if isinstance(res.catalysts, Mapping) else []:
+        if isinstance(c, Mapping) and c.get("ticker") == ticker:
             return c
     return None
 
@@ -107,11 +108,11 @@ def prior_close(res: PackResult, ticker: str, *, now: datetime) -> tuple[Optiona
     the last session completed at both B and D; else (None, MD-19-STALE-PRIOR reason)."""
     b = built_at(res)
     c = _ctx(res, ticker)
-    f = c.get("prior_close") if isinstance(c, dict) else None
+    f = c.get("prior_close") if isinstance(c, Mapping) else None
     if f is None:
         return None, f"MD-19-STALE-PRIOR {ticker}.prior_close: not in the pack"
     if not field_usable(f) or b is None or not _aware_now(now):
-        return None, f"MD-19-STALE-PRIOR {ticker}.prior_close: status {f.get('status') if isinstance(f, dict) else '?'}"
+        return None, f"MD-19-STALE-PRIOR {ticker}.prior_close: status {f.get('status') if isinstance(f, Mapping) else '?'}"
     t = _aware(f.get("as_of") or "")
     want_b, want_d = cal.last_completed_session(b), cal.last_completed_session(now)
     if want_b is None or want_d is None:
@@ -128,14 +129,14 @@ def prior_close(res: PackResult, ticker: str, *, now: datetime) -> tuple[Optiona
 
 
 def _source_times(f: dict) -> list[Optional[datetime]]:
-    src = f.get("sources") if isinstance(f.get("sources"), list) and f.get("sources") else [f]
-    return [_aware(s.get("as_of") or "") if isinstance(s, dict) else None for s in src]
+    src = f.get("sources") if is_seq(f.get("sources")) and f.get("sources") else [f]
+    return [_aware(s.get("as_of") or "") if isinstance(s, Mapping) else None for s in src]
 
 
 def earnings_reasons(res: PackResult, ticker: str, *, now: datetime) -> list[str]:
-    d = res.snapshots.get(ticker) if isinstance(res.snapshots, dict) else None
+    d = res.snapshots.get(ticker) if isinstance(res.snapshots, Mapping) else None
     b = built_at(res)
-    if not isinstance(d, dict) or b is None:
+    if not isinstance(d, Mapping) or b is None:
         return []          # no_idea_reasons already says why
     out = []
     ed = d.get("earnings_date")
@@ -173,8 +174,8 @@ def earnings_reasons(res: PackResult, ticker: str, *, now: datetime) -> list[str
 def earnings_coverage(res: PackResult, ticker: str, *, now: datetime) -> Optional[date]:
     """E: the usable (two-origin OK, corroborated, MD-20-checked) next CONFIRMED earnings date; earnings coverage is
     known through E only (what follows E is not in the pack). None when it is not usable."""
-    d = res.snapshots.get(ticker) if isinstance(res.snapshots, dict) else None
-    ed = d.get("earnings_date") if isinstance(d, dict) else None
+    d = res.snapshots.get(ticker) if isinstance(res.snapshots, Mapping) else None
+    ed = d.get("earnings_date") if isinstance(d, Mapping) else None
     if not field_usable(ed):
         return None
     try:
@@ -233,8 +234,8 @@ def hold_end_for(expiry: date) -> Optional[datetime]:
 
 def _earnings_session(res: PackResult, ticker: str) -> Optional[str]:
     """Usable BMO / AMC, else None. A STALE session label is not a placement (no_idea_reasons already says so)."""
-    d = res.snapshots.get(ticker) if isinstance(res.snapshots, dict) else None
-    et = d.get("earnings_time") if isinstance(d, dict) else None
+    d = res.snapshots.get(ticker) if isinstance(res.snapshots, Mapping) else None
+    et = d.get("earnings_time") if isinstance(d, Mapping) else None
     if field_usable(et) and et.get("value") in ("BMO", "AMC"):
         return et["value"]
     return None

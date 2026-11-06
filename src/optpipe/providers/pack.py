@@ -11,8 +11,8 @@ to-do c): get_chain returns those, and only those, for a ticker that passes mdfe
 """
 from __future__ import annotations
 
-import math
 import re
+from collections.abc import Mapping
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
@@ -28,11 +28,11 @@ _USE_PACK_HOLD = object()
 
 
 def _val(f) -> Any:
-    return md.usable_value(f) if isinstance(f, dict) else None
+    return md.usable_value(f) if isinstance(f, Mapping) else None
 
 
 def _as_of(f) -> Optional[datetime]:
-    return md._aware((f or {}).get("as_of") or "") if isinstance(f, dict) else None
+    return md._aware((f or {}).get("as_of") or "") if isinstance(f, Mapping) else None
 
 
 def _right(s: str) -> Right:
@@ -40,13 +40,10 @@ def _right(s: str) -> Right:
 
 
 def _iv_number(f) -> Optional[float]:
-    """The pack's quoted IV when the field carries a finite number (OK or STALE). None when it is absent."""
-    if not isinstance(f, dict):
+    """A usable pack IV (status OK, finite value). STALE / UNKNOWN is not a realtime number."""
+    if not md.field_usable(f):
         return None
-    v = f.get("value")
-    if isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v):
-        return None
-    return float(v)
+    return float(f["value"])
 
 
 _KIND_WORD = re.compile(r"\b(CPI|PPI|NFP|FOMC)\b", re.I)
@@ -65,10 +62,10 @@ def _macro_kind(c: dict) -> Optional[str]:
 
 
 def _source_read_times(c: dict) -> list[datetime]:
-    srcs = c.get("sources") if isinstance(c.get("sources"), list) else []
+    srcs = c.get("sources") if md.is_seq(c.get("sources")) else []
     out = []
     for s in srcs:
-        if isinstance(s, dict):
+        if isinstance(s, Mapping):
             t = md._aware(str(s.get("as_of") or ""))
             if t is not None:
                 out.append(t)
@@ -135,7 +132,7 @@ class PackMarket:
 
     def _snap(self, symbol: str) -> dict:
         d = self.res.snapshots.get(symbol.upper()) if self.res.ok else None
-        if not isinstance(d, dict):
+        if not isinstance(d, Mapping):
             raise DataUnavailable(f"pack: {symbol} not in the pack")
         return d
 
@@ -192,7 +189,7 @@ class PackMarket:
                 underlying=sym, expiry=exp, strike=float(c["strike"]), right=right,
                 bid=_val(bid), ask=_val(ask), open_interest=int(_val(oi)) if _val(oi) is not None else None,
                 volume=int(_val(c.get("volume"))) if _val(c.get("volume")) is not None else None,
-                iv=_iv_number(c.get("iv")) if isinstance(c.get("iv"), dict) else _iv_number(snap.get("iv")),
+                iv=_iv_number(c.get("iv")) if isinstance(c.get("iv"), Mapping) else _iv_number(snap.get("iv")),
                 quote_time=t, quote_basis=QuoteBasis.REALTIME))
             expiries.add(exp)
         return OptionChain(underlying=sym, expiries=sorted(expiries), quotes=quotes,
@@ -205,7 +202,7 @@ class PackMarket:
         sym = symbol.upper()
         out: list[Event] = []
         for c in (self.res.catalysts or {}).get("catalysts") or []:
-            if not isinstance(c, dict) or c.get("ticker") not in (sym, None):
+            if not isinstance(c, Mapping) or c.get("ticker") not in (sym, None):
                 continue
             if c.get("catalyst_type") != "earnings" or c.get("ticker") != sym:
                 continue
@@ -216,7 +213,7 @@ class PackMarket:
             timing = EventTiming.UNKNOWN
             # prefer the snapshot's earnings_time when usable
             snap = self.res.snapshots.get(sym) or {}
-            et = (snap.get("earnings_time") or {}).get("value") if isinstance(snap, dict) else None
+            et = (snap.get("earnings_time") or {}).get("value") if isinstance(snap, Mapping) else None
             if et == "BMO":
                 timing = EventTiming.BMO
             elif et == "AMC":
@@ -234,7 +231,7 @@ class PackMarket:
         want = None if screen in ("pack", "pack_all") else screen.removeprefix("pack_")
         rows = []
         for ent in (self.res.index or {}).get("tickers") or []:
-            if not isinstance(ent, dict):
+            if not isinstance(ent, Mapping):
                 continue
             if want and ent.get("watchlist") != want:
                 continue
@@ -251,14 +248,15 @@ def pack_macro_from_catalysts(res: md.PackResult, *, now: datetime) -> list[Cale
     """Build CalendarSnapshot list from catalysts.json macro entries (FOMC / CPI / PPI / NFP) for R08.
 
     Coverage = the latest event_date of that kind on or after the pack date (fail closed: no events -> no snap).
-    fetched_at = pack_built_at (the pack is the source of truth for this run).
+    fetched_at is the source read time, never pack_built_at. A kind with events but no parseable sources[].as_of
+    is omitted: an empty fetched_at is not written, because research parses that field.
     """
-    if not res.ok or not isinstance(res.catalysts, dict):
+    if not res.ok or not isinstance(res.catalysts, Mapping):
         return []
     by: dict[str, list] = {k: [] for k in mdfeeds.MACRO_KINDS}
     reads: dict[str, list] = {k: [] for k in mdfeeds.MACRO_KINDS}
     for c in res.catalysts.get("catalysts") or []:
-        if not isinstance(c, dict) or c.get("ticker") is not None:
+        if not isinstance(c, Mapping) or c.get("ticker") is not None:
             continue
         kind = _macro_kind(c)
         if kind not in by:
@@ -279,15 +277,12 @@ def pack_macro_from_catalysts(res: md.PackResult, *, now: datetime) -> list[Cale
         if not evs:
             continue
         times = reads[kind]
-        future = [t for t in times if t > now]
-        # age is the source read, never pack_built_at. No usable as_of → macro_coverage says the read is unusable.
-        # Any future read is reported as future. Otherwise the oldest read fails the 7-day check if one source is stale.
         if not times:
-            fetched = ""
-        elif future:
-            fetched = min(future).isoformat()
-        else:
-            fetched = min(times).isoformat()
+            continue
+        future = [t for t in times if t > now]
+        # age is the source read, never pack_built_at. Any future read is reported as future.
+        # Otherwise the oldest read fails the 7-day check if one source is stale.
+        fetched = (min(future) if future else min(times)).isoformat()
         last = max(e.at.date() for e in evs)
         out.append(CalendarSnapshot(
             kind=kind,

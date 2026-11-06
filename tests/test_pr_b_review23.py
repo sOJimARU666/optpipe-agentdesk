@@ -114,7 +114,15 @@ def test_no_idea_ticker_does_not_move_watcher_and_pack_quote_keeps_iv(tmp_path):
              "legs": []}
     assert w02(_Poll(would, {}, None)) is not None
 
-    d2, r = _passing_jpm(tmp_path / "pass")
+    d2, _stale_iv = _passing_jpm(tmp_path / "pass")
+
+    def ok_iv(x):
+        _fresh_contract(x)
+        x["iv"].update(status="OK", value=31.5, as_of="2026-10-20T08:55:00-04:00")
+
+    edit_json(d2, "JPM.json", ok_iv)
+    r = load(d2)
+    assert r.ok, r.errors
     m = PackMarket(r, now=NOW, allow_labels=("EXAMPLE",), macro=pack_macro_from_catalysts(r, now=NOW))
     q = m.get_quote("JPM")
     assert q.is_realtime is True and q.last == 101.25
@@ -250,6 +258,10 @@ def test_loaded_snapshot_is_frozen_and_quote_cache_does_not_stick(tmp_path):
     d, r = _passing_jpm(tmp_path)
     with pytest.raises(TypeError):
         r.snapshots["JPM"]["last_price"]["value"] = 1.23
+    leaf = r.snapshots["JPM"]["last_price"]
+    with pytest.raises(TypeError):
+        dict.update(leaf, {"value": 8.5})
+    assert leaf["value"] == 101.25
     m = PackMarket(r, now=NOW, allow_labels=("EXAMPLE",))
     assert m.get_quote("JPM").last == 101.25
     from optpipe.watcher.runtime import PackQuoteSource
@@ -260,3 +272,53 @@ def test_loaded_snapshot_is_frozen_and_quote_cache_does_not_stick(tmp_path):
     later = src._market(NOW)
     assert later is not None and later.res.ok
     assert later.get_quote("JPM").last == 101.25
+
+
+def test_missing_macro_source_as_of_does_not_crash_research(tmp_path):
+    """A macro row with events but no parseable sources[].as_of must not crash optpipe run."""
+    from optpipe.cli import main
+    from optpipe.providers.macro import CalendarSnapshot, visible
+    d = copy_pack(tmp_path)
+
+    def drop_as_of(doc):
+        for c in doc["catalysts"]:
+            if c.get("catalyst_type") == "fomc":
+                for s in c.get("sources") or []:
+                    s.pop("as_of", None)
+
+    edit_json(d, "catalysts.json", drop_as_of)
+    r = load(d)
+    assert r.ok, r.errors
+    snaps = pack_macro_from_catalysts(r, now=NOW)
+    assert all(s.source.get("fetched_at") for s in snaps)
+    for s in snaps:
+        s.fetched_at  # a real instant, not ""
+    bad = CalendarSnapshot(
+        "FOMC",
+        {"id": "src-pack-fomc", "url": "urn:optpipe:pack:2026-10-20/catalysts.json",
+         "kind": "economic_calendar", "fetched_at": "", "publisher": "Oodle pack"},
+        [], date(2026, 10, 28), "unusable read")
+    kept, notes = visible([bad], NOW)
+    assert kept == [] and notes
+    out = tmp_path / "out"
+    rc = main(["run", "--data-dir", str(d.parent), "--as-of", NOW.isoformat(),
+               "--allow-example", "--out", str(out)])
+    sessions = [p for p in out.glob("session-*.json") if ".trace." not in p.name]
+    assert sessions, "no session file written"
+    trace = json.loads(next(out.glob("*.trace.json")).read_text())
+    research = [s for s in trace["runs"][-1]["steps"] if s["stage"] == "research"]
+    assert research and research[0]["error"] is None
+    assert rc == 0
+
+
+def test_stale_iv_is_not_a_usable_realtime_number(tmp_path):
+    """A STALE pack IV must not be copied as a realtime number the watcher would store as ok."""
+    from optpipe.watcher.runtime import _f
+    _d, r = _passing_jpm(tmp_path)
+    assert r.snapshots["JPM"]["iv"]["status"] == "STALE"
+    m = PackMarket(r, now=NOW, allow_labels=("EXAMPLE",), macro=pack_macro_from_catalysts(r, now=NOW))
+    ch = m.get_chain("JPM")
+    assert ch.quotes
+    assert ch.quotes[0].iv is None
+    stored = _f(ch.quotes[0].iv, ch.quotes[0].quote_time, "src-pack")
+    assert stored["value"] is None and stored["status"] == "missing"

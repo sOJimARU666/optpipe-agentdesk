@@ -10,6 +10,7 @@ import copy
 import os
 import time
 from dataclasses import dataclass
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -347,7 +348,7 @@ class Orchestrator:
             self.pack.hold_end = mdfeeds.prospective_hold_end(as_of, horizon_days=horizon)
             self.pack.iv_store = self.p.iv_store
             for t in list((self.pack.res.index or {}).get("tickers") or []):
-                sym = t.get("ticker") if isinstance(t, dict) else None
+                sym = t.get("ticker") if isinstance(t, Mapping) else None
                 if not sym:
                     continue
                 if self.pack.hold_end is None:
