@@ -50,59 +50,80 @@ def _single_component(name: str) -> bool:
     return Path(name).name == name
 
 
-def _direct_file_info(dirfd: int, root: Path, name: str) -> Optional[os.stat_result]:
-    """lstat of one direct child. None if absent. KeyError if the entry is not a contained regular file.
+def _child_prefix(root: Path) -> str:
+    """`root` as a normalized path ending in a separator, so `startswith` cannot match a sibling."""
+    root_text = os.path.normpath(os.fspath(root))
+    return root_text if root_text.endswith(os.sep) else root_text + os.sep
 
-    `name` must be a single component. openat would treat a slash or `..` as a path relative to
-    the directory descriptor and could leave the output directory.
+
+def _lstat_contained(root: Path, name: str) -> Optional[os.stat_result]:
+    """lstat of a direct child. None if absent. KeyError if it is not a contained regular file.
+
+    `os.lstat` runs only on `normpath(join(root, name))` after that string passes
+    `startswith(prefix)`. Symlinks are not followed.
     """
     if not _single_component(name):
         raise KeyError(name)
-    try:
-        info = os.stat(name, dir_fd=dirfd, follow_symlinks=False)
-    except FileNotFoundError:
-        return None
-    except OSError:
-        raise KeyError(name) from None
-    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
-        raise KeyError(name)
-    candidate = root / name
-    try:
-        if candidate.is_symlink() or not candidate.resolve().is_relative_to(root):
+    candidate = os.path.normpath(os.path.join(os.fspath(root), name))
+    if candidate.startswith(_child_prefix(root)):
+        try:
+            info = os.lstat(candidate)
+        except FileNotFoundError:
+            return None
+        except OSError:
+            raise KeyError(name) from None
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
             raise KeyError(name)
-    except (OSError, RuntimeError):
-        raise KeyError(name) from None
-    return info
+        return info
+    raise KeyError(name)
 
 
-def _read_direct_file(dirfd: int, root: Path, name: str) -> Optional[bytes]:
-    """Bytes of `name` inside the already-opened output directory.
+def _read_direct_file(root: Path, name: str) -> Optional[bytes]:
+    """Bytes of one direct child of `root`.
 
     None if that entry is absent. KeyError if it is a symlink, not a regular file, or its
-    resolved path is outside `root`. The descriptor is opened with O_NOFOLLOW and must still
-    be the same inode the lstat saw, so a swap to a link between the check and the read fails
-    closed instead of following the new target.
+    normalized path is outside `root`. The open uses the same normalized path that passed
+    `startswith`, with O_NOFOLLOW, and the fd must still be the inode `lstat` saw.
     """
-    info = _direct_file_info(dirfd, root, name)
-    if info is None:
-        return None
-    try:
-        fd = os.open(name, _FILE_FLAGS, dir_fd=dirfd)
-    except OSError:
-        raise KeyError(name) from None
-    try:
-        opened = os.fstat(fd)
-        if opened.st_dev != info.st_dev or opened.st_ino != info.st_ino or not stat.S_ISREG(opened.st_mode):
+    if not _single_component(name):
+        raise KeyError(name)
+    candidate = os.path.normpath(os.path.join(os.fspath(root), name))
+    if candidate.startswith(_child_prefix(root)):
+        try:
+            info = os.lstat(candidate)
+        except FileNotFoundError:
+            return None
+        except OSError:
+            raise KeyError(name) from None
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
             raise KeyError(name)
-        chunks: list[bytes] = []
-        while True:
-            block = os.read(fd, 1024 * 1024)
-            if not block:
-                break
-            chunks.append(block)
-        return b"".join(chunks)
-    finally:
-        os.close(fd)
+        try:
+            fd = os.open(candidate, _FILE_FLAGS)
+        except OSError:
+            raise KeyError(name) from None
+        try:
+            opened = os.fstat(fd)
+            if opened.st_dev != info.st_dev or opened.st_ino != info.st_ino or not stat.S_ISREG(opened.st_mode):
+                raise KeyError(name)
+            chunks: list[bytes] = []
+            while True:
+                block = os.read(fd, 1024 * 1024)
+                if not block:
+                    break
+                chunks.append(block)
+            return b"".join(chunks)
+        finally:
+            os.close(fd)
+    raise KeyError(name)
+
+
+def _listed_name(dirfd: int, wanted: str) -> Optional[str]:
+    """The directory entry whose name equals `wanted`, taken from the listing rather than `wanted`."""
+    try:
+        names = [entry.name for entry in os.scandir(dirfd)]
+    except OSError:
+        raise KeyError(wanted) from None
+    return next((listed for listed in names if listed == wanted), None)
 
 
 @dataclass
@@ -179,7 +200,10 @@ class OutDir:
         except (OSError, RuntimeError):
             raise KeyError(name) from None
         try:
-            return _read_direct_file(dirfd, root, name)
+            listed = _listed_name(dirfd, name)
+            if listed is None:
+                return None
+            return _read_direct_file(root, listed)
         finally:
             os.close(dirfd)
 
@@ -201,7 +225,7 @@ class OutDir:
                 if not match:
                     continue
                 try:
-                    if _direct_file_info(dirfd, root, name) is not None:
+                    if _lstat_contained(root, name) is not None:
                         found.append(match.group(1))
                 except KeyError:
                     continue
@@ -216,15 +240,23 @@ class OutDir:
         safe_date = next((candidate for candidate in self.dates() if candidate == date), None)
         if safe_date is None:
             raise KeyError(date)
-        names = {key: f"session-{safe_date}{suffix}" for key, suffix in _ARTIFACTS}
+        labels = {key: f"session-{safe_date}{suffix}" for key, suffix in _ARTIFACTS}
         try:
             root, dirfd = self._directory()
         except (OSError, RuntimeError):
             raise KeyError(safe_date) from None
         try:
-            blobs = {key: _read_direct_file(dirfd, root, name) for key, name in names.items()}
+            try:
+                listed = [entry.name for entry in os.scandir(dirfd)]
+            except OSError:
+                raise KeyError(safe_date) from None
+            blobs = {}
+            for key, label in labels.items():
+                chosen = next((item for item in listed if item == label), None)
+                blobs[key] = None if chosen is None else _read_direct_file(root, chosen)
         finally:
             os.close(dirfd)
+        names = labels
         raw = blobs["v1"]
         if raw is None:
             raise KeyError(safe_date)
