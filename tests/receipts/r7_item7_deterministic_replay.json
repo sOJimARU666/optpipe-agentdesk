@@ -1,0 +1,728 @@
+{
+  "argv": {
+    "note": "The live argv uses the interpreter path and a unique temp root. Those absolute paths are not frozen. The test checks the live argv is that shape and that each cell has its own work root.",
+    "shape": [
+      "python",
+      "tests/r7_item7_driver.py",
+      "--work",
+      "<unique-temp-root>",
+      "--session",
+      "<cell-session-copy>"
+    ]
+  },
+  "author_environment_capture": {
+    "closure_claim": "none",
+    "dependencies": {
+      "Jinja2": "3.1.6",
+      "PyYAML": "6.0.3",
+      "beautifulsoup4": "4.15.0",
+      "fastapi": "0.162.0",
+      "httpx": "0.28.1",
+      "jsonschema": "4.26.0",
+      "lxml": "6.1.3",
+      "pydantic": "2.14.3",
+      "pytest": "9.2.0",
+      "requests": "2.34.2",
+      "uvicorn": "0.54.0"
+    },
+    "implementation": "CPython",
+    "nonsecret_env": {
+      "OPTPIPE_NETGUARD": "1",
+      "PYTHONDONTWRITEBYTECODE": "1",
+      "PYTHONHASHSEED": [
+        "0",
+        "1"
+      ],
+      "TZ": [
+        "UTC",
+        "Europe/Berlin",
+        "America/New_York"
+      ]
+    },
+    "note": "Generating environment for this receipt. The test records the live interpreter and dependency versions and does not require them to equal this capture.",
+    "python": "3.12.3"
+  },
+  "cases": {
+    "calendar": {
+      "actual": {
+        "case": "calendar",
+        "clock": "2028-01-05T12:00:00-05:00",
+        "closure_claim": "none",
+        "decision_ids": [
+          "MD-19-CALENDAR",
+          "MD-19-PAST-EARNINGS",
+          "MD-19-STALE-quote",
+          "MD-20-CRITICAL",
+          "MD-20-UNVERIFIED"
+        ],
+        "discovery_invoked": true,
+        "discovery_jpm_last": 101.25,
+        "discovery_picks": [
+          "JPM",
+          "WDC",
+          "XMPLA",
+          "XMPLB"
+        ],
+        "discovery_reject": null,
+        "discovery_screen_status": "ok",
+        "error_ids": [],
+        "failure_class": "calendar_clock",
+        "loader_exit": 0,
+        "market_data_cli_exit": 0,
+        "normalization": "id_status_v1",
+        "pack_ok": true,
+        "research_invoked": true,
+        "research_no_idea": true,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "research_reject": null,
+        "watch_cli_exit": 0,
+        "watch_json_present": true,
+        "watcher_allow_example_reason_ids": [
+          "MD-19-CALENDAR",
+          "MD-19-PAST-EARNINGS",
+          "MD-19-STALE-quote",
+          "MD-20-CRITICAL",
+          "MD-20-UNVERIFIED"
+        ],
+        "watcher_allow_example_status": "missing",
+        "watcher_allow_example_value": null,
+        "watcher_market_only_reason_ids": [
+          "MD-19-CALENDAR",
+          "MD-19-PAST-EARNINGS",
+          "MD-20-SCOPE"
+        ],
+        "watcher_market_only_status": "missing",
+        "watcher_market_only_value": null
+      },
+      "expected": {
+        "decision_ids_include": [
+          "MD-19-CALENDAR"
+        ],
+        "error_ids": [],
+        "loader_exit": 0,
+        "market_data_cli_exit": 0,
+        "pack_ok": true,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "watch_cli_exit": 0,
+        "watcher_allow_example_reason_ids_include": [
+          "MD-19-CALENDAR"
+        ]
+      },
+      "failure_class": "calendar_clock",
+      "raw_sha256": "ee3a9a0174b6b7c37eeb96d8625b9d634b1036d700c7c09d2cbabc27e1b792e4",
+      "semantic_sha256": "c2e6b4a08726d0c5ccf52a0a292b92944bba9edafac2fae2203b9d77c419309b"
+    },
+    "future": {
+      "actual": {
+        "case": "future",
+        "clock": "2026-10-20T08:00:00-04:00",
+        "closure_claim": "none",
+        "decision_ids": [],
+        "discovery_invoked": true,
+        "discovery_jpm_last": null,
+        "discovery_picks": [],
+        "discovery_reject": null,
+        "discovery_screen_status": "error",
+        "error_ids": [
+          "MD-19-FUTURE",
+          "MD-19-FUTURE-PACK"
+        ],
+        "failure_class": "stale_future_lookahead",
+        "loader_exit": 1,
+        "market_data_cli_exit": 1,
+        "normalization": "id_status_v1",
+        "pack_ok": false,
+        "research_invoked": true,
+        "research_no_idea": true,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "research_reject": null,
+        "watch_cli_exit": 0,
+        "watch_json_present": true,
+        "watcher_allow_example_reason_ids": [],
+        "watcher_allow_example_status": "missing",
+        "watcher_allow_example_value": null,
+        "watcher_market_only_reason_ids": [],
+        "watcher_market_only_status": "missing",
+        "watcher_market_only_value": null
+      },
+      "expected": {
+        "discovery_picks": [],
+        "discovery_screen_status": "error",
+        "error_ids": [
+          "MD-19-FUTURE",
+          "MD-19-FUTURE-PACK"
+        ],
+        "loader_exit": 1,
+        "market_data_cli_exit": 1,
+        "pack_ok": false,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "watch_cli_exit": 0,
+        "watcher_allow_example_reason_ids": []
+      },
+      "failure_class": "stale_future_lookahead",
+      "raw_sha256": "f0d22732a5a0e86c7f4eed346d029b8bdfc42642999cdf3a5813a8f38dcc2d72",
+      "semantic_sha256": "e562203f12fad9c4fa144ecd6864471a5ce3fbfd1b95d93c98ee5947da7f45bf"
+    },
+    "lookahead": {
+      "actual": {
+        "case": "lookahead",
+        "clock": "2026-10-20T09:05:00-04:00",
+        "closure_claim": "none",
+        "decision_ids": [
+          "MD-19-LOOKAHEAD"
+        ],
+        "discovery_invoked": true,
+        "discovery_jpm_last": 101.25,
+        "discovery_picks": [
+          "JPM",
+          "WDC",
+          "XMPLA",
+          "XMPLB"
+        ],
+        "discovery_reject": null,
+        "discovery_screen_status": "ok",
+        "error_ids": [],
+        "failure_class": "stale_future_lookahead",
+        "loader_exit": 0,
+        "market_data_cli_exit": 0,
+        "normalization": "id_status_v1",
+        "pack_ok": true,
+        "research_invoked": true,
+        "research_no_idea": true,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "research_reject": null,
+        "watch_cli_exit": 0,
+        "watch_json_present": true,
+        "watcher_allow_example_reason_ids": [
+          "MD-20-CRITICAL"
+        ],
+        "watcher_allow_example_status": "missing",
+        "watcher_allow_example_value": null,
+        "watcher_market_only_reason_ids": [
+          "MD-20-CRITICAL",
+          "MD-20-SCOPE"
+        ],
+        "watcher_market_only_status": "missing",
+        "watcher_market_only_value": null
+      },
+      "expected": {
+        "decision_ids": [
+          "MD-19-LOOKAHEAD"
+        ],
+        "discovery_jpm_last": 101.25,
+        "error_ids": [],
+        "loader_exit": 0,
+        "market_data_cli_exit": 0,
+        "pack_ok": true,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "watch_cli_exit": 0,
+        "watcher_allow_example_reason_ids": [
+          "MD-20-CRITICAL"
+        ]
+      },
+      "failure_class": "stale_future_lookahead",
+      "raw_sha256": "a484380dbd5300c8751dd4993459f1e8bde00eea2804fd8843889831fd55f421",
+      "semantic_sha256": "fe5cce34f8060939522be41079ae82bf328c52b24734949ddd4d2b858b66bcb0"
+    },
+    "malformed": {
+      "actual": {
+        "case": "malformed",
+        "clock": "2026-10-20T09:05:00-04:00",
+        "closure_claim": "none",
+        "decision_ids": [],
+        "discovery_invoked": true,
+        "discovery_jpm_last": null,
+        "discovery_picks": [],
+        "discovery_reject": null,
+        "discovery_screen_status": "error",
+        "error_ids": [
+          "MD-03-JSON"
+        ],
+        "failure_class": "missing_malformed",
+        "loader_exit": 2,
+        "market_data_cli_exit": 2,
+        "normalization": "id_status_v1",
+        "pack_ok": false,
+        "research_invoked": true,
+        "research_no_idea": true,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "research_reject": null,
+        "watch_cli_exit": 0,
+        "watch_json_present": true,
+        "watcher_allow_example_reason_ids": [],
+        "watcher_allow_example_status": "missing",
+        "watcher_allow_example_value": null,
+        "watcher_market_only_reason_ids": [],
+        "watcher_market_only_status": "missing",
+        "watcher_market_only_value": null
+      },
+      "expected": {
+        "discovery_picks": [],
+        "discovery_screen_status": "error",
+        "error_ids": [
+          "MD-03-JSON"
+        ],
+        "loader_exit": 2,
+        "market_data_cli_exit": 2,
+        "pack_ok": false,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "watch_cli_exit": 0
+      },
+      "failure_class": "missing_malformed",
+      "raw_sha256": "22e62c7cec790b7ad5ab43fdb2380cbf445377c7571eb03f6dbefed50b5c1b62",
+      "semantic_sha256": "ee9ba746bb49e66d11cad05cf4f56bfea4ab0c350fbdb7227ea16759e4918f5e"
+    },
+    "missing": {
+      "actual": {
+        "case": "missing",
+        "clock": "2026-10-20T09:05:00-04:00",
+        "closure_claim": "none",
+        "decision_ids": [],
+        "discovery_invoked": true,
+        "discovery_jpm_last": null,
+        "discovery_picks": [],
+        "discovery_reject": null,
+        "discovery_screen_status": "error",
+        "error_ids": [
+          "MD-02-MISSING"
+        ],
+        "failure_class": "missing_malformed",
+        "loader_exit": 1,
+        "market_data_cli_exit": 1,
+        "normalization": "id_status_v1",
+        "pack_ok": false,
+        "research_invoked": true,
+        "research_no_idea": true,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "research_reject": null,
+        "watch_cli_exit": 0,
+        "watch_json_present": true,
+        "watcher_allow_example_reason_ids": [],
+        "watcher_allow_example_status": "missing",
+        "watcher_allow_example_value": null,
+        "watcher_market_only_reason_ids": [],
+        "watcher_market_only_status": "missing",
+        "watcher_market_only_value": null
+      },
+      "expected": {
+        "discovery_picks": [],
+        "discovery_screen_status": "error",
+        "error_ids": [
+          "MD-02-MISSING"
+        ],
+        "loader_exit": 1,
+        "market_data_cli_exit": 1,
+        "pack_ok": false,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "watch_cli_exit": 0
+      },
+      "failure_class": "missing_malformed",
+      "raw_sha256": "8f2a7026f86fbe9bbd509cfbaac8f052e97bc7cb9f7549ad7943da5b2049743d",
+      "semantic_sha256": "34da92eafc2fb895fe0652ef3945e1d26e94c557d37422a38bb43753a764632c"
+    },
+    "naive_clock": {
+      "actual": {
+        "case": "naive_clock",
+        "clock": "naive:2026-10-20T09:05:00",
+        "closure_claim": "none",
+        "decision_ids": [],
+        "discovery_invoked": false,
+        "discovery_jpm_last": null,
+        "discovery_picks": [],
+        "discovery_reject": "ValidationError",
+        "discovery_screen_status": null,
+        "error_ids": [
+          "MD-19-TZ"
+        ],
+        "failure_class": "calendar_clock",
+        "loader_exit": 1,
+        "market_data_cli_exit": 2,
+        "normalization": "id_status_v1",
+        "pack_ok": false,
+        "research_invoked": false,
+        "research_no_idea": false,
+        "research_quote_status": null,
+        "research_quote_value": null,
+        "research_reject": "ValidationError",
+        "watch_cli_exit": 2,
+        "watch_json_present": false,
+        "watcher_allow_example_reason_ids": [],
+        "watcher_allow_example_status": "missing",
+        "watcher_allow_example_value": null,
+        "watcher_market_only_reason_ids": [],
+        "watcher_market_only_status": "missing",
+        "watcher_market_only_value": null
+      },
+      "expected": {
+        "discovery_invoked": false,
+        "discovery_reject": "ValidationError",
+        "error_ids": [
+          "MD-19-TZ"
+        ],
+        "loader_exit": 1,
+        "market_data_cli_exit": 2,
+        "pack_ok": false,
+        "research_invoked": false,
+        "research_quote_status": null,
+        "research_reject": "ValidationError",
+        "watch_cli_exit": 2,
+        "watch_json_present": false
+      },
+      "failure_class": "calendar_clock",
+      "raw_sha256": "90942a599cf1100b0cf3da37d641b0e4eee5dd38972101793a27bd88add1dcc4",
+      "semantic_sha256": "6f6d17a36b00ca013bea21a1f60889b16e46650e55bf311eeba148eb992c28a5"
+    },
+    "oversized": {
+      "actual": {
+        "case": "oversized",
+        "clock": "2026-10-20T09:05:00-04:00",
+        "closure_claim": "none",
+        "decision_ids": [],
+        "discovery_invoked": true,
+        "discovery_jpm_last": null,
+        "discovery_picks": [],
+        "discovery_reject": null,
+        "discovery_screen_status": "error",
+        "error_ids": [
+          "MD-01-SIZE"
+        ],
+        "failure_class": "missing_malformed",
+        "loader_exit": 1,
+        "market_data_cli_exit": 1,
+        "normalization": "id_status_v1",
+        "pack_ok": false,
+        "research_invoked": true,
+        "research_no_idea": true,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "research_reject": null,
+        "watch_cli_exit": 0,
+        "watch_json_present": true,
+        "watcher_allow_example_reason_ids": [],
+        "watcher_allow_example_status": "missing",
+        "watcher_allow_example_value": null,
+        "watcher_market_only_reason_ids": [],
+        "watcher_market_only_status": "missing",
+        "watcher_market_only_value": null
+      },
+      "expected": {
+        "discovery_screen_status": "error",
+        "error_ids": [
+          "MD-01-SIZE"
+        ],
+        "loader_exit": 1,
+        "market_data_cli_exit": 1,
+        "pack_ok": false,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "watch_cli_exit": 0
+      },
+      "failure_class": "missing_malformed",
+      "raw_sha256": "d05e604a393f151bde395198487dd1193e3bb60953ef327192e6a08656fd6e2a",
+      "semantic_sha256": "c268a667cbbb01b5bb054a0f3743d8aac3ee4df9a2dc047862b8d404b62a85f5"
+    },
+    "positive": {
+      "actual": {
+        "case": "positive",
+        "clock": "2026-10-20T09:05:00-04:00",
+        "closure_claim": "none",
+        "decision_ids": [],
+        "discovery_invoked": true,
+        "discovery_jpm_last": 101.25,
+        "discovery_picks": [
+          "JPM",
+          "WDC",
+          "XMPLA",
+          "XMPLB"
+        ],
+        "discovery_reject": null,
+        "discovery_screen_status": "ok",
+        "error_ids": [],
+        "failure_class": "positive_control",
+        "loader_exit": 0,
+        "market_data_cli_exit": 0,
+        "normalization": "id_status_v1",
+        "pack_ok": true,
+        "research_invoked": true,
+        "research_no_idea": false,
+        "research_quote_status": "ok",
+        "research_quote_value": 101.25,
+        "research_reject": null,
+        "watch_cli_exit": 0,
+        "watch_json_present": true,
+        "watcher_allow_example_reason_ids": [
+          "MD-20-CRITICAL"
+        ],
+        "watcher_allow_example_status": "missing",
+        "watcher_allow_example_value": null,
+        "watcher_market_only_reason_ids": [
+          "MD-20-CRITICAL",
+          "MD-20-SCOPE"
+        ],
+        "watcher_market_only_status": "missing",
+        "watcher_market_only_value": null
+      },
+      "expected": {
+        "decision_ids": [],
+        "discovery_jpm_last": 101.25,
+        "discovery_screen_status": "ok",
+        "error_ids": [],
+        "loader_exit": 0,
+        "market_data_cli_exit": 0,
+        "pack_ok": true,
+        "research_quote_status": "ok",
+        "research_quote_value": 101.25,
+        "watch_cli_exit": 0,
+        "watch_json_present": true,
+        "watcher_allow_example_status": "missing"
+      },
+      "failure_class": "positive_control",
+      "raw_sha256": "e359dad9004681768c560390c93501748c71ca02d5cd29daa92c5e85355801c4",
+      "semantic_sha256": "18d0b79206c914c8655a0e5abcd1f28f931901ad4afcd888db4c49cc56f94f25"
+    },
+    "stale": {
+      "actual": {
+        "case": "stale",
+        "clock": "2026-10-20T09:40:00-04:00",
+        "closure_claim": "none",
+        "decision_ids": [
+          "MD-19-STALE-quote",
+          "MD-20-CRITICAL"
+        ],
+        "discovery_invoked": true,
+        "discovery_jpm_last": 101.25,
+        "discovery_picks": [
+          "JPM",
+          "WDC",
+          "XMPLA",
+          "XMPLB"
+        ],
+        "discovery_reject": null,
+        "discovery_screen_status": "ok",
+        "error_ids": [],
+        "failure_class": "stale_future_lookahead",
+        "loader_exit": 0,
+        "market_data_cli_exit": 0,
+        "normalization": "id_status_v1",
+        "pack_ok": true,
+        "research_invoked": true,
+        "research_no_idea": true,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "research_reject": null,
+        "watch_cli_exit": 0,
+        "watch_json_present": true,
+        "watcher_allow_example_reason_ids": [
+          "MD-19-STALE-quote",
+          "MD-20-CRITICAL"
+        ],
+        "watcher_allow_example_status": "missing",
+        "watcher_allow_example_value": null,
+        "watcher_market_only_reason_ids": [
+          "MD-20-CRITICAL",
+          "MD-20-SCOPE"
+        ],
+        "watcher_market_only_status": "missing",
+        "watcher_market_only_value": null
+      },
+      "expected": {
+        "decision_ids_include": [
+          "MD-19-STALE-quote"
+        ],
+        "error_ids": [],
+        "loader_exit": 0,
+        "market_data_cli_exit": 0,
+        "pack_ok": true,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "watch_cli_exit": 0,
+        "watcher_allow_example_reason_ids_include": [
+          "MD-19-STALE-quote"
+        ]
+      },
+      "failure_class": "stale_future_lookahead",
+      "raw_sha256": "ae10e379f2922e8473f889b3afe2bc83cb4c62811eda8bdaf7f31cbc4cf06b4a",
+      "semantic_sha256": "e02071c1f408a0c0248eb9880f01542402dd0ec92f9a71188e67ec2d53a0e37c"
+    },
+    "tamper": {
+      "actual": {
+        "case": "tamper",
+        "clock": "2026-10-20T09:05:00-04:00",
+        "closure_claim": "none",
+        "decision_ids": [],
+        "discovery_invoked": true,
+        "discovery_jpm_last": null,
+        "discovery_picks": [],
+        "discovery_reject": null,
+        "discovery_screen_status": "error",
+        "error_ids": [
+          "MD-02-HASH"
+        ],
+        "failure_class": "missing_malformed",
+        "loader_exit": 1,
+        "market_data_cli_exit": 1,
+        "normalization": "id_status_v1",
+        "pack_ok": false,
+        "research_invoked": true,
+        "research_no_idea": true,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "research_reject": null,
+        "watch_cli_exit": 0,
+        "watch_json_present": true,
+        "watcher_allow_example_reason_ids": [],
+        "watcher_allow_example_status": "missing",
+        "watcher_allow_example_value": null,
+        "watcher_market_only_reason_ids": [],
+        "watcher_market_only_status": "missing",
+        "watcher_market_only_value": null
+      },
+      "expected": {
+        "discovery_screen_status": "error",
+        "error_ids": [
+          "MD-02-HASH"
+        ],
+        "loader_exit": 1,
+        "market_data_cli_exit": 1,
+        "pack_ok": false,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "watch_cli_exit": 0
+      },
+      "failure_class": "missing_malformed",
+      "raw_sha256": "1c63a97c6470c611650cee2fc48a954cebb2d04e38e12c7a0e56f796e3aa61b3",
+      "semantic_sha256": "d68aa14f67cb1e7658fa74498cc5bc2cd13029249b527d2913b323be5d54c508"
+    },
+    "wrong_path": {
+      "actual": {
+        "case": "wrong_path",
+        "clock": "2026-10-20T09:05:00-04:00",
+        "closure_claim": "none",
+        "decision_ids": [],
+        "discovery_invoked": true,
+        "discovery_jpm_last": null,
+        "discovery_picks": [],
+        "discovery_reject": null,
+        "discovery_screen_status": "error",
+        "error_ids": [
+          "MD-02-PATH"
+        ],
+        "failure_class": "missing_malformed",
+        "loader_exit": 1,
+        "market_data_cli_exit": 1,
+        "normalization": "id_status_v1",
+        "pack_ok": false,
+        "research_invoked": true,
+        "research_no_idea": true,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "research_reject": null,
+        "watch_cli_exit": 0,
+        "watch_json_present": true,
+        "watcher_allow_example_reason_ids": [],
+        "watcher_allow_example_status": "missing",
+        "watcher_allow_example_value": null,
+        "watcher_market_only_reason_ids": [],
+        "watcher_market_only_status": "missing",
+        "watcher_market_only_value": null
+      },
+      "expected": {
+        "discovery_screen_status": "error",
+        "error_ids": [
+          "MD-02-PATH"
+        ],
+        "loader_exit": 1,
+        "market_data_cli_exit": 1,
+        "pack_ok": false,
+        "research_quote_status": "missing",
+        "research_quote_value": null,
+        "watch_cli_exit": 0
+      },
+      "failure_class": "missing_malformed",
+      "raw_sha256": "e32e20f3f78643fc2732cfd812c55d31adfc5569beac1c8c1b16363b5a319036",
+      "semantic_sha256": "924c617a6dbd01fcb3e760ef38864f95580f2370489e5173620cfb3c610fb6d1"
+    }
+  },
+  "closure_claim": "none",
+  "distinctions": {
+    "byte_identity_vs_semantic": "The matrix asserts byte-identical raw files and, separately, byte-identical semantic files.",
+    "lookahead_consumers": "MD-19-LOOKAHEAD is on the research market that carries the injected IV history, and the research quote is missing. PackQuoteSource does not read that history; its reasons stay the hold-window reasons (MD-20-CRITICAL, and MD-20-SCOPE when the label is MARKET only). This receipt records that split. It does not change the quote source.",
+    "naive_clock_exits": "select_pack loader exit is 1 (MD-19-TZ). optpipe market-data rejects a naive --now before load and exits 2. optpipe watch exits 2. Discovery and research are not invoked (AwareDatetime ValidationError). These are not one exit code."
+  },
+  "identity": {
+    "base_head": "7ee665444eb4d3197effb95347af9bfbf9b7d787",
+    "base_tree": "35afda7460126e07f5a127a2a0043afeb315ed30",
+    "closure_claim": "none",
+    "outside_slice_algorithm": "sha256 of sorted lines '<mode> <blob> <path>' from git ls-files -s, excluding the four slice paths. The stage field is omitted. No network.",
+    "outside_slice_sha256": "dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504",
+    "when_base_commit_absent": "Shallow CI checkouts do not have the base object. Do not fetch. Still require the hard constants, the input sha256 pins, this outside-slice manifest, and a diff against HEAD contained in the tests/ slice allowlist."
+  },
+  "inputs": {
+    "note": "Pinned packs and spec/ are read only. Hostile cases are private temp copies.",
+    "pack_pin": "spec/fixtures/market_data/valid/2026-10-20/pack.sha256",
+    "pack_pin_sha256": "a724aaf3347fcb46544baddfdefe16bf3f90b421f16842adb77712c1c5582365",
+    "risk_rules_sha256": "6badc513716649de953b8689285f9b67a63035202541bcb575467f7999fa3b11",
+    "rules_trio": [
+      "config/settings.yaml",
+      "spec/risk_rules.yaml",
+      "spec/watcher_rules.yaml"
+    ],
+    "settings_sha256": "f89369fe485d01cc42a548ae4a493b4bff53d181d5862f45e4c4693f8c7fd053",
+    "watcher_rules_sha256": "21e294555b6795d6cacfea3c02ce8ea918a2bebd68250ed326a2b6f45a75ba10"
+  },
+  "item": "Sol Item 7 / test_r7_7",
+  "matrix": {
+    "clocks": {
+      "calendar": "2028-01-05T12:00:00-05:00",
+      "future": "2026-10-20T08:00:00-04:00",
+      "lookahead": "2026-10-20T09:05:00-04:00",
+      "malformed": "2026-10-20T09:05:00-04:00",
+      "missing": "2026-10-20T09:05:00-04:00",
+      "naive_clock": "naive:2026-10-20T09:05:00",
+      "oversized": "2026-10-20T09:05:00-04:00",
+      "positive": "2026-10-20T09:05:00-04:00",
+      "stale": "2026-10-20T09:40:00-04:00",
+      "tamper": "2026-10-20T09:05:00-04:00",
+      "wrong_path": "2026-10-20T09:05:00-04:00"
+    },
+    "netguard": "inherited OPTPIPE_NETGUARD; the driver does not set or clear it",
+    "pythonhashseed": [
+      "0",
+      "1"
+    ],
+    "tz": [
+      "UTC",
+      "Europe/Berlin",
+      "America/New_York"
+    ],
+    "wall_clock": "optpipe.marketdata._wall_clock is replaced and must not be called"
+  },
+  "normalization": {
+    "not_the_same": "raw_sha256 and semantic_sha256 are different claims. A match on one does not imply the other.",
+    "raw": "No normalization. Each raw case file is json.dumps of an insertion-ordered object plus a newline. sort_keys is not used. Paths are not inserted. watch.json sha256 is omitted because those bytes embed the fixture session digest, and that session's trace carries stage durations.",
+    "semantic": "id_status_v1. Error and decision strings become a sorted list of first tokens. Full error text is dropped. Status strings, scalar quote values, and exit codes are kept. sort_keys is used only on this semantic file."
+  },
+  "positive_control": {
+    "case": "positive",
+    "empty_guard": "Every raw case file is non-empty and its sha256 is not the sha256 of empty bytes or of a single newline. The positive raw sha256 differs from every failure case.",
+    "marker": "research quote status ok and value 101.25, discovery JPM last 101.25, pack ok, empty pack error ids",
+    "watch_json": "At 2026-10-20T09:05:00-04:00 the CLI watch.json bytes match across the positive control and the load failures, because the vetoed fixture session does not fetch quotes then. That shared hash is not the positive control. The research quote is.",
+    "watcher_quote_source": "PackQuoteSource applies its own 45-day hold end, so the positive control's watcher last is missing with MD-20-CRITICAL. That is the observed quote-source outcome. It is not a research pass."
+  },
+  "scope": "Tests, private labeled temp inputs, and this receipt only. Does not close R7, MD-18, R6, or paper. No production policy change.",
+  "source": {
+    "base_head": "7ee665444eb4d3197effb95347af9bfbf9b7d787",
+    "base_tree": "35afda7460126e07f5a127a2a0043afeb315ed30",
+    "note": "base_head and base_tree are hard constants for the code this slice replays (main after PR #30). When that commit object is present, the test checks rev-parse of its tree and merge-base ancestry. When the object is absent, the test does not fetch. It still requires these constants, identity.outside_slice_sha256, the input sha256 pins, and a worktree diff against HEAD inside the tests/ slice allowlist."
+  }
+}

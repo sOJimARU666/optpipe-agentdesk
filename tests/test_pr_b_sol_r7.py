@@ -253,3 +253,7 @@ print(json.dumps(out, sort_keys=True))
     assert got["now"]["ok"] is True
     assert "MD-03-JSON" in ids(got["trunc"]["errors"])
     assert "MD-02-HASH" in ids(got["tamper"]["errors"])
+
+
+# Discovery, research and the watcher for the same failure classes are replayed in
+# test_r7_7_failure_replay.py (private temp packs, the same hash-seed x timezone matrix).
