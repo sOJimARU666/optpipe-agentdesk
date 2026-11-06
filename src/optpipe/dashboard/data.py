@@ -81,6 +81,13 @@ class OutDir:
     def __init__(self, root: Path | str):
         self.root = Path(root)
 
+    def _session_path(self, date: str, suffix: str) -> Path:
+        root = self.root.resolve()
+        path = (root / f"session-{date}{suffix}").resolve()
+        if not path.is_relative_to(root):
+            raise KeyError(date)
+        return path
+
     def dates(self) -> list[str]:
         if not self.root.is_dir():
             return []
@@ -89,10 +96,10 @@ class OutDir:
     def load(self, date: str) -> Session:
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
             raise KeyError(date)
-        jp = self.root / f"session-{date}.json"
-        vp = self.root / f"session-{date}.v1_1.json"
-        tp = self.root / f"session-{date}.trace.json"
-        sp = tp.with_name(tp.name + ".sha256")
+        jp = self._session_path(date, ".json")
+        vp = self._session_path(date, ".v1_1.json")
+        tp = self._session_path(date, ".trace.json")
+        sp = self._session_path(date, ".trace.json.sha256")
         if not jp.exists():
             raise KeyError(date)
         main = json.loads(jp.read_text())
@@ -125,8 +132,8 @@ class OutDir:
                 integ.problems.append(msg)
         else:
             integ.problems.append(f"{tp.name} not found")
-        wp = self.root / f"session-{date}.watch.json"
-        wsp = wp.with_name(wp.name + ".sha256")
+        wp = self._session_path(date, ".watch.json")
+        wsp = self._session_path(date, ".watch.json.sha256")
         watch = None
         if wp.exists():
             wb = wp.read_bytes()
@@ -141,7 +148,7 @@ class OutDir:
                 if not integ.watch_session_ok:
                     integ.problems.append(f"{wp.name} was made from a different {jp.name} (re-run optpipe watch)")
         files = {k: p.name for k, p in (("v1", jp), ("v1_1", vp), ("trace", tp), ("sha256", sp),
-                                        ("md", self.root / f"session-{date}.md"), ("watch", wp),
+                                        ("md", self._session_path(date, ".md")), ("watch", wp),
                                         ("watch_sha256", wsp)) if p.exists()}
         return Session(date, rec, origin, trace, integ, files, watch)
 

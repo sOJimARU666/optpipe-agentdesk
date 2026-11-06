@@ -158,6 +158,19 @@ def test_integrity_detects_tampering(out, tmp_path):
     assert "sidecar ✗" in html and "check failed" in html
 
 
+def test_outdir_rejects_sidecar_symlink_outside_root(out, tmp_path):
+    import shutil
+    d = tmp_path / "o"
+    shutil.copytree(out, d)
+    (d / f"session-{DATE}.watch.json").write_text(json.dumps({"session": {}}))
+    outside = tmp_path / "outside.sha256"
+    outside.write_text("external sidecar")
+    (d / f"session-{DATE}.watch.json.sha256").symlink_to(outside)
+
+    with pytest.raises(KeyError):
+        OutDir(d).load(DATE)
+
+
 def test_v1_only_session_is_upgraded(out, tmp_path):
     import shutil
     d = tmp_path / "o"
