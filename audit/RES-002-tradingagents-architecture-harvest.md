@@ -8,10 +8,10 @@ Status: **evaluation only**. Concepts harvested from public upstream source; **n
 | Upstream repo | [TauricResearch/TradingAgents](https://github.com/TauricResearch/TradingAgents) |
 | Upstream commit read | `9fa1196fffbcfd9de5146d2dd2869df84ab99838` (2026-11-04; "announce Trading-R1 official release") |
 | Upstream license | Apache-2.0 (`LICENSE`) — **attribution required before any literal copy; this note copies concepts only** |
-| optpipe pin | Spec **1.1.8** (`/workspace/trading/spec`; risk / watcher / market_data rules) |
+| optpipe pin | Spec **1.1.8** (local trading-spec pack outside this repo; risk / watcher / market_data rules) |
 | Target branch | `sol/phase1-reliability` on `sOJimARU666/optpipe-agentdesk` |
 | Sibling note | `audit/REL-001-baseline.md` |
-| Method | Public shallow clone to `/tmp` for read-only inspection; **upstream code was not executed with network or credentials** |
+| Method | Public shallow clone into a disposable local directory for read-only inspection; **upstream code was not executed with network or credentials** |
 
 ## Hard cautions (apply to every row)
 
@@ -84,5 +84,5 @@ Columns: upstream idea (file + pinned URL) ↔ optpipe 1.1.8 equivalent or gap �
 - Upstream tree at `9fa1196fffbcfd9de5146d2dd2869df84ab99838`:  
   https://github.com/TauricResearch/TradingAgents/tree/9fa1196fffbcfd9de5146d2dd2869df84ab99838
 - Modules read (blob URLs in matrix): `trading_graph.py`, `setup.py`, `conditional_logic.py`, `checkpointer.py`, `analyst_execution.py`, `agents/state.py`, `dataflows/date_window.py`, `backtest.py`, plus supporting `agents/rating.py`, `agents/schemas.py`, `LICENSE`.
-- optpipe: `/workspace/trading/spec` 1.1.8 (`risk_rules.yaml/.md`, `watcher_rules.yaml/.md`, `market_data_rules.yaml/.md`, `session.schema.json`); `/workspace/trading/proposals/R7-acceptance-proposal.md` (v2).
+- optpipe: local trading-spec **1.1.8** pack outside this repo (`risk_rules.yaml/.md`, `watcher_rules.yaml/.md`, `market_data_rules.yaml/.md`, `session.schema.json`); R7 acceptance proposal v2 (same local proposals tree, outside this repo).
 - Sibling: `audit/REL-001-baseline.md` on `sol/phase1-reliability` @ `b7e9a5b68a08e2a311053e3ed5dd2c1abd798071` (pre-write head).
