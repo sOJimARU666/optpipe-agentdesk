@@ -62,11 +62,12 @@ planner:
   penny_pilot: [SPY, QQQ, IWM, JPM]
   tick_threshold: 3.0
 
-# Macro calendars (R08) and the risk-free rate for derived IV. Read-only GETs in --live mode, cached under
-# cache_dir with a TTL; fixture runs read <fixtures>/macro_calendars.yaml instead (no network).
+# Macro calendars (R08) and the risk-free rate for derived IV. --live was removed: the CLI does not GET these
+# URLs. Fixture runs read <fixtures>/macro_calendars.yaml. Pack runs read catalysts.json. HttpFetcher remains
+# for PR C (GET only, not a run/watch mode) and would cache under cache_dir.
 # BLS: bls.gov returns 403 unless the User-Agent carries a contact email (Doodle, spec bls_release_sources.md).
-# Live runs send `optpipe/1.1 (calendar fetch; contact: <bls_contact_email>)` for ONE GET of bls.ics.
-# bls_contact_email is EMPTY on purpose: while empty, BLS is not contacted and CPI/PPI/NFP come from FRED's
+# That client would send `optpipe/1.1 (calendar fetch; contact: <bls_contact_email>)` for ONE GET of bls.ics.
+# bls_contact_email is EMPTY on purpose: while empty, BLS is not contacted. CPI/PPI/NFP parsers know FRED's
 # public release calendar (rid 10 CPI, 46 PPI, 50 Employment Situation; times listed in US Central Time).
 sources:
   cache_dir: var/cache

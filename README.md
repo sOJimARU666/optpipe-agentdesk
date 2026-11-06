@@ -128,8 +128,10 @@ or webhooks). It also never modifies the session record; `watch.json` references
 .venv/bin/optpipe watch --session out/session-2026-10-13.json --replay tests/fixtures/2026-10-13/watch_tape.yaml --out out
 .venv/bin/optpipe watch ... --replay TAPE --clock 2026-10-13T09:30:00-04:00 --until 2026-10-13T17:00:00-04:00
 .venv/bin/optpipe watch ... --replay TAPE --once        # a single wake
-.venv/bin/optpipe watch ... --live                       # EXPERIMENTAL: real clock, Nasdaq read-only GETs, untested in CI
+.venv/bin/optpipe watch ... --data-dir ROOT --clock 2026-10-20T15:55:00-04:00 --once
 ```
+
+`--live` was removed. Pack quotes are `watch --data-dir` (file reads, fixed clock when `--clock` is set). Replay stays `--replay`. There is no HTTP quote flag.
 
 * **Market-hours gating.** Quotes are requested only while the NY regular session is open: 09:30–16:00 ET,
   13:00 on the spec's early-close days, and never on weekends or spec holidays. Premarket, after-close,
@@ -165,7 +167,7 @@ or webhooks). It also never modifies the session record; `watch.json` references
   4 wakes, 1 quote GET at 15:55 ET, and 4 `SHADOW_EOD` alerts at 16:00 ET (22:00 Berlin, CEST). The unit tests
   cover the watched paths (W01–W07) with synthetic approved tickets on the same tape.
 
-## Market-data packs (FEAT-OODLE-01 PR A): fail-closed loader, nothing consumes it yet
+## Market-data packs (FEAT-OODLE-01): fail-closed loader, consumed by run and watch --data-dir
 
 `optpipe.marketdata` loads one of Oodle's dated market-data packs (`<root>/YYYY-MM-DD/`: `pack.sha256`, `index.json`,
 `summary.md`, `catalysts.json`, `<TICKER>.json`) with spec 1.1.8's rules (MD-01..MD-15, delegated to the pinned
@@ -212,10 +214,7 @@ as 1.1.6). See `spec_patches/v1.1/MERGE_STATUS.md`.
 The spec sets no market-data clock skew, so the loader allows none (`skew_seconds=0`, injectable). The spec's
 `staleness.staleness_limit_minutes` (20 in 1.1.8) is `pack_built_at - as_of` per quote field (inclusive);
 `no_idea_reasons()` reads the same value from the pinned spec and applies it against the clock at decision time. EXAMPLE / TEST packs always give NO IDEA (MD-20-SCOPE) unless a caller opts in.
-R01's 15 minutes stays with the Risk Officer. Discovery, research and the
-`--live` is removed (PR B). `optpipe run --data-dir ROOT` and `optpipe watch --data-dir ROOT` read packs through
-`optpipe.providers.pack.PackMarket` / `PackQuoteSource`. Fixtures mode (`--fixtures`) stays for the offline HTML/JSON
-captures. The HTTP fetchers stay in the tree for PR C (not deleted here).
+R01's 15 minutes stays with the Risk Officer. `--live` is removed (PR B). Discovery, research and the watcher read packs with `optpipe run --data-dir ROOT` and `optpipe watch --data-dir ROOT` (`PackMarket` / `PackQuoteSource`). `--fixtures` and `watch --replay` stay the offline HTML/JSON and tape paths; they are not pack validation. The HTTP fetchers stay in the tree for PR C (not deleted here).
 
 ## Sources: macro calendars, risk-free rate, IV
 
@@ -226,8 +225,9 @@ captures. The HTTP fetchers stay in the tree for PR C (not deleted here).
 | FRED release calendar (fallback) | fred.stlouisfed.org/releases/calendar?rid={10,46,50}&y=<year> | CPI / PPI / NFP when BLS is skipped or fails |
 | U.S. Treasury Daily Treasury Bill Rates (CSV) | home.treasury.gov … `daily_treasury_bill_rates` | Risk-free rate r for Black-Scholes (13-week coupon equivalent, last business day **strictly before** the run, r = ln(1+y·91/365)/(91/365)) |
 
-* **Read only and cached.** Fetching is GET only through `HttpFetcher`. `CachedFetcher` keeps responses in `var/cache` (TTL 12 h) and falls back to a stale copy on errors. Tests are offline (`tests/fixtures/sources/`).
-* **BLS needs a contact email in the User-Agent** (Doodle checked 2026-10-29: 403 without one, 200 with one). Live runs send `optpipe/1.1 (calendar fetch; contact: <email>)` with the email from `sources.bls_contact_email`. It is **empty by default**, and no address is hard-coded anywhere (a test scans for one). While it is empty, bls.gov is **not contacted**. The run notes say "BLS live fetch skipped", and CPI/PPI/NFP come from FRED's public release calendar instead (rid 10 CPI, 46 PPI, 50 Employment Situation). FRED lists times in US Central Time, so 7:30 am CT is converted to 08:30 ET. The parser refuses the page if it stops saying "Central Time". To use BLS, set `OPTPIPE_BLS_CONTACT_EMAIL=<an address you monitor>` in your shell (it overrides the empty config value and is never written to the repo).
+* **Not a CLI mode.** `optpipe run` and `optpipe watch` do not GET these URLs (`--live` was removed). Fixture runs read `macro_calendars.yaml`. Pack runs read `catalysts.json`. `HttpFetcher` stays in the tree for PR C.
+* **Read only and cached.** The HTTP client is GET only. `CachedFetcher` keeps responses in `var/cache` (TTL 12 h) and falls back to a stale copy on errors. Tests are offline (`tests/fixtures/sources/`).
+* **BLS needs a contact email in the User-Agent** (Doodle checked 2026-10-29: 403 without one, 200 with one). The HTTP client sends `optpipe/1.1 (calendar fetch; contact: <email>)` with the email from `sources.bls_contact_email`. It is **empty by default**, and no address is hard-coded anywhere (a test scans for one). While it is empty, that client does not contact bls.gov. CPI/PPI/NFP parsers fall back to FRED's public release calendar (rid 10 CPI, 46 PPI, 50 Employment Situation). FRED lists times in US Central Time, so 7:30 am CT is converted to 08:30 ET. The parser refuses the page if it stops saying "Central Time". `OPTPIPE_BLS_CONTACT_EMAIL` overrides the empty config value and is never written to the repo. Setting it does not add a CLI fetch.
 * From `bls.ics`, only the VEVENTs whose SUMMARY is exactly `Consumer Price Index`, `Producer Price Index` or `Employment Situation` count. Kinds missing from the ICS fall back to FRED one by one. If both fail, that kind's coverage stays missing and R08 is UNKNOWN, never a false PASS.
 * Remaining 2026 dates (tests use them; BLS = FRED), all at 08:30 ET = 14:30 Berlin (CET): NFP 11-06, CPI 11-10, PPI 11-13, NFP 12-04, CPI 12-10, PPI 12-15.
 * **Fixture replay is HAND-MADE.** `tests/fixtures/2026-10-13/macro_calendars.yaml` is a hand-made replay snapshot built from real 2026-10-29 captures. It is not an actual 2026-10-13 fetch, and every source says so.
@@ -287,8 +287,7 @@ records keep every 1.1.1 check. That ruleset was 1.1.1 at the time; the pinned s
 `.github/workflows/ci.yml` sets `OPTIONS_SPEC_DIR=spec/` and runs `sync_spec.py --check` (before and after the run), pytest,
 Doodle's spec tests (inside `spec/`), `gen_models.py --check`, `make_spec_patch.py --check`, the paper-only scan and a CLI
 fixture run validated as 1.1.2. It is **not pushed anywhere** (no remote).
-Tests marked `live` (`tests/test_watch_live.py`: one real `watch --live --once` pass, read-only GETs) are **skipped by default
-and never run in CI**; live mode is untested in CI. Run them by hand with `pytest -m live` or `OPTPIPE_LIVE_TESTS=1 pytest`.
+Tests marked `live` are skipped by default and are not part of CI. `tests/test_watch_live.py` checks that `watch --live` is rejected; it does not perform a Nasdaq GET. Any remaining `live`-marked test is opt-in: `pytest -m live` or `OPTPIPE_LIVE_TESTS=1 pytest`.
 `tests/test_repo_hygiene.py` fails on absolute box paths, tokens/keys, or non-placeholder email addresses in tracked files.
 
 ### Network guard (tests and CI): known residuals
@@ -331,10 +330,10 @@ These gaps are **known and not fixed**:
 | `risk/engine.py`, `risk/ruleset.py` | **Risk Officer**: a pure function `evaluate(input, ruleset, overrides)` over the spec's rules | Doodle | Poodle |
 | `risk/adapter.py`, `risk/review_input.py` | Session record → rule inputs (point-in-time visibility) | Doodle | Poodle |
 | `risk/agent.py` | Risk Officer stage wrapper | Moodle | Poodle |
-| `watcher/` | Pipeline stage (inactive watch rules in the record; never force-closes); `engine.py` rule engine (spec parity); `runtime.py` M3 watcher: market-hours gating, targets, replay/live GET sources, `watch.json` + sidecar + `validate_watch` | Doodle (rules) / Moodle (runtime) | Poodle |
+| `watcher/` | Pipeline stage (inactive watch rules in the record; never force-closes); `engine.py` rule engine (spec parity); `runtime.py` M3 watcher: market-hours gating, targets, replay tape or pack file quotes, `watch.json` + sidecar + `validate_watch` | Doodle (rules) / Moodle (runtime) | Poodle |
 | `scripts/make_watch_tape.py` | Generates the HAND-MADE FICTIONAL replay tape | Poodle | Poodle |
 | `records/` | Store (JSON/v1.1/MD/trace + SHA-256), v1 ↔ v1.1 compat, idea log, data-quality index, Markdown | Doodle (semantics) | Poodle |
-| `providers/finviz.py`, `nasdaq.py` | Parsers + providers (fixtures or experimental live read-only GET) | Doodle | Poodle |
+| `providers/finviz.py`, `nasdaq.py` | Parsers + providers. The CLI uses fixtures or packs. HTTP clients remain for PR C and are not a `--live` flag. | Doodle | Poodle |
 | `providers/macro.py`, `treasury.py` | Fed FOMC / BLS calendar parsers and replay; Treasury bill-rate parser | Doodle | Poodle |
 | `providers/fetchers.py`, `cache.py` | `FixtureFetcher` / `HttpFetcher` (GET only, the only network code) / `CachedFetcher` | Moodle | Poodle |
 | `providers/global_snapshot.py` | Curated record (fixtures) / unavailable (live) | Doodle | Poodle |
@@ -363,20 +362,20 @@ OPTIONS_SPEC_DIR=$PWD/spec .venv/bin/pytest      # CI mode (the default run uses
 .venv/bin/pytest -m live_spec -rs                # opt-in: has Doodle's live folder moved since the pin?
 ```
 
-`--live` swaps in `HttpFetcher` (read-only GETs to Finviz, Nasdaq, Fed, BLS and Treasury). It is **experimental and untested in CI** (the only live test is opt-in: `pytest -m live`).
-The global snapshot, single-name events and earnings have no live source and remain `missing`.
+`--live` was removed in PR B. `optpipe run` does not swap in `HttpFetcher`. Offline replay is `--fixtures`. Pack reads are `--data-dir`.
+The global snapshot, single-name events and earnings have no pack field of their own. On the fixture path they come from curated inputs; when those inputs are absent they stay `missing`.
 
-## Live vs fixtures
+## Fixtures and packs
 
 | Piece | Status |
 |---|---|
-| Finviz screens, Nasdaq quote/option chain | Parsers tested on saved responses. Live = experimental GET. |
-| FOMC (Fed) | Parser tested on a real capture (fetched 2026-10-29). Live = GET. |
-| NFP/CPI/PPI (BLS / FRED) | ICS parser tested on a HAND-MADE `bls.ics` (no email configured, so none was fetched). FRED parser tested on real captures from 2026-10-29. Live BLS runs only with `bls_contact_email` set; otherwise FRED is used. The fixture run uses a HAND-MADE replay of the BLS schedule pages. |
-| Risk-free rate (Treasury) | Parser tested on the 2026 CSV. Live = GET. |
+| Finviz screens, Nasdaq quote/option chain | Parsers tested on saved responses. `run --fixtures` replays those files. `run --data-dir` reads the pack. No `--live` flag. |
+| FOMC (Fed) | Parser tested on a real capture (fetched 2026-10-29). Fixture replay uses the hand-made snapshot. Pack runs use `catalysts.json`. |
+| NFP/CPI/PPI (BLS / FRED) | ICS parser tested on a HAND-MADE `bls.ics` (no email configured, so none was fetched). FRED parser tested on real captures from 2026-10-29. The fixture run uses a HAND-MADE replay of the BLS schedule pages. Pack runs use macro rows in `catalysts.json`. The CLI does not GET BLS or FRED. |
+| Risk-free rate (Treasury) | Parser tested on the 2026 CSV. Fixture replay uses the snapshot. Pack runs do not GET Treasury. |
 | Implied volatility | Derived from chain mids (Black-Scholes). R10 is UNKNOWN until 20 daily points exist. |
 | Global snapshot, earnings reports, single-name events | Curated `session_inputs.yaml` / fixtures only |
-| Watcher (M3) | Replay tape (HAND-MADE FICTIONAL) tested offline. `--live` = experimental Nasdaq GET during NY market hours. |
+| Watcher (M3) | Replay tape (HAND-MADE FICTIONAL) tested offline. Pack quotes are `watch --data-dir` (file reads). `--live` was removed. |
 | EODHD | Stub |
 
 ## Placeholders (pending Eugene)
