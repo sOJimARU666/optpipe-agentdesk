@@ -99,6 +99,10 @@ class OutDir:
     def load(self, date: str) -> Session:
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
             raise KeyError(date)
+        requested_date = date
+        date = next((available for available in self.dates() if available == requested_date), None)
+        if date is None:
+            raise KeyError(requested_date)
         jp = self._session_path(date, ".json")
         vp = self._session_path(date, ".v1_1.json")
         tp = self._session_path(date, ".trace.json")
