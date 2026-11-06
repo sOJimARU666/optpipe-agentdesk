@@ -1,9 +1,16 @@
-"""Load sessions from an out/ directory for the dashboard (read-only)."""
+"""Load sessions from an out/ directory for the dashboard (read-only).
+
+Session artifacts are opened only as direct children of the configured output directory.
+Symlinks are not followed: a link is a containment failure even when its target would
+still land inside that directory, because following it re-opens a check-then-use window.
+"""
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
+import stat
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -19,6 +26,83 @@ _V1 = re.compile(r"^session-(\d{4}-\d{2}-\d{2})\.json$")
 
 def sha256_bytes(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
+
+
+_DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC
+_FILE_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+_ARTIFACTS = (
+    ("v1", ".json"),
+    ("v1_1", ".v1_1.json"),
+    ("trace", ".trace.json"),
+    ("sha256", ".trace.json.sha256"),
+    ("md", ".md"),
+    ("watch", ".watch.json"),
+    ("watch_sha256", ".watch.json.sha256"),
+)
+
+
+def _single_component(name: str) -> bool:
+    """True when `name` cannot be a path: one final component, no separator or NUL."""
+    if not name or name in {".", ".."}:
+        return False
+    if "/" in name or "\\" in name or "\x00" in name:
+        return False
+    return Path(name).name == name
+
+
+def _direct_file_info(dirfd: int, root: Path, name: str) -> Optional[os.stat_result]:
+    """lstat of one direct child. None if absent. KeyError if the entry is not a contained regular file.
+
+    `name` must be a single component. openat would treat a slash or `..` as a path relative to
+    the directory descriptor and could leave the output directory.
+    """
+    if not _single_component(name):
+        raise KeyError(name)
+    try:
+        info = os.stat(name, dir_fd=dirfd, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
+    except OSError:
+        raise KeyError(name) from None
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
+        raise KeyError(name)
+    candidate = root / name
+    try:
+        if candidate.is_symlink() or not candidate.resolve().is_relative_to(root):
+            raise KeyError(name)
+    except (OSError, RuntimeError):
+        raise KeyError(name) from None
+    return info
+
+
+def _read_direct_file(dirfd: int, root: Path, name: str) -> Optional[bytes]:
+    """Bytes of `name` inside the already-opened output directory.
+
+    None if that entry is absent. KeyError if it is a symlink, not a regular file, or its
+    resolved path is outside `root`. The descriptor is opened with O_NOFOLLOW and must still
+    be the same inode the lstat saw, so a swap to a link between the check and the read fails
+    closed instead of following the new target.
+    """
+    info = _direct_file_info(dirfd, root, name)
+    if info is None:
+        return None
+    try:
+        fd = os.open(name, _FILE_FLAGS, dir_fd=dirfd)
+    except OSError:
+        raise KeyError(name) from None
+    try:
+        opened = os.fstat(fd)
+        if opened.st_dev != info.st_dev or opened.st_ino != info.st_ino or not stat.S_ISREG(opened.st_mode):
+            raise KeyError(name)
+        chunks: list[bytes] = []
+        while True:
+            block = os.read(fd, 1024 * 1024)
+            if not block:
+                break
+            chunks.append(block)
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
 
 
 @dataclass
@@ -81,69 +165,119 @@ class OutDir:
     def __init__(self, root: Path | str):
         self.root = Path(root)
 
+    def _directory(self) -> tuple[Path, int]:
+        """Resolved output directory and an O_DIRECTORY descriptor for it. Caller closes the descriptor."""
+        root = self.root.resolve()
+        return root, os.open(root, _DIR_FLAGS)
+
+    def read_contained(self, name: str) -> Optional[bytes]:
+        """Read one direct child of the output directory. See `_read_direct_file`."""
+        if not _single_component(name):
+            raise KeyError(name)
+        try:
+            root, dirfd = self._directory()
+        except (OSError, RuntimeError):
+            raise KeyError(name) from None
+        try:
+            return _read_direct_file(dirfd, root, name)
+        finally:
+            os.close(dirfd)
+
     def dates(self) -> list[str]:
         if not self.root.is_dir():
             return []
-        return sorted((m.group(1) for p in self.root.iterdir() if (m := _V1.match(p.name))), reverse=True)
+        try:
+            root, dirfd = self._directory()
+        except (OSError, RuntimeError):
+            return []
+        try:
+            try:
+                listed = [entry.name for entry in os.scandir(dirfd)]
+            except OSError:
+                return []
+            found = []
+            for name in listed:
+                match = _V1.match(name)
+                if not match:
+                    continue
+                try:
+                    if _direct_file_info(dirfd, root, name) is not None:
+                        found.append(match.group(1))
+                except KeyError:
+                    continue
+            return sorted(found, reverse=True)
+        finally:
+            os.close(dirfd)
 
     def load(self, date: str) -> Session:
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
             raise KeyError(date)
-        jp = self.root / f"session-{date}.json"
-        vp = self.root / f"session-{date}.v1_1.json"
-        tp = self.root / f"session-{date}.trace.json"
-        sp = tp.with_name(tp.name + ".sha256")
-        if not jp.exists():
+        # The path component is a date this directory actually listed, not the request string.
+        safe_date = next((candidate for candidate in self.dates() if candidate == date), None)
+        if safe_date is None:
             raise KeyError(date)
-        main = json.loads(jp.read_text())
+        names = {key: f"session-{safe_date}{suffix}" for key, suffix in _ARTIFACTS}
+        try:
+            root, dirfd = self._directory()
+        except (OSError, RuntimeError):
+            raise KeyError(safe_date) from None
+        try:
+            blobs = {key: _read_direct_file(dirfd, root, name) for key, name in names.items()}
+        finally:
+            os.close(dirfd)
+        raw = blobs["v1"]
+        if raw is None:
+            raise KeyError(safe_date)
+        main = json.loads(raw)
+        preview = blobs["v1_1"]
         if main.get("schema_version") in V11_SHAPE:
             rec, origin = main, f"record (schema {main['schema_version']})"
-        elif vp.exists():
-            rec, origin = json.loads(vp.read_text()), "v1.1 preview (older output)"
+        elif preview is not None:
+            rec, origin = json.loads(preview), "v1.1 preview (older output)"
         else:
-            rec, origin = from_v1(json.loads(jp.read_text())), "v1 (upgraded for display)"
+            rec, origin = from_v1(main), "v1 (upgraded for display)"
         integ, trace = Integrity(), None
         integ.guard_errors = guard_errors(rec)
         integ.problems += [f"guard: {e}" for e in integ.guard_errors]
-        if tp.exists():
-            tb = tp.read_bytes()
-            trace = json.loads(tb)
-            integ.trace_sha256 = sha256_bytes(tb)
-            if sp.exists():
-                integ.sidecar_ok = sp.read_text().split()[0] == integ.trace_sha256
+        trace_name = names["trace"]
+        trace_bytes = blobs["trace"]
+        if trace_bytes is not None:
+            trace = json.loads(trace_bytes)
+            integ.trace_sha256 = sha256_bytes(trace_bytes)
+            sidecar = blobs["sha256"]
+            if sidecar is not None:
+                integ.sidecar_ok = sidecar.decode("utf-8").split()[0] == integ.trace_sha256
                 if not integ.sidecar_ok:
-                    integ.problems.append(f"{sp.name} does not match {tp.name}")
+                    integ.problems.append(f"{names['sha256']} does not match {trace_name}")
             ref = rec.get("trace_ref")
             if ref:
-                integ.trace_ref_ok = ref.get("sha256") == integ.trace_sha256 and ref.get("path") == tp.name
+                integ.trace_ref_ok = ref.get("sha256") == integ.trace_sha256 and ref.get("path") == trace_name
                 if not integ.trace_ref_ok:
                     integ.problems.append("trace_ref in the record does not match the trace file")
             from ..records.store import verify_session_ref
-            ok, msg = verify_session_ref(jp, trace)
+            ok, msg = verify_session_ref(names["v1"], trace, main)
             integ.session_ref_ok = ok
             if ok is False:
                 integ.problems.append(msg)
         else:
-            integ.problems.append(f"{tp.name} not found")
-        wp = self.root / f"session-{date}.watch.json"
-        wsp = wp.with_name(wp.name + ".sha256")
+            integ.problems.append(f"{trace_name} not found")
+        watch_bytes = blobs["watch"]
         watch = None
-        if wp.exists():
-            wb = wp.read_bytes()
-            watch = json.loads(wb)
-            if wsp.exists():
-                integ.watch_sidecar_ok = wsp.read_text().split()[0] == sha256_bytes(wb)
+        if watch_bytes is not None:
+            watch = json.loads(watch_bytes)
+            watch_sidecar = blobs["watch_sha256"]
+            if watch_sidecar is not None:
+                integ.watch_sidecar_ok = watch_sidecar.decode("utf-8").split()[0] == sha256_bytes(watch_bytes)
                 if not integ.watch_sidecar_ok:
-                    integ.problems.append(f"{wsp.name} does not match {wp.name}")
+                    integ.problems.append(f"{names['watch_sha256']} does not match {names['watch']}")
             wref = (watch.get("session") or {}).get("sha256")
             if wref:
-                integ.watch_session_ok = wref == sha256_bytes(jp.read_bytes())
+                integ.watch_session_ok = wref == sha256_bytes(raw)
                 if not integ.watch_session_ok:
-                    integ.problems.append(f"{wp.name} was made from a different {jp.name} (re-run optpipe watch)")
-        files = {k: p.name for k, p in (("v1", jp), ("v1_1", vp), ("trace", tp), ("sha256", sp),
-                                        ("md", self.root / f"session-{date}.md"), ("watch", wp),
-                                        ("watch_sha256", wsp)) if p.exists()}
-        return Session(date, rec, origin, trace, integ, files, watch)
+                    integ.problems.append(
+                        f"{names['watch']} was made from a different {names['v1']} (re-run optpipe watch)")
+        files = {key: names[key] for key, blob in blobs.items() if blob is not None}
+        return Session(safe_date, rec, origin, trace, integ, files, watch)
 
 
 # ---------------------------------------------------------------- formatting helpers (Jinja filters)

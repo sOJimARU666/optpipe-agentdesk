@@ -1,5 +1,6 @@
 """Milestone 2 dashboard: FastAPI TestClient over a fixture out/ dir (offline, read-only, GET only)."""
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -144,6 +145,116 @@ def test_raw_files_only_session_files(client, out):
     assert r.status_code == 200 and r.json()["schema_version"] == SV
     for bad in ("../pyproject.toml", "settings.yaml", "session-x.py", "..%2F..%2Fetc%2Fpasswd"):
         assert client.get(f"/files/{bad}").status_code == 404
+
+
+@pytest.mark.parametrize("date", ["../pyproject.toml", "..", "2026/10/13", "2026-10-13/../../outside", "2026-10-13\n"])
+def test_outdir_rejects_non_date_path(tmp_path, date):
+    outside = tmp_path / "session-2026-10-13.json"
+    outside.write_text('{"marker":"TRAVERSAL-MARKER"}')
+    nested = tmp_path / "nested" / "out"
+    nested.mkdir(parents=True)
+    with pytest.raises(KeyError):
+        OutDir(nested).load(date)
+    assert OutDir(nested).dates() == []
+    assert "TRAVERSAL-MARKER" in outside.read_text()
+
+
+def test_outside_session_symlink_is_omitted_and_rejected(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    marker = "OUTSIDE-SESSION-MARKER"
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"marker":"' + marker + '"}')
+    (out / f"session-{DATE}.json").symlink_to(Path("..") / outside.name)
+    od = OutDir(out)
+    assert DATE not in od.dates()
+    with pytest.raises(KeyError) as caught:
+        od.load(DATE)
+    assert marker not in str(caught.value)
+
+
+def test_inside_session_symlink_is_not_followed(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    marker = "INSIDE-LINK-TARGET"
+    (out / "decoy.json").write_text('{"marker":"' + marker + '"}')
+    (out / f"session-{DATE}.json").symlink_to("decoy.json")
+    od = OutDir(out)
+    assert od.dates() == []
+    with pytest.raises(KeyError) as caught:
+        od.load(DATE)
+    assert marker not in str(caught.value)
+
+
+@pytest.mark.parametrize("suffix", [
+    ".v1_1.json", ".trace.json", ".trace.json.sha256", ".md", ".watch.json", ".watch.json.sha256",
+])
+def test_artifact_symlink_outside_root_rejects_load(tmp_path, suffix):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / f"session-{DATE}.json").write_text('{"schema_version":"1.1.8"}')
+    marker = "OUTSIDE-ARTIFACT-MARKER"
+    outside = tmp_path / ("outside" + suffix)
+    outside.write_text(marker)
+    (out / f"session-{DATE}{suffix}").symlink_to(Path("..") / outside.name)
+    od = OutDir(out)
+    assert od.dates() == [DATE]
+    with pytest.raises(KeyError) as caught:
+        od.load(DATE)
+    assert marker not in str(caught.value)
+
+
+def test_fifo_sidecar_is_rejected_without_opening(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / f"session-{DATE}.json").write_text('{"schema_version":"1.1.8"}')
+    os.mkfifo(out / f"session-{DATE}.watch.json.sha256")
+    with pytest.raises(KeyError):
+        OutDir(out).load(DATE)
+
+
+def test_session_page_rejects_watch_sidecar_symlink(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / f"session-{DATE}.json").write_text('{"schema_version":"1.1.8"}')
+    marker = "OUTSIDE-SIDECAR-MARKER"
+    outside = tmp_path / "outside.sha256"
+    outside.write_text(marker)
+    (out / f"session-{DATE}.watch.json.sha256").symlink_to(Path("..") / outside.name)
+    response = TestClient(create_app(out)).get(f"/s/{DATE}/today")
+    assert response.status_code == 404
+    assert marker not in response.text
+
+
+@pytest.mark.parametrize("name", [
+    "session-1999-01-01.json", "session-1999-01-01.md", "session-1999-01-01.trace.json.sha256",
+])
+def test_raw_symlink_outside_root_is_not_served(tmp_path, name):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / f"session-{DATE}.json").write_text('{"schema_version":"1.1.8"}')
+    marker = "RAW-OUTSIDE-MARKER"
+    outside = tmp_path / "leak-body"
+    outside.write_text(marker)
+    (out / name).symlink_to(outside)
+    client = TestClient(create_app(out))
+    response = client.get(f"/files/{name}")
+    assert response.status_code == 404
+    assert marker not in response.text
+    assert client.get(f"/files/session-{DATE}.json").status_code == 200
+
+
+def test_history_stays_up_when_sidecar_symlink_escapes(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / f"session-{DATE}.json").write_text('{"schema_version":"1.1.8","risk_reviews":[],"idea_log":[]}')
+    outside = tmp_path / "outside.sha256"
+    outside.write_text("OUTSIDE-SIDECAR-MARKER")
+    (out / f"session-{DATE}.watch.json.sha256").symlink_to(Path("..") / outside.name)
+    response = TestClient(create_app(out)).get("/history")
+    assert response.status_code == 200
+    assert "OUTSIDE-SIDECAR-MARKER" not in response.text
+    assert "unreadable" in response.text
 
 
 def test_integrity_detects_tampering(out, tmp_path):

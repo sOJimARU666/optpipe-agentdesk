@@ -54,16 +54,22 @@ def session_content_sha256(rec: dict) -> str:
                           .encode("utf-8")).hexdigest()
 
 
-def verify_session_ref(json_path: str | Path, trace: dict | SessionTrace | None) -> tuple[bool | None, str]:
-    """(ok, message). ok is None when the trace has no session_ref sha256 (older outputs)."""
+def verify_session_ref(json_path: str | Path, trace: dict | SessionTrace | None,
+                       record: dict) -> tuple[bool | None, str]:
+    """(ok, message). ok is None when the trace has no session_ref sha256 (older outputs).
+
+    `record` is the object the caller already loaded. The path is not opened: hashing
+    `json_path` again would race a replacement of that caller-supplied path. Only its final
+    component is compared with trace.session_ref.path.
+    """
     t = trace.model_dump(mode="json") if isinstance(trace, SessionTrace) else (trace or {})
     ref = t.get("session_ref") or {}
     if not ref.get("sha256"):
         return None, "trace.session_ref has no sha256 (older output)"
-    jp = Path(json_path)
-    if ref.get("path") != jp.name:
-        return False, f"trace.session_ref.path {ref.get('path')!r} != {jp.name!r}"
-    got = session_content_sha256(json.loads(jp.read_text()))
+    name = Path(json_path).name
+    if ref.get("path") != name:
+        return False, f"trace.session_ref.path {ref.get('path')!r} != {name!r}"
+    got = session_content_sha256(record)
     return (got == ref["sha256"]), (f"session_ref OK ({got[:16]}...)" if got == ref["sha256"] else
                                     f"trace.session_ref.sha256 {ref['sha256'][:16]}... != record content {got[:16]}...")
 
@@ -95,7 +101,7 @@ def write_session(rec: dict, trace: SessionTrace, out_dir: str | Path) -> Writte
     v11["trace_ref"] = {"path": tp.name, "sha256": tsha}
     SessionRecordSpec.model_validate(v11)                    # never write a record Doodle's schema rejects
     jp.write_text(_dump(v11))
-    ok, msg = verify_session_ref(jp, trace)
+    ok, msg = verify_session_ref(jp, trace, v11)
     if not ok:                                               # trace_ref is the only key added after hashing
         raise RuntimeError(msg)
     vp = v1_1_path(jp)
