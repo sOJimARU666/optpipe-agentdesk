@@ -1,8 +1,13 @@
 """Load sessions from an out/ directory for the dashboard (read-only).
 
 Session artifacts are opened only as direct children of the configured output directory.
-Symlinks are not followed: a link is a containment failure even when its target would
-still land inside that directory, because following it re-opens a check-then-use window.
+The read boundary is that directory's file descriptor: a request is equality-checked
+against names scandir returned, and only a listed string that full-matches the fixed
+session pattern is passed to stat or open. There is no second walk through a joined
+path. Symlinks are not followed. A regular file with any extra hard link is rejected,
+because that link can name the same bytes from outside the output directory. The open
+is non-blocking so a swap to a FIFO between the pre-open stat and the open cannot park
+the reader.
 """
 from __future__ import annotations
 
@@ -22,6 +27,12 @@ from ..records.compat import V11_SHAPE, from_v1
 BERLIN = ZoneInfo("Europe/Berlin")
 NY = ZoneInfo("America/New_York")
 _V1 = re.compile(r"^session-(\d{4}-\d{2}-\d{2})\.json$")
+# Longer suffixes stay in front of the shorter ones they contain. This is the only
+# name shape stat/open will accept, and it cannot express a separator or "..".
+_SESSION_NAME = re.compile(
+    r"^session-\d{4}-\d{2}-\d{2}"
+    r"(?:\.v1_1\.json|\.trace\.json\.sha256|\.trace\.json|\.watch\.json\.sha256|\.watch\.json|\.json|\.md)$"
+)
 
 
 def sha256_bytes(b: bytes) -> str:
@@ -29,7 +40,7 @@ def sha256_bytes(b: bytes) -> str:
 
 
 _DIR_FLAGS = os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC
-_FILE_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+_FILE_FLAGS = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC | os.O_NONBLOCK
 _ARTIFACTS = (
     ("v1", ".json"),
     ("v1_1", ".v1_1.json"),
@@ -50,80 +61,84 @@ def _single_component(name: str) -> bool:
     return Path(name).name == name
 
 
-def _child_prefix(root: Path) -> str:
-    """`root` as a normalized path ending in a separator, so `startswith` cannot match a sibling."""
-    root_text = os.path.normpath(os.fspath(root))
-    return root_text if root_text.endswith(os.sep) else root_text + os.sep
+def _listed_session_names(dirfd: int) -> list[str]:
+    """Fixed-pattern names scandir returned for this directory descriptor.
 
-
-def _lstat_contained(root: Path, name: str) -> Optional[os.stat_result]:
-    """lstat of a direct child. None if absent. KeyError if it is not a contained regular file.
-
-    `os.lstat` runs only on `normpath(join(root, name))` after that string passes
-    `startswith(prefix)`. Symlinks are not followed.
+    Each string is the directory entry's own name. Callers equality-check a request
+    against these and pass only a returned string to stat and open.
     """
-    if not _single_component(name):
-        raise KeyError(name)
-    candidate = os.path.normpath(os.path.join(os.fspath(root), name))
-    if candidate.startswith(_child_prefix(root)):
-        try:
-            info = os.lstat(candidate)
-        except FileNotFoundError:
-            return None
-        except OSError:
-            raise KeyError(name) from None
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
-            raise KeyError(name)
-        return info
-    raise KeyError(name)
+    names: list[str] = []
+    with os.scandir(dirfd) as scan:
+        for entry in scan:
+            listed = entry.name
+            if _SESSION_NAME.fullmatch(listed):
+                names.append(listed)
+    return names
 
 
-def _read_direct_file(root: Path, name: str) -> Optional[bytes]:
-    """Bytes of one direct child of `root`.
+def _equal_listed(listed: list[str], wanted: str) -> Optional[str]:
+    """The entry from `listed` equal to `wanted`, or None.
 
-    None if that entry is absent. KeyError if it is a symlink, not a regular file, or its
-    normalized path is outside `root`. The open uses the same normalized path that passed
-    `startswith`, with O_NOFOLLOW, and the fd must still be the inode `lstat` saw.
+    The result is that listed object. `wanted` itself is never returned, so a request
+    string is not what stat or open receives.
     """
-    if not _single_component(name):
+    for name in listed:
+        if name == wanted:
+            return name
+    return None
+
+
+def _reject_uncontained(name: str, info: os.stat_result) -> None:
+    """KeyError unless `info` is one regular file with no extra hard link."""
+    if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
         raise KeyError(name)
-    candidate = os.path.normpath(os.path.join(os.fspath(root), name))
-    if candidate.startswith(_child_prefix(root)):
-        try:
-            info = os.lstat(candidate)
-        except FileNotFoundError:
-            return None
-        except OSError:
-            raise KeyError(name) from None
-        if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
-            raise KeyError(name)
-        try:
-            fd = os.open(candidate, _FILE_FLAGS)
-        except OSError:
-            raise KeyError(name) from None
-        try:
-            opened = os.fstat(fd)
-            if opened.st_dev != info.st_dev or opened.st_ino != info.st_ino or not stat.S_ISREG(opened.st_mode):
-                raise KeyError(name)
-            chunks: list[bytes] = []
-            while True:
-                block = os.read(fd, 1024 * 1024)
-                if not block:
-                    break
-                chunks.append(block)
-            return b"".join(chunks)
-        finally:
-            os.close(fd)
-    raise KeyError(name)
 
 
-def _listed_name(dirfd: int, wanted: str) -> Optional[str]:
-    """The directory entry whose name equals `wanted`, taken from the listing rather than `wanted`."""
+def _stat_listed(dirfd: int, name: str) -> Optional[os.stat_result]:
+    """Pre-open lstat of a listed child. None if absent. KeyError if it is not a single regular file."""
+    if _SESSION_NAME.fullmatch(name) is None:
+        raise KeyError(name)
     try:
-        names = [entry.name for entry in os.scandir(dirfd)]
+        info = os.stat(name, dir_fd=dirfd, follow_symlinks=False)
+    except FileNotFoundError:
+        return None
     except OSError:
-        raise KeyError(wanted) from None
-    return next((listed for listed in names if listed == wanted), None)
+        raise KeyError(name) from None
+    _reject_uncontained(name, info)
+    return info
+
+
+def _read_listed(dirfd: int, name: str) -> Optional[bytes]:
+    """Bytes of one listed child, opened relative to `dirfd`.
+
+    None if that entry is absent. KeyError if it is a symlink, not a regular file, has
+    another hard link, or the fd is a different inode than the pre-open stat. The open
+    cannot follow a link and cannot block on a FIFO swapped in after that stat.
+    """
+    info = _stat_listed(dirfd, name)
+    if info is None:
+        return None
+    try:
+        fd = os.open(name, _FILE_FLAGS, dir_fd=dirfd)
+    except OSError:
+        raise KeyError(name) from None
+    try:
+        opened = os.fstat(fd)
+        if (opened.st_dev != info.st_dev or opened.st_ino != info.st_ino
+                or not stat.S_ISREG(opened.st_mode) or opened.st_nlink != 1):
+            raise KeyError(name)
+        chunks: list[bytes] = []
+        while True:
+            try:
+                block = os.read(fd, 1024 * 1024)
+            except OSError:
+                raise KeyError(name) from None
+            if not block:
+                break
+            chunks.append(block)
+        return b"".join(chunks)
+    finally:
+        os.close(fd)
 
 
 @dataclass
@@ -192,18 +207,22 @@ class OutDir:
         return root, os.open(root, _DIR_FLAGS)
 
     def read_contained(self, name: str) -> Optional[bytes]:
-        """Read one direct child of the output directory. See `_read_direct_file`."""
-        if not _single_component(name):
+        """Read one listed session artifact. The request is not the path passed to stat or open."""
+        if not _single_component(name) or _SESSION_NAME.fullmatch(name) is None:
             raise KeyError(name)
         try:
-            root, dirfd = self._directory()
+            _root, dirfd = self._directory()
         except (OSError, RuntimeError):
             raise KeyError(name) from None
         try:
-            listed = _listed_name(dirfd, name)
-            if listed is None:
+            try:
+                listed = _listed_session_names(dirfd)
+            except OSError:
+                raise KeyError(name) from None
+            chosen = _equal_listed(listed, name)
+            if chosen is None:
                 return None
-            return _read_direct_file(root, listed)
+            return _read_listed(dirfd, chosen)
         finally:
             os.close(dirfd)
 
@@ -211,21 +230,21 @@ class OutDir:
         if not self.root.is_dir():
             return []
         try:
-            root, dirfd = self._directory()
+            _root, dirfd = self._directory()
         except (OSError, RuntimeError):
             return []
         try:
             try:
-                listed = [entry.name for entry in os.scandir(dirfd)]
+                listed = _listed_session_names(dirfd)
             except OSError:
                 return []
             found = []
             for name in listed:
-                match = _V1.match(name)
-                if not match:
+                match = _V1.fullmatch(name)
+                if match is None:
                     continue
                 try:
-                    if _lstat_contained(root, name) is not None:
+                    if _stat_listed(dirfd, name) is not None:
                         found.append(match.group(1))
                 except KeyError:
                     continue
@@ -236,27 +255,28 @@ class OutDir:
     def load(self, date: str) -> Session:
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
             raise KeyError(date)
-        # The path component is a date this directory actually listed, not the request string.
+        # The date is one this directory listed. The request string is not a path component.
         safe_date = next((candidate for candidate in self.dates() if candidate == date), None)
         if safe_date is None:
             raise KeyError(date)
-        labels = {key: f"session-{safe_date}{suffix}" for key, suffix in _ARTIFACTS}
         try:
-            root, dirfd = self._directory()
+            _root, dirfd = self._directory()
         except (OSError, RuntimeError):
             raise KeyError(safe_date) from None
         try:
             try:
-                listed = [entry.name for entry in os.scandir(dirfd)]
+                listed = _listed_session_names(dirfd)
             except OSError:
                 raise KeyError(safe_date) from None
-            blobs = {}
-            for key, label in labels.items():
-                chosen = next((item for item in listed if item == label), None)
-                blobs[key] = None if chosen is None else _read_direct_file(root, chosen)
+            blobs: dict[str, Optional[bytes]] = {}
+            names: dict[str, str] = {}
+            for key, suffix in _ARTIFACTS:
+                label = f"session-{safe_date}{suffix}"
+                chosen = _equal_listed(listed, label)
+                names[key] = chosen if chosen is not None else label
+                blobs[key] = None if chosen is None else _read_listed(dirfd, chosen)
         finally:
             os.close(dirfd)
-        names = labels
         raw = blobs["v1"]
         if raw is None:
             raise KeyError(safe_date)
