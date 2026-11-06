@@ -293,7 +293,7 @@ def main(argv: list[str] | None = None) -> int:
         from .records.store import verify_session_ref
         tp = Path(str(a.file).replace(".json", ".trace.json"))
         if tp.exists():
-            ok, msg = verify_session_ref(a.file, json.loads(tp.read_text()))
+            ok, msg = verify_session_ref(a.file, json.loads(tp.read_text()), rec)
             if ok is False:
                 errs.append(f"session_ref: {msg}")
             elif ok:

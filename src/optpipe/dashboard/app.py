@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, PlainTextResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -220,16 +220,26 @@ def create_app(out_dir: Path | str, export: bool = False) -> FastAPI:
     def history(request: Request):
         sessions, ideas = history_model(od)
         dates = od.dates()
-        s = od.load(dates[0]) if dates else None
+        s = None
+        if dates:
+            try:
+                s = od.load(dates[0])
+            except (KeyError, ValueError):
+                s = None
         return render(request, "history.html", "history", s, sessions=sessions, ideas=ideas,
                       session_links={d: link("today", d, export) for d in dates})
 
     @app.get("/files/{name}")
     def raw(name: str):
-        p = od.root / name
-        if not (name.startswith("session-") and name.endswith(_RAW_OK) and "/" not in name and p.is_file()):
+        if not (name.startswith("session-") and name.endswith(_RAW_OK) and "/" not in name and "\\" not in name):
+            raise HTTPException(404, name)
+        try:
+            body = od.read_contained(name)
+        except KeyError:
+            raise HTTPException(404, name) from None
+        if body is None:
             raise HTTPException(404, name)
         mt = "application/json" if name.endswith(".json") else "text/plain; charset=utf-8"
-        return FileResponse(p, media_type=mt)
+        return Response(content=body, media_type=mt)
 
     return app
