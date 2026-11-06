@@ -659,6 +659,14 @@
     "lookahead_consumers": "MD-19-LOOKAHEAD is on the research market that carries the injected IV history, and the research quote is missing. PackQuoteSource does not read that history; its reasons stay the hold-window reasons (MD-20-CRITICAL, and MD-20-SCOPE when the label is MARKET only). This receipt records that split. It does not change the quote source.",
     "naive_clock_exits": "select_pack loader exit is 1 (MD-19-TZ). optpipe market-data rejects a naive --now before load and exits 2. optpipe watch exits 2. Discovery and research are not invoked (AwareDatetime ValidationError). These are not one exit code."
   },
+  "identity": {
+    "base_head": "7ee665444eb4d3197effb95347af9bfbf9b7d787",
+    "base_tree": "35afda7460126e07f5a127a2a0043afeb315ed30",
+    "closure_claim": "none",
+    "outside_slice_algorithm": "sha256 of sorted lines '<mode> <blob> <path>' from git ls-files -s, excluding the four slice paths. The stage field is omitted. No network.",
+    "outside_slice_sha256": "dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504",
+    "when_base_commit_absent": "Shallow CI checkouts do not have the base object. Do not fetch. Still require the hard constants, the input sha256 pins, this outside-slice manifest, and a diff against HEAD contained in the tests/ slice allowlist."
+  },
   "inputs": {
     "note": "Pinned packs and spec/ are read only. Hostile cases are private temp copies.",
     "pack_pin": "spec/fixtures/market_data/valid/2026-10-20/pack.sha256",
@@ -715,6 +723,6 @@
   "source": {
     "base_head": "7ee665444eb4d3197effb95347af9bfbf9b7d787",
     "base_tree": "35afda7460126e07f5a127a2a0043afeb315ed30",
-    "note": "base_head and base_tree are the exact code this slice replays (main after PR #30). The test checks that commit's tree and that the diff from it stays inside this slice's test files."
+    "note": "base_head and base_tree are hard constants for the code this slice replays (main after PR #30). When that commit object is present, the test checks rev-parse of its tree and merge-base ancestry. When the object is absent, the test does not fetch. It still requires these constants, identity.outside_slice_sha256, the input sha256 pins, and a worktree diff against HEAD inside the tests/ slice allowlist."
   }
 }

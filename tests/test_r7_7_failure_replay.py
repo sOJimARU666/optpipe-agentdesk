@@ -18,11 +18,25 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 from mdpack import ROOT, SPEC
 from optpipe.cli import main
 
 BASE_HEAD = "7ee665444eb4d3197effb95347af9bfbf9b7d787"
 BASE_TREE = "35afda7460126e07f5a127a2a0043afeb315ed30"
+# sha256 of sorted '<mode> <blob> <path>' lines from git ls-files -s, excluding SLICE_FILES.
+OUTSIDE_SLICE_SHA256 = "dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504"
+INPUT_PINS = (
+    ("settings_sha256", "config/settings.yaml",
+     "f89369fe485d01cc42a548ae4a493b4bff53d181d5862f45e4c4693f8c7fd053"),
+    ("risk_rules_sha256", "spec/risk_rules.yaml",
+     "6badc513716649de953b8689285f9b67a63035202541bcb575467f7999fa3b11"),
+    ("watcher_rules_sha256", "spec/watcher_rules.yaml",
+     "21e294555b6795d6cacfea3c02ce8ea918a2bebd68250ed326a2b6f45a75ba10"),
+    ("pack_pin_sha256", "spec/fixtures/market_data/valid/2026-10-20/pack.sha256",
+     "a724aaf3347fcb46544baddfdefe16bf3f90b421f16842adb77712c1c5582365"),
+)
 RECEIPT = ROOT / "tests" / "receipts" / "r7_item7_deterministic_replay.json"
 DRIVER = ROOT / "tests" / "r7_item7_driver.py"
 FIXTURES = ROOT / "tests" / "fixtures" / "2026-10-13"
@@ -37,20 +51,78 @@ SLICE_FILES = {
 SAME_CLOCK = ("positive", "missing", "malformed", "tamper", "oversized", "wrong_path", "lookahead")
 EMPTY_SHA = hashlib.sha256(b"").hexdigest()
 NEWLINE_SHA = hashlib.sha256(b"\n").hexdigest()
+_FORBIDDEN_PREFIXES = ("src/", "spec/", "config/", "scripts/")
 
 
-def _git(*args: str) -> str:
-    return subprocess.check_output(["git", *args], cwd=ROOT, text=True).strip()
+def _git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+    proc = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
+    if check and proc.returncode != 0:
+        raise AssertionError(f"git {' '.join(args)} exited {proc.returncode}: {proc.stderr.strip()}")
+    return proc
 
 
-def _slice_paths() -> set[str]:
-    changed = set(_git("diff", "--name-only", BASE_HEAD).split())
-    changed |= set(_git("diff", "--name-only", "--cached", BASE_HEAD).split())
-    changed |= set(_git("diff", "--name-only", BASE_HEAD, "HEAD").split())
-    others = subprocess.check_output(
-        ["git", "ls-files", "--others", "--exclude-standard"], cwd=ROOT, text=True)
-    changed |= {n for n in others.split() if n}
-    return {n for n in changed if n}
+def _commit_exists(root: Path, sha: str) -> bool:
+    """Local object check only. A missing object is exit 128 from git; that is absence, not a fetch."""
+    proc = _git(root, "cat-file", "-e", f"{sha}^{{commit}}", check=False)
+    return proc.returncode == 0
+
+
+def _outside_slice_sha256(root: Path, slice_files: set[str]) -> str:
+    raw = subprocess.check_output(["git", "ls-files", "-s", "-z"], cwd=root)
+    lines = []
+    for rec in raw.split(b"\0"):
+        if not rec:
+            continue
+        meta, path_b = rec.split(b"\t", 1)
+        mode, blob, _stage = meta.decode().split(" ")
+        path = path_b.decode()
+        if path in slice_files:
+            continue
+        lines.append(f"{mode} {blob} {path}")
+    payload = ("\n".join(sorted(lines)) + "\n").encode()
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _changed_against_head(root: Path) -> set[str]:
+    """Worktree and index versus HEAD. HEAD exists on a depth-1 checkout; the base commit may not."""
+    names: set[str] = set()
+    for args in (["diff", "--name-only", "HEAD"], ["diff", "--name-only", "--cached"]):
+        names.update(n for n in _git(root, *args).stdout.splitlines() if n)
+    others = _git(root, "ls-files", "--others", "--exclude-standard").stdout
+    names.update(n for n in others.splitlines() if n)
+    return names
+
+
+def verify_base_identity(root: Path, receipt: dict, *, base_head: str, base_tree: str,
+                         slice_files: set[str], input_pins: tuple, outside_sha256: str) -> None:
+    """Require the pinned base identity. Never fetches. Does not return before the pin checks.
+
+    When the base commit object is present, also require its tree and ancestry.
+    When it is absent, the manifest, input pins, and HEAD diff are the whole check.
+    """
+    assert receipt["closure_claim"] == "none"
+    assert receipt["source"]["base_head"] == base_head
+    assert receipt["source"]["base_tree"] == base_tree
+    assert receipt["identity"]["closure_claim"] == "none"
+    assert receipt["identity"]["base_head"] == base_head
+    assert receipt["identity"]["base_tree"] == base_tree
+    assert receipt["identity"]["outside_slice_sha256"] == outside_sha256
+    for field, rel, digest in input_pins:
+        assert receipt["inputs"][field] == digest
+        got = hashlib.sha256((root / rel).read_bytes()).hexdigest()
+        assert got == digest, rel
+    assert _outside_slice_sha256(root, slice_files) == outside_sha256
+    dirty = _changed_against_head(root)
+    assert dirty <= set(slice_files), dirty
+    assert not any(p.startswith(_FORBIDDEN_PREFIXES) for p in dirty)
+    if _commit_exists(root, base_head):
+        got = _git(root, "rev-parse", f"{base_head}^{{tree}}").stdout.strip()
+        assert got == base_tree
+        ancestry = _git(root, "merge-base", "--is-ancestor", base_head, "HEAD", check=False)
+        assert ancestry.returncode == 0, ancestry.stderr.strip()
+        diff = {n for n in _git(root, "diff", "--name-only", base_head, "HEAD").stdout.splitlines() if n}
+        assert diff <= set(slice_files), diff
+        assert not any(p.startswith(_FORBIDDEN_PREFIXES) for p in diff)
 
 
 def _satisfies(actual: dict, expected: dict) -> None:
@@ -96,17 +168,10 @@ def _run_cell(work: Path, session: Path, seed: str, tz: str) -> None:
     assert cell["python"]
 
 
-def test_r7_7_failure_replay_receipt(tmp_path):
-    """Byte-identical raw projections and, separately, id_status_v1 semantic files."""
-    assert _git("rev-parse", f"{BASE_HEAD}^{{tree}}") == BASE_TREE
-    subprocess.check_call(["git", "merge-base", "--is-ancestor", BASE_HEAD, "HEAD"], cwd=ROOT)
-    extra = _slice_paths() - SLICE_FILES
-    assert extra == set(), extra
-    assert not any(n.startswith(("src/", "spec/", "config/", "scripts/")) for n in _slice_paths())
-
-    receipt = json.loads(RECEIPT.read_text())
+def assert_receipt_contract(receipt: dict) -> None:
+    """Receipt checks that do not need the base git object. The matrix runs after this."""
     assert receipt["closure_claim"] == "none"
-    blob = RECEIPT.read_text()
+    blob = json.dumps(receipt)
     assert "closes R7" not in blob and "R7 is closed" not in blob
     assert "MD-18 closed" not in blob and "R6 closed" not in blob
     capture = receipt["author_environment_capture"]
@@ -115,16 +180,27 @@ def test_r7_7_failure_replay_receipt(tmp_path):
     for dist, ver in capture["dependencies"].items():
         assert ver
         assert importlib.metadata.version(dist)  # live version is recorded by being resolvable, not frozen
-    assert Path(os.environ["OPTIONS_SPEC_DIR"]).resolve() == SPEC.resolve()
+    positive = receipt["cases"]["positive"]["actual"]
+    assert positive["research_quote_status"] == "ok"
+    assert positive["research_quote_value"] == 101.25
+    assert positive["closure_claim"] == "none"
+    for name, body in receipt["cases"].items():
+        assert body["actual"]["closure_claim"] == "none"
+        assert body["raw_sha256"] not in (EMPTY_SHA, NEWLINE_SHA)
+        assert body["semantic_sha256"] not in (EMPTY_SHA, NEWLINE_SHA)
+        assert body["raw_sha256"] != body["semantic_sha256"], name
+        if name != "positive":
+            assert body["actual"]["research_quote_value"] != 101.25
 
-    for name, rel in (
-        ("settings_sha256", "config/settings.yaml"),
-        ("risk_rules_sha256", "spec/risk_rules.yaml"),
-        ("watcher_rules_sha256", "spec/watcher_rules.yaml"),
-        ("pack_pin_sha256", receipt["inputs"]["pack_pin"]),
-    ):
-        digest = hashlib.sha256((ROOT / rel).read_bytes()).hexdigest()
-        assert digest == receipt["inputs"][name]
+
+def test_r7_7_failure_replay_receipt(tmp_path):
+    """Byte-identical raw projections and, separately, id_status_v1 semantic files."""
+    receipt = json.loads(RECEIPT.read_text())
+    verify_base_identity(
+        ROOT, receipt, base_head=BASE_HEAD, base_tree=BASE_TREE, slice_files=SLICE_FILES,
+        input_pins=INPUT_PINS, outside_sha256=OUTSIDE_SLICE_SHA256)
+    assert_receipt_contract(receipt)
+    assert Path(os.environ["OPTIONS_SPEC_DIR"]).resolve() == SPEC.resolve()
 
     session = _session(tmp_path)
     cells = []
@@ -190,3 +266,90 @@ def test_r7_7_failure_replay_receipt(tmp_path):
                    for cell in cells for p in (cell / "watch" / case).glob("*.watch.json")}
         assert len(digests) == 1
         assert digests.pop() != watch["positive"]
+
+
+def _git_commit(repo: Path, message: str) -> None:
+    subprocess.check_call([
+        "git", "-c", "user.email=poodle@example.com", "-c", "user.name=Poodle",
+        "-c", "commit.gpgsign=false", "commit", "-m", message,
+    ], cwd=repo)
+
+
+def _shallow_fixture(tmp_path: Path):
+    """Depth-1 clone: the tip is present and its parent, and BASE_HEAD, are not."""
+    origin = tmp_path / "origin"
+    origin.mkdir(parents=True)
+    subprocess.check_call(["git", "init", "-q"], cwd=origin)
+    (origin / "src").mkdir()
+    (origin / "config").mkdir()
+    (origin / "tests").mkdir()
+    (origin / "src" / "prod.py").write_text("prod\n")
+    (origin / "config" / "settings.yaml").write_text("mode: paper_only\n")
+    (origin / "tests" / "keep.py").write_text("keep\n")
+    (origin / "tests" / "slice_a.py").write_text("v1\n")
+    subprocess.check_call(["git", "add", "."], cwd=origin)
+    _git_commit(origin, "base")
+    (origin / "tests" / "slice_a.py").write_text("v2\n")
+    subprocess.check_call(["git", "add", "tests/slice_a.py"], cwd=origin)
+    _git_commit(origin, "slice")
+    shallow = tmp_path / "shallow"
+    # A path clone ignores --depth. file:// is still local and makes the depth-1 checkout real.
+    subprocess.check_call(["git", "clone", "--depth", "1", "-q", origin.resolve().as_uri(), str(shallow)])
+    slice_files = {"tests/slice_a.py"}
+    digest = hashlib.sha256((shallow / "config" / "settings.yaml").read_bytes()).hexdigest()
+    pins = (("settings_sha256", "config/settings.yaml", digest),)
+    manifest = _outside_slice_sha256(shallow, slice_files)
+    receipt = {
+        "closure_claim": "none",
+        "source": {"base_head": BASE_HEAD, "base_tree": BASE_TREE},
+        "identity": {
+            "closure_claim": "none",
+            "base_head": BASE_HEAD,
+            "base_tree": BASE_TREE,
+            "outside_slice_sha256": manifest,
+        },
+        "inputs": {"settings_sha256": digest},
+    }
+    return shallow, receipt, pins, manifest, slice_files
+
+
+def test_r7_7_shallow_checkout_enforces_identity(tmp_path, monkeypatch):
+    """Missing base object: the old rev-parse exits 128; pins still fail closed; the replay still runs.
+
+    closure_claim: none. This does not close R7, MD-18, or R6.
+    """
+    shallow, receipt, pins, manifest, slice_files = _shallow_fixture(tmp_path / "fixture")
+    old = subprocess.run(
+        ["git", "rev-parse", f"{BASE_HEAD}^{{tree}}"], cwd=shallow, capture_output=True, text=True)
+    assert old.returncode == 128
+    parent = subprocess.run(["git", "rev-parse", "HEAD^"], cwd=shallow, capture_output=True, text=True)
+    assert parent.returncode == 128
+    assert _commit_exists(shallow, BASE_HEAD) is False
+    kwargs = dict(base_head=BASE_HEAD, base_tree=BASE_TREE, slice_files=slice_files,
+                  input_pins=pins, outside_sha256=manifest)
+    verify_base_identity(shallow, receipt, **kwargs)
+
+    bad_tree = json.loads(json.dumps(receipt))
+    bad_tree["source"]["base_tree"] = "0" * 64
+    with pytest.raises(AssertionError):
+        verify_base_identity(shallow, bad_tree, **kwargs)
+    bad_pin = json.loads(json.dumps(receipt))
+    bad_pin["inputs"]["settings_sha256"] = "0" * 64
+    with pytest.raises(AssertionError):
+        verify_base_identity(shallow, bad_pin, **kwargs)
+    bad_manifest = json.loads(json.dumps(receipt))
+    bad_manifest["identity"]["outside_slice_sha256"] = "0" * 64
+    with pytest.raises(AssertionError):
+        verify_base_identity(shallow, bad_manifest, **kwargs)
+
+    (shallow / "src" / "prod.py").write_text("hacked\n")
+    subprocess.check_call(["git", "add", "src/prod.py"], cwd=shallow)
+    _git_commit(shallow, "prod edit")
+    with pytest.raises(AssertionError):
+        verify_base_identity(shallow, receipt, **kwargs)
+
+    # Hide the base object and run the real receipt contract plus the full matrix.
+    monkeypatch.setattr(sys.modules[__name__], "_commit_exists", lambda _root, _sha: False)
+    assert _commit_exists(ROOT, BASE_HEAD) is False
+    assert_receipt_contract(json.loads(RECEIPT.read_text()))
+    test_r7_7_failure_replay_receipt(tmp_path / "replay")
