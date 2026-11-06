@@ -81,18 +81,39 @@ class OutDir:
     def __init__(self, root: Path | str):
         self.root = Path(root)
 
+    def _safe_path(self, path: Path) -> Path:
+        try:
+            resolved = path.resolve()
+            root = self.root.resolve()
+        except (OSError, RuntimeError):
+            raise KeyError(path.name) from None
+        if not resolved.is_relative_to(root):
+            raise KeyError(path.name)
+        return resolved
+
     def dates(self) -> list[str]:
         if not self.root.is_dir():
             return []
-        return sorted((m.group(1) for p in self.root.iterdir() if (m := _V1.match(p.name))), reverse=True)
+        dates = []
+        for path in self.root.iterdir():
+            match = _V1.match(path.name)
+            if not match:
+                continue
+            try:
+                resolved = self._safe_path(path)
+            except KeyError:
+                continue
+            if resolved.is_file():
+                dates.append(match.group(1))
+        return sorted(dates, reverse=True)
 
     def load(self, date: str) -> Session:
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
             raise KeyError(date)
-        jp = self.root / f"session-{date}.json"
-        vp = self.root / f"session-{date}.v1_1.json"
-        tp = self.root / f"session-{date}.trace.json"
-        sp = tp.with_name(tp.name + ".sha256")
+        jp = self._safe_path(self.root / f"session-{date}.json")
+        vp = self._safe_path(self.root / f"session-{date}.v1_1.json")
+        tp = self._safe_path(self.root / f"session-{date}.trace.json")
+        sp = self._safe_path(self.root / f"session-{date}.trace.json.sha256")
         if not jp.exists():
             raise KeyError(date)
         main = json.loads(jp.read_text())
@@ -125,8 +146,8 @@ class OutDir:
                 integ.problems.append(msg)
         else:
             integ.problems.append(f"{tp.name} not found")
-        wp = self.root / f"session-{date}.watch.json"
-        wsp = wp.with_name(wp.name + ".sha256")
+        wp = self._safe_path(self.root / f"session-{date}.watch.json")
+        wsp = self._safe_path(self.root / f"session-{date}.watch.json.sha256")
         watch = None
         if wp.exists():
             wb = wp.read_bytes()
@@ -140,9 +161,9 @@ class OutDir:
                 integ.watch_session_ok = wref == sha256_bytes(jp.read_bytes())
                 if not integ.watch_session_ok:
                     integ.problems.append(f"{wp.name} was made from a different {jp.name} (re-run optpipe watch)")
+        md = self._safe_path(self.root / f"session-{date}.md")
         files = {k: p.name for k, p in (("v1", jp), ("v1_1", vp), ("trace", tp), ("sha256", sp),
-                                        ("md", self.root / f"session-{date}.md"), ("watch", wp),
-                                        ("watch_sha256", wsp)) if p.exists()}
+                                        ("md", md), ("watch", wp), ("watch_sha256", wsp)) if p.exists()}
         return Session(date, rec, origin, trace, integ, files, watch)
 
 
