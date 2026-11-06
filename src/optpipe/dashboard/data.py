@@ -91,6 +91,14 @@ class OutDir:
             raise KeyError(path.name)
         return resolved
 
+    def _find_path(self, name: str) -> Optional[Path]:
+        if not self.root.is_dir():
+            return None
+        for path in self.root.iterdir():
+            if path.name == name:
+                return self._safe_path(path)
+        return None
+
     def dates(self) -> list[str]:
         if not self.root.is_dir():
             return []
@@ -110,27 +118,27 @@ class OutDir:
     def load(self, date: str) -> Session:
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
             raise KeyError(date)
-        jp = self._safe_path(self.root / f"session-{date}.json")
-        vp = self._safe_path(self.root / f"session-{date}.v1_1.json")
-        tp = self._safe_path(self.root / f"session-{date}.trace.json")
-        sp = self._safe_path(self.root / f"session-{date}.trace.json.sha256")
-        if not jp.exists():
+        jp = self._find_path(f"session-{date}.json")
+        vp = self._find_path(f"session-{date}.v1_1.json")
+        tp = self._find_path(f"session-{date}.trace.json")
+        sp = self._find_path(f"session-{date}.trace.json.sha256")
+        if jp is None:
             raise KeyError(date)
         main = json.loads(jp.read_text())
         if main.get("schema_version") in V11_SHAPE:
             rec, origin = main, f"record (schema {main['schema_version']})"
-        elif vp.exists():
+        elif vp is not None:
             rec, origin = json.loads(vp.read_text()), "v1.1 preview (older output)"
         else:
             rec, origin = from_v1(json.loads(jp.read_text())), "v1 (upgraded for display)"
         integ, trace = Integrity(), None
         integ.guard_errors = guard_errors(rec)
         integ.problems += [f"guard: {e}" for e in integ.guard_errors]
-        if tp.exists():
+        if tp is not None:
             tb = tp.read_bytes()
             trace = json.loads(tb)
             integ.trace_sha256 = sha256_bytes(tb)
-            if sp.exists():
+            if sp is not None:
                 integ.sidecar_ok = sp.read_text().split()[0] == integ.trace_sha256
                 if not integ.sidecar_ok:
                     integ.problems.append(f"{sp.name} does not match {tp.name}")
@@ -145,14 +153,14 @@ class OutDir:
             if ok is False:
                 integ.problems.append(msg)
         else:
-            integ.problems.append(f"{tp.name} not found")
-        wp = self._safe_path(self.root / f"session-{date}.watch.json")
-        wsp = self._safe_path(self.root / f"session-{date}.watch.json.sha256")
+            integ.problems.append(f"session-{date}.trace.json not found")
+        wp = self._find_path(f"session-{date}.watch.json")
+        wsp = self._find_path(f"session-{date}.watch.json.sha256")
         watch = None
-        if wp.exists():
+        if wp is not None:
             wb = wp.read_bytes()
             watch = json.loads(wb)
-            if wsp.exists():
+            if wsp is not None:
                 integ.watch_sidecar_ok = wsp.read_text().split()[0] == sha256_bytes(wb)
                 if not integ.watch_sidecar_ok:
                     integ.problems.append(f"{wsp.name} does not match {wp.name}")
@@ -161,9 +169,9 @@ class OutDir:
                 integ.watch_session_ok = wref == sha256_bytes(jp.read_bytes())
                 if not integ.watch_session_ok:
                     integ.problems.append(f"{wp.name} was made from a different {jp.name} (re-run optpipe watch)")
-        md = self._safe_path(self.root / f"session-{date}.md")
+        md = self._find_path(f"session-{date}.md")
         files = {k: p.name for k, p in (("v1", jp), ("v1_1", vp), ("trace", tp), ("sha256", sp),
-                                        ("md", md), ("watch", wp), ("watch_sha256", wsp)) if p.exists()}
+                                        ("md", md), ("watch", wp), ("watch_sha256", wsp)) if p is not None}
         return Session(date, rec, origin, trace, integ, files, watch)
 
 
