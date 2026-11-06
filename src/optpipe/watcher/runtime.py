@@ -861,7 +861,8 @@ WATCH_SCHEMA = {
     "properties": {
         "label": {"type": "string", "pattern": "^PAPER ONLY"},
         "mode": {"type": "object", "required": ["clock", "quotes", "quote_method"],
-                 "properties": {"quote_method": {"const": "GET"}}},
+                 # GET is the replay tape. file is PackQuoteSource. Any other method fails closed.
+                 "properties": {"quote_method": {"enum": ["GET", "file"]}}},
         "targets": {"type": "array", "items": {"type": "object",
                     "required": ["target_id", "kind", "ticket_id", "status", "vetoed", "hypothetical", "watched_intraday"]}},
         "alerts": {"type": "array", "items": {"type": "object",
