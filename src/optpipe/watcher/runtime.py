@@ -30,7 +30,8 @@ watcher_rules.yaml) and writes <session>.watch.json plus a .sha256 sidecar.
   * Quote sources are GET-only: ReplayTape (fixtures, no network) or LiveNasdaqSource (read-only GETs via
     HttpFetcher, which has no POST/PUT/DELETE method).
   * Output: nothing is sent anywhere. No order path, no notifications, no outside service is contacted
-    except the optional read-only quote GETs in --live mode.
+    PackQuoteSource (PR B) reads Oodle's market-data packs; --live is removed from the CLI (LiveNasdaqSource stays
+    for PR C).
 """
 from __future__ import annotations
 
@@ -220,6 +221,102 @@ class LiveNasdaqSource:
                                  "iv": _f(oq.iv, oq.quote_time, src)}
         for c in want - set(opts):
             opts[c] = {"bid": _f(None, None, "src-nasdaq"), "ask": _f(None, None, "src-nasdaq"), "iv": _f(None, None, "src-nasdaq")}
+        return {"underlyings": und, "options": opts}
+
+
+class PackQuoteSource:
+    """FEAT-OODLE-01 PR B: watcher quotes from an Oodle market-data pack (file I/O only, no network).
+
+    Loads the pack for `now`'s America/New_York date under `root` via mdfeeds.select_pack (so a pack built after
+    `now` is MD-19-FUTURE-PACK). Only contracts that pass every CONTRACT_CRITICAL field are returned; a ticker that
+    is NO IDEA contributes missing fields (fail closed). LiveNasdaqSource stays in the tree for PR C but the CLI no
+    longer reaches it.
+    """
+    name, method = "pack", "file"
+
+    def __init__(self, root, *, allow_labels: tuple = ("MARKET",), spec=None):
+        self.root, self.allow_labels, self.spec = root, allow_labels, spec
+        self.calls: list[dict] = []
+        self._cache: dict = {}          # date -> PackMarket | None
+
+    def _market(self, now):
+        from .. import mdfeeds
+        from ..providers.pack import PackMarket, pack_macro_from_catalysts
+        d = now.astimezone(__import__("zoneinfo").ZoneInfo("America/New_York")).date().isoformat()
+        cached = self._cache.get(d)
+        if cached is not None:
+            built = mdfeeds.built_at(cached.res)
+            # an earlier clock on a pack built later must not be served from the success cache
+            if built is not None and now < built:
+                return None
+            cached.now = now
+            return cached
+        res = mdfeeds.select_pack(self.root, now, spec=self.spec)
+        if not res.ok:
+            # do not cache the failure: MD-19-FUTURE-PACK at 08:00 must not poison 09:05 on this object
+            return None
+        m = PackMarket(res, now=now, macro=pack_macro_from_catalysts(res, now=now),
+                       allow_labels=self.allow_labels)
+        self._cache[d] = m
+        return m
+
+    @staticmethod
+    def _hold_end(now, contracts):
+        """Close of the latest requested expiry, else a 45-day prospective hold so R07/R08 still run."""
+        from datetime import date
+        from .. import mdfeeds, nyse_calendar as cal
+        ends = []
+        for cid in contracts or []:
+            if not isinstance(cid, str) or len(cid) < 15:
+                continue
+            yymmdd = cid[:-9][-6:]
+            try:
+                exp = date(2000 + int(yymmdd[0:2]), int(yymmdd[2:4]), int(yymmdd[4:6]))
+            except ValueError:
+                continue
+            close = cal.close_at(exp)
+            if close is not None:
+                ends.append(close)
+        if ends:
+            return max(ends)
+        return mdfeeds.prospective_hold_end(now, horizon_days=45)
+
+    def snapshot(self, now, symbols, contracts):
+        self.calls.append({"method": "file", "at": now.isoformat(), "symbols": list(symbols)})
+        from ..records.fields import occ_symbol
+        und, opts = {}, {}
+        m = self._market(now)
+        want = set(contracts)
+        if m is not None:
+            m.hold_end = self._hold_end(now, contracts)
+        if m is None or not m.res.ok:
+            for s in symbols:
+                und[s] = {"last": _f(None, None, "src-pack"), "bars_5m": []}
+            for c in want:
+                opts[c] = {"bid": _f(None, None, "src-pack"), "ask": _f(None, None, "src-pack"),
+                           "iv": _f(None, None, "src-pack")}
+            return {"underlyings": und, "options": opts}
+        src = f"src-pack-{m.res.date}"
+        for s in symbols:
+            try:
+                q = m.get_quote(s)
+                und[s] = {"last": _f(q.last, q.quote_time or now, src), "bars_5m": []}
+            except Exception:
+                und[s] = {"last": _f(None, None, src), "bars_5m": []}
+            try:
+                ch = m.get_chain(s)
+            except Exception:
+                ch = None
+            if ch is None:
+                continue
+            for oq in ch.quotes:
+                cid = occ_symbol(s, oq.expiry, oq.right.value, oq.strike)
+                if cid in want:
+                    opts[cid] = {"bid": _f(oq.bid, oq.quote_time or now, src),
+                                 "ask": _f(oq.ask, oq.quote_time or now, src),
+                                 "iv": _f(oq.iv, oq.quote_time or now, src)}
+        for c in want - set(opts):
+            opts[c] = {"bid": _f(None, None, src), "ask": _f(None, None, src), "iv": _f(None, None, src)}
         return {"underlyings": und, "options": opts}
 
 

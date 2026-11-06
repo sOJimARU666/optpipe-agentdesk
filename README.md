@@ -198,18 +198,24 @@ quarters further apart are fine).
 the `earnings_date` agrees with any UNCONFIRMED entry, a BMO / AMC `earnings_time` is corroborated by a matching
 `event_time` (catalysts.json has none for the example JPM entry, only a note, so that ticker is NO IDEA: the time
 cannot be checked), and at least one contract has usable, fresh `bid`, `ask`, `open_interest` and
-`spread_pct_of_mid` (PR B must then use only such a contract). **Not checked yet:** R07 catalyst coverage to the
-hold-window end and R08 macro catalysts plus coverage; both wait for PR B, where the consumer and its hold window exist.
+`spread_pct_of_mid` (ideas use only `usable_contracts()`). **R07 / R08** run in `optpipe.mdfeeds.decision_reasons()`
+when a hold-window end is set. A pack run sets that end to the planner's far DTE (clamped by R13 `hold_max_days`)
+before discovery, so a FOMC-only pack is NO IDEA. R07 places BMO before the open and AMC after the close.
+Macro age is the catalysts source `as_of`, not `pack_built_at`. An UNKNOWN / null / STALE `earnings_time` is
+MD-20-CRITICAL (R07 cannot place the event). An uncorroborated OK BMO/AMC is MD-20-UNVERIFIED (not CONFLICT).
+MD-18 provenance stays OPEN: `pack.sha256` is directory integrity only.
 
-**Record version vs labels:** session records are still written as `1.1.6` (`records/compat.py`) but carry the 1.1.8
-`risk_ruleset_version` and `watcher_rules_version` labels (1.1.7 and 1.1.8 are label-only for the rules). The 1.1.8
-record bump is deferred to PR B (also in `spec_patches/v1.1/MERGE_STATUS.md`).
+**Record version:** session records are written as `1.1.8` (`records/compat.py` `V11`); they carry the 1.1.8
+`risk_ruleset_version` and `watcher_rules_version` labels. Spec 1.1.7 / 1.1.8 are label-only for the rules (same checks
+as 1.1.6). See `spec_patches/v1.1/MERGE_STATUS.md`.
 
 The spec sets no market-data clock skew, so the loader allows none (`skew_seconds=0`, injectable). The spec's
 `staleness.staleness_limit_minutes` (20 in 1.1.8) is `pack_built_at - as_of` per quote field (inclusive);
 `no_idea_reasons()` reads the same value from the pinned spec and applies it against the clock at decision time. EXAMPLE / TEST packs always give NO IDEA (MD-20-SCOPE) unless a caller opts in.
 R01's 15 minutes stays with the Risk Officer. Discovery, research and the
-watcher switch to packs in PR B; `--live` is unchanged.
+`--live` is removed (PR B). `optpipe run --data-dir ROOT` and `optpipe watch --data-dir ROOT` read packs through
+`optpipe.providers.pack.PackMarket` / `PackQuoteSource`. Fixtures mode (`--fixtures`) stays for the offline HTML/JSON
+captures. The HTTP fetchers stay in the tree for PR C (not deleted here).
 
 ## Sources: macro calendars, risk-free rate, IV
 

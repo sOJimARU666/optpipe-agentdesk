@@ -24,28 +24,38 @@ SCREEN_BIAS = {
 SCREEN_PRIORITY = ["ta_toplosers", "ta_topgainers", "ta_unusualvolume", "ta_newhigh", "ta_newlow"]
 PARSE_NOTES = ("Ticker read from the link/data attribute (raw text doubles the logo letter, e.g. WWDC=WDC). "
                "Page is not timestamped; values may be prior-session -> rows marked stale with as_of = fetch time.")
+PACK_NOTES = "Tickers from the Oodle pack index. Prices are usable pack last_price fields."
+
+
+def _pack_screen(name: str, source: str | None = None) -> bool:
+    src = str(source or "")
+    return name == "pack" or str(name).startswith("pack_") or src.startswith("pack:") or src.startswith("urn:optpipe:pack:")
 
 
 def screen_section(r: ScreenResult, filters: str, as_of) -> tuple[dict, dict]:
     name = r.screen
-    sid = src_id("finviz", name.removeprefix("ta_"))
+    pack = _pack_screen(name, r.source)
+    sid = src_id("pack", name) if pack else src_id("finviz", name.removeprefix("ta_"))
     fetched = r.fetched_at or as_of
-    url = r.source or SCREENER_URL.format(screen=name, filters=filters)
-    source = {"id": sid, "url": url, "fetched_at": fetched.isoformat(), "kind": "screener", "publisher": "Finviz",
-              "realtime": False}
+    url = (r.source or f"urn:optpipe:pack:{name}") if pack else (r.source or SCREENER_URL.format(screen=name, filters=filters))
+    source = {"id": sid, "url": url, "fetched_at": fetched.isoformat(), "kind": "screener",
+              "publisher": "Oodle pack" if pack else "Finviz", "realtime": False}
+    row_status = "ok" if pack else "stale"
     rows = []
     for i, row in enumerate(r.rows, 1):
         d: dict[str, Any] = {"rank": i, "ticker": row.ticker}
         if row.price is not None:
-            d["last"] = F(row.price, sid, fetched, "stale")
+            d["last"] = F(row.price, sid, fetched, row_status)
         if row.change_pct is not None:
-            d["change_pct"] = F(row.change_pct, sid, fetched, "stale")
+            d["change_pct"] = F(row.change_pct, sid, fetched, row_status)
         if row.volume is not None:
-            d["volume"] = F(row.volume, sid, fetched, "stale")
+            d["volume"] = F(row.volume, sid, fetched, row_status)
         rows.append(d)
-    sec: dict[str, Any] = {"screen_id": "scr-" + name.removeprefix("ta_"), "name": name, "source_id": sid,
-                           "filters": filters, "fetched_at": fetched.isoformat(),
-                           "status": "stale" if rows else "missing", "rows": rows, "parse_notes": PARSE_NOTES}
+    sec: dict[str, Any] = {"screen_id": "scr-" + (name.removeprefix("pack_") if pack else name.removeprefix("ta_")),
+                           "name": name, "source_id": sid,
+                           "filters": "pack index" if pack else filters, "fetched_at": fetched.isoformat(),
+                           "status": ("ok" if rows else "missing") if pack else ("stale" if rows else "missing"),
+                           "rows": rows, "parse_notes": PACK_NOTES if pack else PARSE_NOTES}
     if not rows:
         sec["status_reason"] = r.note or f"screen status {r.status}: no result rows"
     return sec, source
@@ -71,7 +81,8 @@ class DiscoveryAgent(Agent[DiscoveryInput, DiscoveryOutput]):
             sec, src = screen_section(r, self.filters, inp.as_of)
             screens.append(sec); sources.append(src)
             if not r.rows:
-                notes.append(f"finviz {s}: {sec['status_reason']}")
+                who = "pack" if _pack_screen(s, r.source) else "finviz"
+                notes.append(f"{who} {s}: {sec['status_reason']}")
         g, gsrc = self.global_provider.get_snapshot(inp.run_id)
         sources += gsrc + self.extra_sources
         if not g["instruments"]:
@@ -89,12 +100,23 @@ class DiscoveryAgent(Agent[DiscoveryInput, DiscoveryOutput]):
                                     exchange=m.exchange, catalysts=list(m.catalysts))
         for sym in inp.watchlist:
             chosen.setdefault(sym, Pick(symbol=sym, catalysts=[Catalyst(text="watchlist", source_id=SETTINGS_SRC)]))
+        only_pack = bool(screens) and all(_pack_screen(s, r.source) for s, r in screens.items())
+        if only_pack:
+            manual = {m.symbol for m in inp.manual_candidates}
+            on_pack = {row.ticker for r in screens.values() for row in r.rows}
+            for sym in [s for s in chosen if s not in on_pack and s not in manual]:
+                del chosen[sym]
         for s, r in screens.items():
+            pack = _pack_screen(s, r.source)
             for row in r.rows:
                 if row.ticker in chosen:
                     chosen[row.ticker].screens.append(s)
-                    chosen[row.ticker].catalysts.append(Catalyst(text=f"Finviz {s}", status="stale",
-                                                                 source_id=src_id("finviz", s.removeprefix("ta_"))))
+                    if pack:
+                        chosen[row.ticker].catalysts.append(
+                            Catalyst(text=f"pack screen {s}", source_id=src_id("pack", s)))
+                    else:
+                        chosen[row.ticker].catalysts.append(Catalyst(text=f"Finviz {s}", status="stale",
+                                                                     source_id=src_id("finviz", s.removeprefix("ta_"))))
         ranked = []
         for s in SCREEN_PRIORITY:
             if r := screens.get(s):
@@ -108,6 +130,17 @@ class DiscoveryAgent(Agent[DiscoveryInput, DiscoveryOutput]):
             chosen[row.ticker] = Pick(symbol=row.ticker, bias=SCREEN_BIAS.get(s, Bias.NEUTRAL), screens=[s],
                                       catalysts=[Catalyst(text=txt, status="stale",
                                                           source_id=src_id("finviz", s.removeprefix("ta_")))])
+        for s, r in screens.items():
+            if not _pack_screen(s, r.source):
+                continue
+            for row in r.rows:
+                if row.ticker in chosen:
+                    continue
+                if len(chosen) >= inp.max_candidates:
+                    break
+                chosen[row.ticker] = Pick(
+                    symbol=row.ticker, bias=Bias.NEUTRAL, screens=[s],
+                    catalysts=[Catalyst(text=f"pack screen {s}", source_id=src_id("pack", s))])
         return list(chosen.values())[: max(inp.max_candidates, len(inp.manual_candidates))]
 
     def summarize_input(self, inp: DiscoveryInput) -> dict[str, Any]:

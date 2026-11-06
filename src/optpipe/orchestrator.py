@@ -10,6 +10,7 @@ import copy
 import os
 import time
 from dataclasses import dataclass
+from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -24,16 +25,15 @@ from .discovery.agent import SETTINGS_SRC
 from .models.contracts import (DiscoveryInput, ManualCandidate, ManualCoverage, ManualEvent, ManualSource,
                                PlannerInput, PlannerParams, ResearchInput, RiskInput, WatcherInput)
 from .models.schema_spec import SessionRecordSpec
-from .models.schema_spec import SessionRecordSpec
 from .records.compat import from_v1
 from .scenario import scenario_note
 from .models.session import HandoffTrace, RunTrace, SessionTrace
 from .planner import PlannerAgent
 from .providers.base import Fetcher
-from .providers.cache import CachedFetcher
-from .providers.fetchers import FixtureFetcher, HttpFetcher
-from .providers.macro import LiveMacroCalendars, ReplayMacroCalendars, bls_user_agent
-from .providers.treasury import LiveTreasuryRates, ReplayTreasuryRates
+from .providers.fetchers import FixtureFetcher
+from .providers.macro import ReplayMacroCalendars
+from .providers.treasury import ReplayTreasuryRates
+# HttpFetcher / LiveMacroCalendars / LiveTreasuryRates / CachedFetcher stay in providers/ for PR C (retirement).
 from .research.iv import IvHistoryStore
 from .providers.finviz import FinvizScreener
 from .providers.global_snapshot import RecordGlobalSnapshot, UnavailableGlobalSnapshot
@@ -46,7 +46,7 @@ from .risk.engine import Calendar
 from .risk.ruleset import Ruleset, load_ruleset
 from .spec import SpecFiles, discover
 
-SCHEMA_VERSION = "1.1.6"   # Doodle's spec 1.1.6 (pinned 2026-11-03, SOL-ACCEPT-001 G12: the 1.1.3 checks plus the open INV-06 fill window, INV-05/06-TIME-*, INV-17 and the fail-closed INV-16): written as-is; compat.to_v1 only for v1 readers
+SCHEMA_VERSION = "1.1.8"   # Doodle's spec 1.1.8 (FEAT-OODLE-01 PR B): a 1.1.8 record gets exactly the 1.1.7 = 1.1.6 checks (SOL-ACCEPT-001 G12: the 1.1.3 checks plus the open INV-06 fill window, INV-05/06-TIME-*, INV-17 and the fail-closed INV-16; no new record invariant): written as-is; compat.to_v1 only for v1 readers
 MODE = "paper"   # the only mode the schema allows; there is no live mode anywhere in this package
 
 
@@ -85,7 +85,7 @@ def phase_for(t: datetime, cal: Calendar) -> str:
     closed    weekend / NYSE holiday, before 04:00, or at/after the regular close
               (16:00; 13:00 on early-close days)                      [Doodle's ruling, v1.1]
     premarket 04:00 .. open-1h | preopen open-1h .. open | open open .. open+15m | intraday .. close
-    Records are schema 1.1.6 (v1.1 shape), so "closed" is written as-is (Doodle's INV-10 checks it against the NY clock).
+    Records are schema 1.1.8 (v1.1 shape), so "closed" is written as-is (Doodle's INV-10 checks it against the NY clock).
     """
     n = t.astimezone(NY)
     if not cal.is_trading_day(n.date()):
@@ -106,11 +106,12 @@ def phase_for(t: datetime, cal: Calendar) -> str:
 class Pipeline:
     settings: Settings
     fetcher: Fetcher
-    data_mode: Literal["fixtures", "live"]
+    data_mode: Literal["fixtures", "packs"]
     global_provider: Any
     macro: Any = None            # MacroCalendarProvider
     rates: Any = None            # RateProvider
     iv_store: Optional[IvHistoryStore] = None
+    pack: Any = None             # providers.pack.PackMarket when data_mode == "packs" (PR B)
 
 
 def state_dir(settings: Settings) -> Path:
@@ -127,8 +128,23 @@ def resolve_record_path(ref: str, base: Path, spec: Optional[SpecFiles]) -> Opti
     return base / ref
 
 
+class _NoFetch:
+    """Fetcher stub for pack mode: packs never HTTP-fetch. Kept so Pipeline.fetcher stays typed."""
+    def get(self, resource: str, key: str, url: str):
+        from .providers.base import DataUnavailable
+        raise DataUnavailable(f"pack mode: no HTTP fetch ({resource}:{key})")
+
+
 def build_pipeline(settings: Settings, fixtures_dir: Optional[Path], inputs: SessionInputs,
-                   as_of: datetime) -> Pipeline:
+                   as_of: datetime, *, data_dir: Optional[Path] = None,
+                   allow_labels: tuple = ("MARKET",)) -> Pipeline:
+    """Build a fixtures pipeline (offline HTML/JSON captures) or a packs pipeline (Oodle market-data packs).
+
+    `--live` is gone (FEAT-OODLE-01 PR B): HttpFetcher / LiveMacroCalendars / LiveTreasuryRates stay in the tree for
+    PR C but are not reached from the CLI or from this function. Pass exactly one of fixtures_dir or data_dir.
+    """
+    if (fixtures_dir is None) == (data_dir is None):
+        raise ValueError("build_pipeline: pass exactly one of fixtures_dir or data_dir")
     spec = discover(settings.spec_path)
     sc = settings.sources
     if fixtures_dir is not None:
@@ -141,17 +157,19 @@ def build_pipeline(settings: Settings, fixtures_dir: Optional[Path], inputs: Ses
         rates = ReplayTreasuryRates(replay, sc.treasury_tenor) if replay.exists() else None
         return Pipeline(settings, fetcher, "fixtures", gp, macro, rates,
                         IvHistoryStore(state_dir(settings) / "fixtures" / "iv_history"))
-    # live: read-only public GETs (Finviz, Nasdaq, Fed, BLS, Treasury). Global snapshot has no live provider yet.
-    http = HttpFetcher(settings.http.user_agent, settings.http.timeout_s)
-    cached = CachedFetcher(http, cache_dir(settings), sc.cache_ttl_hours)
-    bls_ua = bls_user_agent(sc.bls_contact_email)            # None (skip BLS) unless an email is configured
-    bls = CachedFetcher(HttpFetcher(bls_ua, settings.http.timeout_s), cache_dir(settings),
-                        sc.cache_ttl_hours) if bls_ua else None
-    return Pipeline(settings, http, "live", UnavailableGlobalSnapshot(settings.discovery.global_indexes),
-                    LiveMacroCalendars(cached, sc.fomc_url, bls, sc.bls_ics_url, sc.fred_calendar_url,
-                                       sc.fred_release_ids),
-                    LiveTreasuryRates(cached, sc.treasury_url, sc.treasury_tenor),
-                    IvHistoryStore(state_dir(settings) / "live" / "iv_history"))
+    # packs: discovery / research / watcher read through optpipe.marketdata (PR B)
+    from .providers.pack import load_pack_market
+    from . import nyse_calendar as nycal
+    # hold_end is per-idea (expiry); discovery/research set it later via PackMarket.reasons(..., hold_end=)
+    pack_date = (as_of.astimezone(nycal.NY).date() if as_of.tzinfo else as_of.date()).isoformat()
+    pack = load_pack_market(data_dir, pack_date, now=as_of, risk_market_hours=None,
+                            allow_labels=allow_labels, spec=spec)
+    # risk calendar is attached after rules load (Orchestrator); leave None here, patch in Orchestrator
+    return Pipeline(settings, _NoFetch(), "packs",  # type: ignore[arg-type]
+                    UnavailableGlobalSnapshot(settings.discovery.global_indexes),
+                    None, None,
+                    IvHistoryStore(state_dir(settings) / "packs" / "iv_history"),
+                    pack=pack)
 
 
 def _merge_by(old: list[dict], new: list[dict], key: str) -> list[dict]:
@@ -211,7 +229,11 @@ class Orchestrator:
         self.profile = sc.risk_profile if sc else None
         self.effective_overrides = {**self.base_rules.profile_overrides(self.profile), **s.risk_overrides}
         self.rules: Ruleset = self.base_rules.with_profile(self.profile).with_overrides(s.risk_overrides)
-        self.nasdaq = NasdaqProvider(pipeline.fetcher)
+        self.nasdaq = NasdaqProvider(pipeline.fetcher) if pipeline.data_mode == "fixtures" else None
+        self.pack = pipeline.pack
+        if self.pack is not None:
+            # attach the risk calendar so MD-19-CALENDAR can compare (Q-5)
+            self.pack.risk_market_hours = self.base_rules.config.market_hours
         self.planner = PlannerAgent()
         self.risk = RiskOfficerAgent(self.rules, self.effective_overrides or None)
         self.max_loss_per_idea, mismatch = scenario_max_loss(s, self.rules)
@@ -249,16 +271,19 @@ class Orchestrator:
         d = as_of.astimezone(NY).date()
         notes = [
             "PAPER ONLY: no broker integration; tickets are HYPOTHETICAL data records, never orders.",
-            f"data mode: {self.p.data_mode}" + (" (fixture replay: created/updated = replayed as_of)"
-                                                if self.p.data_mode == "fixtures" else ""),
+            f"data mode: {self.p.data_mode}" + (
+                " (fixture replay: created/updated = replayed as_of)" if self.p.data_mode == "fixtures"
+                else " (Oodle market-data packs via optpipe.marketdata; no network)"),
             f"broker (informational, never connected): {s.broker.name}; trade style: {s.trade_style}",
             f"watchlist: {s.watchlist or 'PLACEHOLDER (empty)'}; sectors: {s.sectors or 'PLACEHOLDER (empty)'}",
             *[n for n in [scenario_note(s.scenario, s.broker.name, s.trade_style)] if n],
             *self.rule_notes,
             "PLACEHOLDER: NYSE 2026 holidays/early closes in spec risk_rules.yaml are unverified",
-            ("macro calendars: " + ("hand-made replay snapshot from real captures (fixtures)"
-                                    if self.p.data_mode == "fixtures" else "Fed + BLS schedule pages (live GET, cached)")
-             if self.p.macro is not None else "macro calendars: none configured; FOMC/CPI/PPI/NFP coverage missing"),
+            ("macro calendars: " + (
+                "hand-made replay snapshot from real captures (fixtures)" if self.p.data_mode == "fixtures"
+                else "catalysts.json macro entries from the pack (R08)")
+             if (self.p.macro is not None or (self.pack is not None and self.pack.macro))
+             else "macro calendars: none configured; FOMC/CPI/PPI/NFP coverage missing"),
         ]
         if s.risk_overrides:
             notes.append(f"risk config overrides: {s.risk_overrides}")
@@ -273,6 +298,8 @@ class Orchestrator:
                 "notes": notes}
 
     def _market_status(self, symbols: list[str], as_of: datetime) -> dict:
+        if self.nasdaq is None:
+            return MISS(note="pack mode: market status is not a pack field")
         for sym in symbols:
             try:
                 q = self.nasdaq.get_quote(sym)
@@ -303,15 +330,59 @@ class Orchestrator:
         settings_src = {"id": SETTINGS_SRC, "url": "urn:optpipe:config:settings.yaml", "kind": "user_input",
                         "fetched_at": iso(as_of), "publisher": "Eugene Ward (settings.yaml)"}
 
-        discovery = DiscoveryAgent(FinvizScreener(self.p.fetcher, s.discovery.finviz_filters), self.p.global_provider,
+        if self.pack is not None:
+            if not self.pack.res.ok:
+                first = self.pack.res.errors[0] if self.pack.res.errors else "pack not ok"
+                notes.append(f"market-data pack: FAIL CLOSED ({first})")
+            screens = ["pack"]                          # every ticker in the pack index
+            screener = self.pack
+            quotes = chains = events = self.pack
+            macro = self.pack.macro_provider          # has get_calendars; the list alone is not a provider
+            # Gate every idea on the planner's far DTE (clamped by R13 hold_max). R07/R08 do not run when
+            # hold_end is None, so the pack path always supplies one. FOMC-only stays fail-closed.
+            from . import mdfeeds
+            horizon = s.planner.preferred_dte_max
+            hi = self.rules.config.hold_max_days
+            if hi is not None:
+                horizon = min(horizon, int(hi))
+            self.pack.hold_end = mdfeeds.prospective_hold_end(as_of, horizon_days=horizon)
+            self.pack.iv_store = self.p.iv_store
+            for t in list((self.pack.res.index or {}).get("tickers") or []):
+                sym = t.get("ticker") if isinstance(t, Mapping) else None
+                if not sym:
+                    continue
+                if self.pack.hold_end is None:
+                    notes.append(f"NO IDEA {sym}: hold end is outside the app calendar (R07/R08 UNKNOWN)")
+                    continue
+                if why := self.pack.reasons(sym):
+                    notes.append(f"NO IDEA {sym}: {why[0]}" + (f" (+{len(why)-1} more)" if len(why) > 1 else ""))
+        else:
+            screens = s.discovery.screens
+            screener = FinvizScreener(self.p.fetcher, s.discovery.finviz_filters)
+            quotes = chains = events = self.nasdaq
+            macro = self.p.macro
+        discovery = DiscoveryAgent(screener, self.p.global_provider,
                                    s.discovery.finviz_filters, inputs.earnings_reports, [settings_src, *manual_sources])
+        # Pack mode picks from the pack index. The settings watchlist is the fixture/Finviz universe.
         disc = self._step(discovery, DiscoveryInput(
-            as_of=as_of, run_id=run_id, screens=s.discovery.screens, watchlist=s.watchlist,
+            as_of=as_of, run_id=run_id, screens=screens,
+            watchlist=[] if self.pack is not None else s.watchlist,
             manual_candidates=inputs.manual_candidates, max_candidates=s.discovery.max_candidates))
         notes += disc.notes
+        if self.pack is not None:
+            # drop picks that are NO IDEA (fail closed: a pick without usable contracts must not reach the planner)
+            kept, dropped = [], []
+            for pck in disc.picks:
+                if self.pack.usable(pck.symbol):
+                    kept.append(pck)
+                else:
+                    dropped.append(pck.symbol)
+            if dropped:
+                notes.append(f"pack: dropped NO IDEA picks: {', '.join(dropped)}")
+            disc.picks = kept  # type: ignore[misc]
 
         source_times = {x["id"]: datetime.fromisoformat(x["fetched_at"]) for x in [settings_src, *manual_sources]}
-        research = ResearchAgent(self.nasdaq, self.nasdaq, self.nasdaq, macro=self.p.macro, rates=self.p.rates,
+        research = ResearchAgent(quotes, chains, events, macro=macro, rates=self.p.rates,
                                  iv_store=self.p.iv_store, data_mode=self.p.data_mode,
                                  iv_target_days=s.iv.target_days, iv_min_history=s.iv.min_history_points)
         res = self._step(research, ResearchInput(
@@ -366,7 +437,7 @@ class Orchestrator:
         rec["idea_log"], recommendation = apply_reviews(rec["idea_log"], reviews, as_of)
         rec["data_quality"] = {**quality_index(rec), "notes": [recommendation, *notes][:50]}
         SessionRecordSpec.model_validate(rec)
-        SessionRecordSpec.model_validate(rec)          # Doodle's schema 1.1.6
+        SessionRecordSpec.model_validate(rec)          # Doodle's schema 1.1.8
 
         validation = self.validate(rec)
         trace = RunTrace(run_id=run_id, as_of=as_of, data_mode=self.p.data_mode, steps=self.steps,
@@ -418,7 +489,7 @@ class Orchestrator:
         return rec
 
     def validate(self, rec: dict) -> dict:
-        """errors: the 1.1.6 record against Doodle's validator + schema (the INV-11 trace file check runs
+        """errors: the 1.1.8 record against Doodle's validator + schema (the INV-11 trace file check runs
         on the written file, see validate_file), plus optpipe's guards (records/guards.py). Fails closed: a
         missing, unimportable or crashing validator is an error, never an OK (FIX-SEC-001 P0-5)."""
         mod, err = load_validator(self.spec)
@@ -477,9 +548,11 @@ def load_validator(spec) -> tuple[Optional[Any], Optional[str]]:
 
 
 def run_session(settings: Settings, inputs: SessionInputs, as_of: datetime, fixtures_dir: Optional[Path],
-                existing: Optional[dict] = None, existing_trace: Optional[SessionTrace] = None
+                existing: Optional[dict] = None, existing_trace: Optional[SessionTrace] = None,
+                *, data_dir: Optional[Path] = None, allow_labels: tuple = ("MARKET",)
                 ) -> tuple[dict, SessionTrace]:
-    orch = Orchestrator(build_pipeline(settings, fixtures_dir, inputs, as_of))
+    orch = Orchestrator(build_pipeline(settings, fixtures_dir, inputs, as_of,
+                                       data_dir=data_dir, allow_labels=allow_labels))
     rec, rt, _ = orch.run(inputs, as_of, existing)
     trace = existing_trace or SessionTrace(session_id=rec["session"]["id"])
     trace.runs.append(rt)

@@ -1,5 +1,5 @@
 """SOL-ACCEPT-001 G12: spec 1.1.6 re-pin (was 1.1.5, FIX-SEC-001 PR #6; this file was test_spec_1_1_5.py). Records are
-written as 1.1.6 (the 1.1.3 checks plus the 1.1.6-only G3/G4/G5/G6 checks), the ruleset / watcher labels come from the
+written as 1.1.8 (same shape and checks as 1.1.6 / 1.1.7: the 1.1.3 checks plus G3/G4/G5/G6), the ruleset / watcher labels come from the
 pinned spec, 1.1.3, 1.1.4 and 1.1.5 records (and the frozen examples) still validate and load under their own rules,
 and undated reviews sort deterministically. Negative tests fail on 450c4c2 (undated reviews) / 49debf0 (labels) /
 021aed2 (1.1.6 pin). PAPER ONLY, synthetic records, no network."""
@@ -18,10 +18,10 @@ from optpipe.records.guards import check_record, latest_review, reviews_by_time
 def test_records_are_written_as_1_1_6_with_spec_labels(pipeline_output, spec):
     rec = pipeline_output["record"]
     ruleset = str(yaml.safe_load(spec.path("risk_rules").read_text())["ruleset_version"])
-    assert rec["schema_version"] == compat.V11 == "1.1.6"
+    assert rec["schema_version"] == compat.V11 == "1.1.8"
     assert ruleset == "1.1.8" and rec["session"].get("risk_ruleset_version", ruleset) == ruleset
     assert rec["risk_reviews"] and {r["ruleset_version"] for r in rec["risk_reviews"]} == {ruleset}
-    assert str(spec.watcher_rules()["watcher_version"]) == "1.1.8"   # 1.1.7 / 1.1.8: label only (records stay 1.1.6)
+    assert str(spec.watcher_rules()["watcher_version"]) == "1.1.8"   # records and labels are both 1.1.8 (PR B)
 
 
 def _validator_errors(spec, rec):
@@ -44,13 +44,13 @@ def test_frozen_example_still_validates(spec, old):
 @pytest.mark.parametrize("old", OLD)
 def test_pipeline_record_relabelled_old_still_validates_and_loads(pipeline_output, spec, old):
     """A 1.1.3 (PR #5), 1.1.4 (49debf0) or 1.1.5 (f7a295e) record validates with the same result under spec 1.1.6, and
-    optpipe still reads it: store/dashboard accept it (V11_SHAPE) and from_v1 relabels it to 1.1.6 without other changes."""
+    optpipe still reads it: store/dashboard accept it (V11_SHAPE) and from_v1 relabels it to 1.1.8 without other changes."""
     rec = copy.deepcopy(pipeline_output["record"])
     rec["schema_version"] = old
     assert _validator_errors(spec, rec) == []
-    assert {"1.1.3", "1.1.4", "1.1.5", "1.1.6"} <= set(compat.V11_SHAPE)
+    assert {"1.1.3", "1.1.4", "1.1.5", "1.1.6", "1.1.7", "1.1.8"} <= set(compat.V11_SHAPE)
     up = compat.from_v1(rec)
-    assert up["schema_version"] == "1.1.6" and {**up, "schema_version": old} == rec
+    assert up["schema_version"] == "1.1.8" and {**up, "schema_version": old} == rec
 
 
 def test_1_1_6_record_gets_the_1_1_3_checks(pipeline_output, spec):
