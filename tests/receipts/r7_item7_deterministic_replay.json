@@ -660,11 +660,11 @@
     "naive_clock_exits": "select_pack loader exit is 1 (MD-19-TZ). optpipe market-data rejects a naive --now before load and exits 2. optpipe watch exits 2. Discovery and research are not invoked (AwareDatetime ValidationError). These are not one exit code."
   },
   "identity": {
-    "base_head": "7ee665444eb4d3197effb95347af9bfbf9b7d787",
-    "base_tree": "35afda7460126e07f5a127a2a0043afeb315ed30",
+    "base_head": "ae95c68cc10240fe75b41cc30272c463d960f5e3",
+    "base_tree": "c4af5232c75bbb566482285469772f35dc872eae",
     "closure_claim": "none",
     "outside_slice_algorithm": "sha256 of sorted lines '<mode> <blob> <path>' from git ls-files -s, excluding the four slice paths. The stage field is omitted. No network.",
-    "outside_slice_sha256": "dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504",
+    "outside_slice_sha256": "c18425270b5c2c4673ff3601d4e67cba8c239670dd4f4e274d977c8b7fcbabe7",
     "when_base_commit_absent": "Shallow CI checkouts do not have the base object. Do not fetch. Still require the hard constants, the input sha256 pins, this outside-slice manifest, and a diff against HEAD contained in the tests/ slice allowlist."
   },
   "inputs": {
@@ -721,8 +721,8 @@
   },
   "scope": "Tests, private labeled temp inputs, and this receipt only. Does not close R7, MD-18, R6, or paper. No production policy change.",
   "source": {
-    "base_head": "7ee665444eb4d3197effb95347af9bfbf9b7d787",
-    "base_tree": "35afda7460126e07f5a127a2a0043afeb315ed30",
-    "note": "base_head and base_tree are hard constants for the code this slice replays (main after PR #30). When that commit object is present, the test checks rev-parse of its tree and merge-base ancestry. When the object is absent, the test does not fetch. It still requires these constants, identity.outside_slice_sha256, the input sha256 pins, and a worktree diff against HEAD inside the tests/ slice allowlist."
+    "base_head": "ae95c68cc10240fe75b41cc30272c463d960f5e3",
+    "base_tree": "c4af5232c75bbb566482285469772f35dc872eae",
+    "note": "base_head and base_tree are hard constants for the code this slice replays (origin/main ae95c68cc10240fe75b41cc30272c463d960f5e3). When that commit object is present, the test checks rev-parse of its tree and merge-base ancestry. When the object is absent, the test does not fetch. It still requires these constants, identity.outside_slice_sha256, the input sha256 pins, and a worktree diff against HEAD inside the tests/ slice allowlist. Case raw_sha256 and semantic_sha256 values stay the historical replay outputs."
   }
 }

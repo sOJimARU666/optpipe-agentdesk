@@ -23,10 +23,11 @@ import pytest
 from mdpack import ROOT, SPEC
 from optpipe.cli import main
 
-BASE_HEAD = "7ee665444eb4d3197effb95347af9bfbf9b7d787"
-BASE_TREE = "35afda7460126e07f5a127a2a0043afeb315ed30"
+BASE_HEAD = "ae95c68cc10240fe75b41cc30272c463d960f5e3"
+BASE_TREE = "c4af5232c75bbb566482285469772f35dc872eae"
 # sha256 of sorted '<mode> <blob> <path>' lines from git ls-files -s, excluding SLICE_FILES.
-OUTSIDE_SLICE_SHA256 = "dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504"
+# Retargeted to origin/main ae95c68. Case raw/semantic hashes are not part of this pin.
+OUTSIDE_SLICE_SHA256 = "c18425270b5c2c4673ff3601d4e67cba8c239670dd4f4e274d977c8b7fcbabe7"
 INPUT_PINS = (
     ("settings_sha256", "config/settings.yaml",
      "f89369fe485d01cc42a548ae4a493b4bff53d181d5862f45e4c4693f8c7fd053"),
