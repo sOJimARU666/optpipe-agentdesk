@@ -56,7 +56,8 @@ _FORBIDDEN_PREFIXES = ("src/", "spec/", "config/", "scripts/")
 
 
 def _git(root: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:
-    proc = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True)
+    proc = subprocess.run(["git", *args], cwd=root, capture_output=True, text=True,
+                          env={**os.environ, "GIT_NO_LAZY_FETCH": "1", "GIT_NO_REPLACE_OBJECTS": "1"})
     if check and proc.returncode != 0:
         raise AssertionError(f"git {' '.join(args)} exited {proc.returncode}: {proc.stderr.strip()}")
     return proc
@@ -94,36 +95,45 @@ def _changed_against_head(root: Path) -> set[str]:
     return names
 
 
-def verify_base_identity(root: Path, receipt: dict, *, base_head: str, base_tree: str,
-                         slice_files: set[str], input_pins: tuple, outside_sha256: str) -> None:
-    """Require the pinned base identity. Never fetches. Does not return before the pin checks.
+# Bytes captured at the immutable PR #33 merge. The working verifier is reviewed
+# code; the historical driver and receipt are data/executable inputs with fixed identities.
+def read_replay_receipt(receipt_path, driver_path):
+    raw = receipt_path.read_bytes()
+    assert hashlib.sha256(raw).hexdigest() == "19591c50d1256d5500ef3ca4ba1660b6d00022b684e0c23efa9e5e8d0172ce24", "receipt bytes changed"
+    assert hashlib.sha256(driver_path.read_bytes()).hexdigest() == "bde43a42e0a6ba6879f132e0a989f9f45df6881d317404205c0c586ba81b70dd", "driver bytes changed"
+    return json.loads(raw)
 
-    When the base commit object is present, also require its tree and ancestry.
-    When it is absent, the manifest, input pins, and HEAD diff are the whole check.
-    """
+
+def verify_receipt_pins(root, receipt, base_head, base_tree, input_pins, outside_sha256):
     assert receipt["closure_claim"] == "none"
     assert receipt["source"]["base_head"] == base_head
-    assert receipt["source"]["base_tree"] == base_tree
+    assert receipt["source"]["base_tree"] == base_tree, "receipt base-tree mismatch"
     assert receipt["identity"]["closure_claim"] == "none"
     assert receipt["identity"]["base_head"] == base_head
     assert receipt["identity"]["base_tree"] == base_tree
-    assert receipt["identity"]["outside_slice_sha256"] == outside_sha256
+    assert receipt["identity"]["outside_slice_sha256"] == outside_sha256, "receipt manifest mismatch"
     for field, rel, digest in input_pins:
-        assert receipt["inputs"][field] == digest
+        assert receipt["inputs"][field] == digest, f"receipt input mismatch: {rel}"
         got = hashlib.sha256((root / rel).read_bytes()).hexdigest()
         assert got == digest, rel
-    assert _outside_slice_sha256(root, slice_files) == outside_sha256
+
+
+def verify_base_identity(root: Path, receipt: dict, *, base_head: str, base_tree: str,
+                         slice_files: set[str], input_pins: tuple, outside_sha256: str) -> None:
+    """Authenticate historical evidence locally, requiring the recorded base object."""
+    verify_receipt_pins(root, receipt, base_head, base_tree, input_pins, outside_sha256)
+    assert _outside_slice_sha256(root, slice_files) == outside_sha256, "outside-slice manifest mismatch"
     dirty = _changed_against_head(root)
     assert dirty <= set(slice_files), dirty
     assert not any(p.startswith(_FORBIDDEN_PREFIXES) for p in dirty)
-    if _commit_exists(root, base_head):
-        got = _git(root, "rev-parse", f"{base_head}^{{tree}}").stdout.strip()
-        assert got == base_tree
-        ancestry = _git(root, "merge-base", "--is-ancestor", base_head, "HEAD", check=False)
-        assert ancestry.returncode == 0, ancestry.stderr.strip()
-        diff = {n for n in _git(root, "diff", "--name-only", base_head, "HEAD").stdout.splitlines() if n}
-        assert diff <= set(slice_files), diff
-        assert not any(p.startswith(_FORBIDDEN_PREFIXES) for p in diff)
+    assert _commit_exists(root, base_head), f"historical base unavailable: {base_head}"
+    got = _git(root, "rev-parse", f"{base_head}^{{tree}}").stdout.strip()
+    assert got == base_tree
+    ancestry = _git(root, "merge-base", "--is-ancestor", base_head, "HEAD", check=False)
+    assert ancestry.returncode == 0, ancestry.stderr.strip()
+    diff = {n for n in _git(root, "diff", "--name-only", base_head, "HEAD").stdout.splitlines() if n}
+    assert diff <= set(slice_files), diff
+    assert not any(p.startswith(_FORBIDDEN_PREFIXES) for p in diff)
 
 
 def _satisfies(actual: dict, expected: dict) -> None:
@@ -196,10 +206,8 @@ def assert_receipt_contract(receipt: dict) -> None:
 
 def test_r7_7_failure_replay_receipt(tmp_path):
     """Byte-identical raw projections and, separately, id_status_v1 semantic files."""
-    receipt = json.loads(RECEIPT.read_text())
-    verify_base_identity(
-        ROOT, receipt, base_head=BASE_HEAD, base_tree=BASE_TREE, slice_files=SLICE_FILES,
-        input_pins=INPUT_PINS, outside_sha256=OUTSIDE_SLICE_SHA256)
+    receipt = read_replay_receipt(RECEIPT, DRIVER)
+    verify_receipt_pins(ROOT, receipt, BASE_HEAD, BASE_TREE, INPUT_PINS, OUTSIDE_SLICE_SHA256)
     assert_receipt_contract(receipt)
     assert Path(os.environ["OPTIONS_SPEC_DIR"]).resolve() == SPEC.resolve()
 
@@ -314,7 +322,7 @@ def _shallow_fixture(tmp_path: Path):
     return shallow, receipt, pins, manifest, slice_files
 
 
-def test_r7_7_shallow_checkout_enforces_identity(tmp_path, monkeypatch):
+def test_r7_7_shallow_checkout_enforces_identity(tmp_path):
     """Missing base object: the old rev-parse exits 128; pins still fail closed; the replay still runs.
 
     closure_claim: none. This does not close R7, MD-18, or R6.
@@ -328,29 +336,40 @@ def test_r7_7_shallow_checkout_enforces_identity(tmp_path, monkeypatch):
     assert _commit_exists(shallow, BASE_HEAD) is False
     kwargs = dict(base_head=BASE_HEAD, base_tree=BASE_TREE, slice_files=slice_files,
                   input_pins=pins, outside_sha256=manifest)
-    verify_base_identity(shallow, receipt, **kwargs)
+    with pytest.raises(AssertionError, match=f"historical base unavailable: {BASE_HEAD}"):
+        verify_base_identity(shallow, receipt, **kwargs)
 
     bad_tree = json.loads(json.dumps(receipt))
     bad_tree["source"]["base_tree"] = "0" * 64
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="receipt base-tree mismatch"):
         verify_base_identity(shallow, bad_tree, **kwargs)
     bad_pin = json.loads(json.dumps(receipt))
     bad_pin["inputs"]["settings_sha256"] = "0" * 64
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="receipt input mismatch: config/settings.yaml"):
         verify_base_identity(shallow, bad_pin, **kwargs)
     bad_manifest = json.loads(json.dumps(receipt))
     bad_manifest["identity"]["outside_slice_sha256"] = "0" * 64
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="receipt manifest mismatch"):
         verify_base_identity(shallow, bad_manifest, **kwargs)
 
     (shallow / "src" / "prod.py").write_text("hacked\n")
     subprocess.check_call(["git", "add", "src/prod.py"], cwd=shallow)
     _git_commit(shallow, "prod edit")
-    with pytest.raises(AssertionError):
+    with pytest.raises(AssertionError, match="outside-slice manifest mismatch"):
         verify_base_identity(shallow, receipt, **kwargs)
 
-    # Hide the base object and run the real receipt contract plus the full matrix.
-    monkeypatch.setattr(sys.modules[__name__], "_commit_exists", lambda _root, _sha: False)
-    assert _commit_exists(ROOT, BASE_HEAD) is False
-    assert_receipt_contract(json.loads(RECEIPT.read_text()))
-    test_r7_7_failure_replay_receipt(tmp_path / "replay")
+    # Exercise the real pytest entry point on a committed descendant in a shallow clone.
+    current = tmp_path / "current"
+    subprocess.run(["git", "clone", "-q", "--depth=1", ROOT.as_uri(), str(current)], check=True)
+    assert not _commit_exists(current, BASE_HEAD)
+    note = current / "unrelated-replay-control.md"
+    note.write_text("Unrelated committed addition.\n")
+    _git(current, "add", "--", note.name)
+    _git_commit(current, "unrelated descendant")
+    env = os.environ.copy()
+    env.update(OPTIONS_SPEC_DIR=str(current / "spec"),
+               PYTHONPATH=os.pathsep.join(map(str, (current / "tests/netguard", current / "src"))),
+               GIT_NO_LAZY_FETCH="1", GIT_NO_REPLACE_OBJECTS="1")
+    subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+                    "tests/test_r7_7_failure_replay.py::test_r7_7_failure_replay_receipt"],
+                   cwd=current, env=env, check=True, timeout=1200)
