@@ -5,6 +5,7 @@ import signal
 from pathlib import Path
 
 import pytest
+from bs4 import BeautifulSoup
 
 from fastapi.routing import APIRoute  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -35,6 +36,21 @@ def client(out):
 @pytest.fixture(scope="module")
 def v11(out):
     return json.loads((out / f"session-{DATE}.json").read_text())
+
+
+def test_today_conflicts_retain_evidence(client):
+    page = BeautifulSoup(client.get(f"/s/{DATE}/today").content, "html.parser")
+    earnings = next(p for p in page.find_all("p") if p.b and p.b.get_text() == "JPM")
+    kospi = next(row for row in page.select("tr") if "KOSPI" in row.stripped_strings)
+    for node, observations in [
+        (earnings, ["-3.7 · src-wsj-jpm · 2026-10-13T07:03:00-04:00",
+                    "0.78 · src-nasdaq-jpm-info-0752 · 2026-10-13T07:52:00-04:00"]),
+        (kospi, ["-7.4 · src-ilsole · time unknown", "-5.5 · src-eme · time unknown"]),
+    ]:
+        text = node.get_text(" ", strip=True)
+        assert "conflicting" in text
+        for observation in observations:
+            assert observation in text
 
 
 def test_all_routes_are_get_only(out):

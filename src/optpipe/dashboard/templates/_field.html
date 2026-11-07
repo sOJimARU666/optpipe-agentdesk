@@ -1,1 +1,5 @@
-{%- macro f(x, digits=4) -%}<span class="st-{{ x.status if x is mapping and x.status else 'ok' }}" title="{{ x|ftitle }}">{{ x|fval(digits) }}{% if x is mapping and x.status and x.status != 'ok' %}<sup class="small"> {{ x.status }}</sup>{% endif %}</span>{%- endmacro -%}
+{%- macro f(x, digits=4) -%}
+{%- if x is mapping and x.status == 'conflicting' -%}
+<span class="st-conflicting">conflicting{% for observation in x.conflicts %}<br><span class="small">{{ observation.value }} · {{ observation.source_id }} · {{ observation.as_of or 'time unknown' }}</span>{% endfor %}</span>
+{%- else -%}<span class="st-{{ x.status if x is mapping and x.status else 'ok' }}" title="{{ x|ftitle }}">{{ x|fval(digits) }}{% if x is mapping and x.status and x.status != 'ok' %}<sup class="small"> {{ x.status }}</sup>{% endif %}</span>{%- endif -%}
+{%- endmacro -%}
