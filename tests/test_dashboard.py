@@ -157,6 +157,36 @@ def test_history_and_idea_log(client, v11):
     assert "/files/session-2026-10-13.trace.json" in html
 
 
+@pytest.mark.parametrize("suffixes", [
+    (".json", ".trace.json", ".md"),
+    (".json", ".v1_1.json"),
+    (".json",),
+])
+def test_history_offers_readable_downloads(out, tmp_path, suffixes):
+    from optpipe.records.compat import to_v1
+
+    stem = f"session-{DATE}"
+    for suffix in suffixes:
+        name = stem + suffix
+        if suffix == ".v1_1.json":
+            raw = (out / (stem + ".json")).read_bytes()
+            (tmp_path / name).write_bytes(raw)
+            (tmp_path / (stem + ".json")).write_text(json.dumps(to_v1(json.loads(raw))))
+        else:
+            (tmp_path / name).write_bytes((out / name).read_bytes())
+
+    with TestClient(create_app(tmp_path)) as client:
+        history = client.get("/history")
+        assert history.status_code == 200
+        page = BeautifulSoup(history.content, "html.parser")
+        urls = [link["href"] for link in page.select('a[href^="/files/"]')]
+        assert urls == [f"/files/{stem}{suffix}" for suffix in suffixes]
+        for url in urls:
+            download = client.get(url)
+            assert download.status_code == 200
+            assert download.content == (tmp_path / Path(url).name).read_bytes()
+
+
 def test_raw_files_only_session_files(client, out):
     r = client.get(f"/files/session-{DATE}.json")
     assert r.status_code == 200 and r.json()["schema_version"] == SV
