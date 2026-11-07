@@ -1,0 +1,287 @@
+{
+  "checks": [
+    {
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "audit",
+        "-p",
+        "test_rel004_stdlib_baseline.py",
+        "-v"
+      ],
+      "exit": 0,
+      "name": "synthetic-controls",
+      "seconds": 7.444,
+      "stderr_sha256_raw": "fb8d0c3fe0ff42c0a7c81ca8450f65d94977270ddb8728c7cbfdbd79ef4e247a",
+      "stdout_sha256_raw": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "python3",
+        "audit/rel004_stdlib_baseline.py",
+        "--repo",
+        ".",
+        "--revision",
+        "d4ad49ad1eae03cc41f144cb4a01bfb81d5fab36"
+      ],
+      "exit": 0,
+      "name": "reliability-baseline",
+      "seconds": 3.297,
+      "stderr_sha256_raw": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256_raw": "e922a5070ecf318ebcb9dcba37c563274f7cc4e1b58474e4d15d145ce84a8bf2"
+    },
+    {
+      "command": [
+        "python3",
+        "audit/rel004_stdlib_baseline.py",
+        "--repo",
+        ".",
+        "--revision",
+        "ae95c68cc10240fe75b41cc30272c463d960f5e3"
+      ],
+      "exit": 0,
+      "name": "main-baseline",
+      "seconds": 2.574,
+      "stderr_sha256_raw": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256_raw": "e08d29d5af82e0a9057f7edadac26ab374b8d221cf9aeb6bf9a0b12c5860486a"
+    },
+    {
+      "command": [
+        "python3",
+        "audit/rel004_verify_archive.py",
+        "--repo",
+        ".",
+        "--baseline",
+        "audit/REL-004-reliability-results.json"
+      ],
+      "exit": 0,
+      "name": "reliability-independent",
+      "seconds": 1.136,
+      "stderr_sha256_raw": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256_raw": "f278c37772d261ce7b68cec2d6525dccd7d02d650fd6449266172140a5bbb3ee"
+    },
+    {
+      "command": [
+        "python3",
+        "audit/rel004_verify_archive.py",
+        "--repo",
+        ".",
+        "--baseline",
+        "audit/REL-004-main-results.json"
+      ],
+      "exit": 0,
+      "name": "main-independent",
+      "seconds": 1.279,
+      "stderr_sha256_raw": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256_raw": "8aea637cc03b9af75df90fb7c60ccf29fcaeeb8f466cfc8b87627d746b173a05"
+    },
+    {
+      "command": [
+        "../../optpipe-agentdesk/.venv/bin/python",
+        "tests/netguard/ci_check_blocked.py"
+      ],
+      "exit": 0,
+      "name": "runtime-network-guard",
+      "seconds": 0.517,
+      "stderr_sha256_raw": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256_raw": "14f3d3f7f1dbbb81fbc58984ca15925b4ae013360af849bd2b4b4534b8bce278"
+    },
+    {
+      "command": [
+        "../../optpipe-agentdesk/.venv/bin/python",
+        "-m",
+        "pytest",
+        "tests/test_repo_hygiene.py",
+        "tests/test_paper_only.py",
+        "-p",
+        "no:cacheprovider"
+      ],
+      "exit": 0,
+      "name": "hygiene-paper",
+      "seconds": 8.926,
+      "stderr_sha256_raw": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256_raw": "44afa1a9f3c4c8287fe8fd39a1bc232ef96b20fcfd8a0c839e824a5ca9dafeb6"
+    },
+    {
+      "command": [
+        "../../optpipe-agentdesk/.venv/bin/python",
+        "scripts/sync_spec.py",
+        "--check"
+      ],
+      "exit": 0,
+      "name": "pinned-spec",
+      "seconds": 0.477,
+      "stderr_sha256_raw": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256_raw": "399a0db20e2a36dcc86f29284aaff0b71c6b47a784ab118f357a388be6123f92"
+    },
+    {
+      "command": [
+        "python3",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "audit",
+        "-p",
+        "test_rel004_stdlib_baseline.py",
+        "-v"
+      ],
+      "exit": 0,
+      "name": "synthetic-controls-release",
+      "seconds": 1.424,
+      "stderr_sha256_raw": "a0c1442c9edd1ddd7cd69b46f0022f54154981464926a40acceed0e9727b8631",
+      "stdout_sha256_raw": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "python3",
+        "audit/rel004_stdlib_baseline.py",
+        "--repo",
+        ".",
+        "--revision",
+        "d4ad49ad1eae03cc41f144cb4a01bfb81d5fab36"
+      ],
+      "exit": 0,
+      "name": "reliability-baseline-release",
+      "seconds": 1.696,
+      "stderr_sha256_raw": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256_raw": "86d6e9c776b2a9a1a52bfa91b6ef4953f1b39a024a6135a4b8432afbddc994f0"
+    },
+    {
+      "command": [
+        "python3",
+        "audit/rel004_stdlib_baseline.py",
+        "--repo",
+        ".",
+        "--revision",
+        "ae95c68cc10240fe75b41cc30272c463d960f5e3"
+      ],
+      "exit": 0,
+      "name": "main-baseline-release",
+      "seconds": 1.866,
+      "stderr_sha256_raw": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256_raw": "67c2a22822def47091978c527cfc8ee46fee315e3c1ae7e13b8239f3bf55e33c"
+    },
+    {
+      "command": [
+        "python3",
+        "audit/rel004_verify_archive.py",
+        "--repo",
+        ".",
+        "--baseline",
+        "audit/REL-004-reliability-results.json"
+      ],
+      "exit": 0,
+      "name": "reliability-independent-release",
+      "seconds": 0.656,
+      "stderr_sha256_raw": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256_raw": "f278c37772d261ce7b68cec2d6525dccd7d02d650fd6449266172140a5bbb3ee"
+    },
+    {
+      "command": [
+        "python3",
+        "audit/rel004_verify_archive.py",
+        "--repo",
+        ".",
+        "--baseline",
+        "audit/REL-004-main-results.json"
+      ],
+      "exit": 0,
+      "name": "main-independent-release",
+      "seconds": 0.713,
+      "stderr_sha256_raw": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256_raw": "8aea637cc03b9af75df90fb7c60ccf29fcaeeb8f466cfc8b87627d746b173a05"
+    }
+  ],
+  "closure_claim": "none",
+  "development_control_failure": {
+    "cause": "archive pathspec included absent directories in minimal synthetic repositories",
+    "errors": 2,
+    "final_errors": 0,
+    "final_tests": 15,
+    "fixed": "select existing scope roots before git archive",
+    "shell_wrapper_exit": 0,
+    "stderr_sha256_raw": "58761879a13383128d73e7b177db04723056c4732285c667d9b5393741b12cbc",
+    "tests_run": 15,
+    "unittest_exit": "not separately captured in initial wrapper"
+  },
+  "environment_overrides": {
+    "OPTIONS_SPEC_DIR": "spec",
+    "OPTPIPE_NETGUARD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "tests/netguard:src"
+  },
+  "final_checks_utc": "2026-11-06T20:48:18.360040+00:00",
+  "git": "2.52.0",
+  "independent_verification": {
+    "main": {
+      "checks": [
+        "git archive inventory vs git ls-tree/cat-file inventory",
+        "py_compile",
+        "tabnanny"
+      ],
+      "diagnostics": [],
+      "files": 121,
+      "inventory_matches": true,
+      "inventory_sha256": "d379a40e14dba7d87a21cc4eed56d2f2db6f3e92a7b982737470048d0b973182",
+      "revision": "ae95c68cc10240fe75b41cc30272c463d960f5e3",
+      "target_code_executed": false,
+      "temporary_bytecode_removed": true
+    },
+    "reliability": {
+      "checks": [
+        "git archive inventory vs git ls-tree/cat-file inventory",
+        "py_compile",
+        "tabnanny"
+      ],
+      "diagnostics": [],
+      "files": 116,
+      "inventory_matches": true,
+      "inventory_sha256": "c765cffcca3903c839b6c4cd5107ce275a8dc0a7b577b9380c34a796a2bbdcbe",
+      "revision": "d4ad49ad1eae03cc41f144cb4a01bfb81d5fab36",
+      "target_code_executed": false,
+      "temporary_bytecode_removed": true
+    }
+  },
+  "log_normalization": "Absolute checkout prefix replaced with . for repository hygiene; JSON scan output stored in its full result file; raw stream SHA256s preserved above. External runtime paths in the pytest warning are retained.",
+  "not_run": {
+    "full_application_suite": "audit-only changes; prior Pilot 001 execution retained as prior evidence",
+    "full_pinned_spec_suite": "audit-only changes; not repeated",
+    "ruff": "unavailable; installation not authorized"
+  },
+  "packages": {
+    "anyio": "4.14.2",
+    "pluggy": "1.7.0",
+    "pytest": "9.2.0"
+  },
+  "pilot": "003",
+  "python": "3.12.14",
+  "timestamp_utc": "2026-11-06T20:42:26.058900+00:00",
+  "tool_inventory": {
+    "executables_on_PATH": {
+      "bandit": false,
+      "flake8": false,
+      "mypy": false,
+      "pyflakes": false,
+      "pylint": false,
+      "ruff": false
+    },
+    "interpreters_checked": [
+      "system python3",
+      "existing project environment",
+      "primary runtime"
+    ],
+    "modules_in_all_three_interpreters": {
+      "bandit": false,
+      "flake8": false,
+      "mypy": false,
+      "pyflakes": false,
+      "pylint": false,
+      "ruff": false
+    },
+    "new_dependencies_installed": false
+  }
+}

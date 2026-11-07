@@ -1,0 +1,146 @@
+{
+  "closure_claim": "none",
+  "controls": {
+    "command": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s audit -p 'test_rel003_history_scan.py' -v",
+    "exit_code": 0,
+    "negative_control": {
+      "clean_tip": "69c9ad2b2f511910006a4a2d244ceab0ab0f477f",
+      "current_tip_match_count": 0,
+      "detector_source_sha256": "213ae0df179f41758bad47482dcd0739b919c12a1bc76d8514602ec5678db108",
+      "fake_value_emitted": false,
+      "fixture": "known-fake-token-added-then-deleted",
+      "history_locations": [
+        {
+          "commit": "61c7cf6cbdb7be218d1d0f1b2bdb211dd8354fca",
+          "path": "removed.txt"
+        }
+      ],
+      "history_match_count": 1,
+      "old_commit": "61c7cf6cbdb7be218d1d0f1b2bdb211dd8354fca",
+      "real_credential_used": false,
+      "synthetic_repository_only": true
+    },
+    "passed": 11,
+    "tests": 11
+  },
+  "date": "2026-11-06",
+  "dependency_installations_this_pilot": 0,
+  "executed_repository_checks": [
+    {
+      "command": "../../optpipe-agentdesk/.venv/bin/python -m pytest -p no:cacheprovider -o addopts= -q tests/test_repo_hygiene.py tests/test_paper_only.py",
+      "exit_code": 0,
+      "passed": 101,
+      "seconds": 6.7
+    },
+    {
+      "command": "../../optpipe-agentdesk/.venv/bin/python scripts/sync_spec.py --check --dest spec",
+      "exit_code": 0
+    },
+    {
+      "command": "../../optpipe-agentdesk/.venv/bin/python -m pytest -p no:cacheprovider -o addopts= -q tests/test_repo_hygiene.py",
+      "exit_code": 0,
+      "passed": 7,
+      "stage": "final packaged artifact check"
+    }
+  ],
+  "git_version": "git version 2.52.0",
+  "independent_storage_reproduction": {
+    "byte_identical_to_primary": true,
+    "command": "python3 audit/rel003_history_scan.py --repo ../verify.git --refs ../private/advertised-refs-after.txt",
+    "exit_code": 0,
+    "git_fsck_command": "git -C ../verify.git fsck --full --no-reflogs --no-dangling",
+    "git_fsck_exit_code": 0,
+    "git_fsck_output_bytes": 0,
+    "independent_reviewer": "not yet received; same operator re-execution",
+    "preparation": "git clone --mirror --no-local ../../optpipe-agentdesk ../verify.git",
+    "uses_alternate_object_store": false
+  },
+  "limits": [
+    "Existing repository regex only; not Gitleaks/Betterleaks equivalence",
+    "No broad secret-free claim or gate closure",
+    "Snapshot covers advertised refs at acquisition only",
+    "No unadvertised/unreachable Git objects or reflogs",
+    "No decompression, encoding transforms, entropy analysis, live validation, external LFS payloads",
+    "REL-004 Ruff not executed; executable unavailable; no installation authorized",
+    "No fresh full application-suite run in Pilot 002; prior 1509/4 result belongs to Pilot 001"
+  ],
+  "main_sha": "ae95c68cc10240fe75b41cc30272c463d960f5e3",
+  "pilot": "SOL AI LAB WORK PILOT 002",
+  "primary": {
+    "command": "python3 audit/rel003_history_scan.py --repo . --refs audit/REL-003-ref-snapshot.txt",
+    "exit_code": 0,
+    "final_command_rerun_byte_identical": true,
+    "initial_command": "python3 audit/rel003_history_scan.py --repo . --refs ../private/advertised-refs-after.txt",
+    "json_sha256": "5497220bac60b7696072964768598b58b2df4276f6b67ef71abda73d2e992f07"
+  },
+  "publication": {
+    "new_write_probe_performed": false,
+    "previous_write_probe": "Pilot 001 GitHub create_tree returned HTTP 403 Resource not accessible by integration",
+    "remote_publication_confirmed": false,
+    "route": "existing Sol-Soodle Gmail relay"
+  },
+  "python_version": "3.12.14",
+  "reconciliation": {
+    "P03_negative_control": "prior team report, not repeated",
+    "new_Soodle_reply_found": false,
+    "pilot001_local_commit": "532e0f2130737fba45ee4865d2da4cad52568b67",
+    "pilot001_relay_message_id": "1a1b2108ce60c4f3",
+    "pilot001_remote_publication": "not observed; remote branch still d4ad49a",
+    "pr31_head": "26d7aa57666c55df4f77fea82c5aae9d832d1788",
+    "pr31_state": "open draft",
+    "pr33_ci_success_runs": [
+      42249900529,
+      42249897699,
+      42249883086
+    ],
+    "pr33_head": "bd4d63f4cc18cf03915a04b1e8f0cad6e9f60c49",
+    "pr33_state": "open unmerged",
+    "reliability_ci_success_run": 42209539941
+  },
+  "ref_acquisition": {
+    "HEAD_aliases": 1,
+    "before_after_inventory_equal": true,
+    "branch_heads": 34,
+    "commands": [
+      "git ls-remote origin",
+      "git fetch --no-tags origin",
+      "git ls-remote origin",
+      "git fetch --no-tags origin refs/pull/1/head:refs/audit-pilot002/pull-1-head refs/pull/31/merge:refs/audit-pilot002/pull-31-merge refs/pull/33/merge:refs/audit-pilot002/pull-33-merge"
+    ],
+    "final_snapshot_equal": true,
+    "final_snapshot_sha256": "771c358723fd5955c529a39e44a9f7d1e31c42043ada1d1bdfeb755782837766",
+    "pull_refs": 35,
+    "ref_snapshot_sha256": "771c358723fd5955c529a39e44a9f7d1e31c42043ada1d1bdfeb755782837766",
+    "rows": 70,
+    "shallow": false,
+    "tags": 0,
+    "unique_root_shas": 37
+  },
+  "repository": "sOJimARU666/optpipe-agentdesk",
+  "source_sha": "d4ad49ad1eae03cc41f144cb4a01bfb81d5fab36",
+  "target_branch": "sol/phase1-reliability",
+  "test_environment": {
+    "OPTIONS_SPEC_DIR": "<tested-tree>/spec",
+    "OPTPIPE_NETGUARD": "1",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "<tested-tree>/tests/netguard:<tested-tree>/src"
+  },
+  "tool_identity": {
+    "git": {
+      "invocation": "PATH:git",
+      "resolved_executable_sha256": "8a2ae22e7898e163330a96319b541f92ed6f90fc87576414f72c5a89aa1dc352"
+    },
+    "python3": {
+      "invocation": "PATH:python3",
+      "resolved_executable_sha256": "fa67443527ed9647f760d807e2a38f26340757123e643c4639cf273ed15d5ea7"
+    }
+  },
+  "tools_absent_from_PATH_and_project_venv": [
+    "gitleaks",
+    "betterleaks",
+    "trufflehog",
+    "detect-secrets",
+    "ruff"
+  ]
+}

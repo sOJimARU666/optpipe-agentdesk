@@ -1,6 +1,8 @@
 # REL-002 — Property-based reliability test gap matrix (proposal)
 
-Status: **PROPOSED / source-reviewed, not executed**. Date: 2026-11-06.
+Status: **historical proposal; P01 and P03 now implemented and independently executed**. Date: 2026-11-06.
+
+Verified follow-up: P01 was committed at `2c8db3dd8fbfb78aeb93991fe69b32deee0becba`; P03 at `d4ad49ad1eae03cc41f144cb4a01bfb81d5fab36`. Sol's Work Pilot 001 independently ran the latter head's full offline application suite: **1509 passed, 4 skipped, exit 0**, including both files. See `audit/WORK-PILOT-001.md`. P02/P04/P05/P06 remain proposals; P07 remains deferred. The matrix below preserves the original design rather than claiming every candidate was implemented. Moodle's P03 mutation result remains team-reported, not independently reproduced in this pilot.
 Repository: `sOJimARU666/optpipe-agentdesk`; target branch: `sol/phase1-reliability`.
 Scope: offline market-data loader and its decision-time eligibility helpers. No production modifications, dependency changes, merges, network access, or trading.
 
@@ -39,9 +41,9 @@ Inspected on the isolated branch: `tests/test_marketdata_loader.py`, `tests/test
 - Offline pytest command, exit code, collection count, failures/skips, and CI URL at exact commit.
 - Independent reviewer approval before any PR merge.
 
-## Known blocker
+## Historical CI blocker — resolved
 
-GitHub Actions run `42189869506` on research-only commit `62b645f35872d7de3a96a6d1606fcfc58d175eab` failed at the offline test suite. Earlier safeguards passed; traceback not yet obtained. The commit added only `audit/RES-002-tradingagents-architecture-harvest.md`. Compare failing test IDs against parent `b7e9a5b68a08e2a311053e3ed5dd2c1abd798071` before attributing causality or claiming REL-002 readiness.
+GitHub Actions run `42189869506` on documentation commit `62b645f35872d7de3a96a6d1606fcfc58d175eab` failed. The branch subsequently received the documentation-path hygiene correction `fd7f81284992c14a133fa3351e943e54ecf6c908`; run `42199799865` succeeded. Work Pilot 001 directly verified that success and the later head's run `42209539941`, and independently passed the current offline suite locally. The old run is not a current blocker. Its original traceback was not retrieved during this pilot; the exact original failure attribution is not a new local reproduction.
 
 ## Handoff decision
 
