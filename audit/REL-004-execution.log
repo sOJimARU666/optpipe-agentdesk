@@ -1,0 +1,285 @@
+CHECK: synthetic-controls
+COMMAND: python3 -m unittest discover -s audit -p test_rel004_stdlib_baseline.py -v
+EXIT: 0
+SECONDS: 7.444
+STDOUT:
+
+STDERR:
+test_compiler_rejects_invalid_control_flow (test_rel004_stdlib_baseline.AnalysisControls.test_compiler_rejects_invalid_control_flow) ... ok
+test_compiler_warning_and_tuple_assert (test_rel004_stdlib_baseline.AnalysisControls.test_compiler_warning_and_tuple_assert) ... ok
+test_declared_python311_grammar (test_rel004_stdlib_baseline.AnalysisControls.test_declared_python311_grammar) ... ok
+test_dictionary_overwrite_including_equal_literal_types (test_rel004_stdlib_baseline.AnalysisControls.test_dictionary_overwrite_including_equal_literal_types) ... ok
+test_duplicate_test_and_class_method_detected (test_rel004_stdlib_baseline.AnalysisControls.test_duplicate_test_and_class_method_detected) ... ok
+test_import_closure_builtin_and_implicit_names_are_accepted (test_rel004_stdlib_baseline.AnalysisControls.test_import_closure_builtin_and_implicit_names_are_accepted) ... ok
+test_missing_global_in_nested_scope (test_rel004_stdlib_baseline.AnalysisControls.test_missing_global_in_nested_scope) ... ok
+test_star_import_explicitly_records_coverage_limit (test_rel004_stdlib_baseline.AnalysisControls.test_star_import_explicitly_records_coverage_limit) ... ok
+test_target_source_is_never_executed_and_encoding_is_respected (test_rel004_stdlib_baseline.AnalysisControls.test_target_source_is_never_executed_and_encoding_is_respected) ... ok
+test_cli_exit_codes_distinguish_results_from_incomplete (test_rel004_stdlib_baseline.FrozenInputControls.test_cli_exit_codes_distinguish_results_from_incomplete) ... ok
+test_frozen_commit_ignores_dirty_and_untracked_sources (test_rel004_stdlib_baseline.FrozenInputControls.test_frozen_commit_ignores_dirty_and_untracked_sources) ... ok
+test_missing_revision_and_size_limit_fail_incomplete (test_rel004_stdlib_baseline.FrozenInputControls.test_missing_revision_and_size_limit_fail_incomplete) ... ok
+test_symlink_python_entry_fails_incomplete (test_rel004_stdlib_baseline.FrozenInputControls.test_symlink_python_entry_fails_incomplete) ... ok
+
+----------------------------------------------------------------------
+Ran 13 tests in 3.904s
+
+OK
+
+
+CHECK: reliability-baseline
+COMMAND: python3 audit/rel004_stdlib_baseline.py --repo . --revision d4ad49ad1eae03cc41f144cb4a01bfb81d5fab36
+EXIT: 0
+SECONDS: 3.297
+STDOUT: initial JSON superseded by release scan; original raw stdout digest is in REL-004-verification.json; final JSON is audit/REL-004-reliability-results.json
+STDERR:
+
+
+CHECK: main-baseline
+COMMAND: python3 audit/rel004_stdlib_baseline.py --repo . --revision ae95c68cc10240fe75b41cc30272c463d960f5e3
+EXIT: 0
+SECONDS: 2.574
+STDOUT: initial JSON superseded by release scan; original raw stdout digest is in REL-004-verification.json; final JSON is audit/REL-004-main-results.json
+STDERR:
+
+
+CHECK: reliability-independent
+COMMAND: python3 audit/rel004_verify_archive.py --repo . --baseline audit/REL-004-reliability-results.json
+EXIT: 0
+SECONDS: 1.136
+STDOUT:
+{
+  "checks": [
+    "git archive inventory vs git ls-tree/cat-file inventory",
+    "py_compile",
+    "tabnanny"
+  ],
+  "diagnostics": [],
+  "files": 116,
+  "inventory_matches": true,
+  "inventory_sha256": "c765cffcca3903c839b6c4cd5107ce275a8dc0a7b577b9380c34a796a2bbdcbe",
+  "revision": "d4ad49ad1eae03cc41f144cb4a01bfb81d5fab36",
+  "target_code_executed": false,
+  "temporary_bytecode_removed": true
+}
+
+STDERR:
+
+
+CHECK: main-independent
+COMMAND: python3 audit/rel004_verify_archive.py --repo . --baseline audit/REL-004-main-results.json
+EXIT: 0
+SECONDS: 1.279
+STDOUT:
+{
+  "checks": [
+    "git archive inventory vs git ls-tree/cat-file inventory",
+    "py_compile",
+    "tabnanny"
+  ],
+  "diagnostics": [],
+  "files": 121,
+  "inventory_matches": true,
+  "inventory_sha256": "d379a40e14dba7d87a21cc4eed56d2f2db6f3e92a7b982737470048d0b973182",
+  "revision": "ae95c68cc10240fe75b41cc30272c463d960f5e3",
+  "target_code_executed": false,
+  "temporary_bytecode_removed": true
+}
+
+STDERR:
+
+
+CHECK: runtime-network-guard
+COMMAND: ../../optpipe-agentdesk/.venv/bin/python tests/netguard/ci_check_blocked.py
+EXIT: 0
+SECONDS: 0.517
+STDOUT:
+ok: socket.create_connection blocked by the network guard (network guard: socket.create_connection is blocked during tests (PAPER ONLY, offline suite))
+ok: urllib GET blocked by the network guard (network guard: urllib.request.urlopen is blocked during tests (PAPER ONLY, offline suite))
+ok: requests GET blocked by the network guard (network guard: requests.Session.request GET http://127.0.0.1:9/ is blocked during tests (PAPER ONLY, offline suite))
+netguard CI check: PASS
+
+STDERR:
+
+
+CHECK: hygiene-paper
+COMMAND: ../../optpipe-agentdesk/.venv/bin/python -m pytest tests/test_repo_hygiene.py tests/test_paper_only.py -p no:cacheprovider
+EXIT: 0
+SECONDS: 8.926
+STDOUT:
+........................................................................ [ 71%]
+.............................                                            [100%]
+=============================== warnings summary ===============================
+../../../../../opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/anyio/pytest_plugin.py:14
+  /opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/site-packages/anyio/pytest_plugin.py:14: PytestRemovedIn10Warning: _pytest.python.CallSpec2 has been renamed to CallSpec.
+  The CallSpec2 alias will be removed in pytest 10.
+  Update imports to use CallSpec instead.
+  See https://docs.pytest.org/en/stable/deprecations.html#callspec2-renamed
+    from _pytest.python import CallSpec2
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+101 passed, 1 warning in 7.45s
+
+STDERR:
+
+
+CHECK: pinned-spec
+COMMAND: ../../optpipe-agentdesk/.venv/bin/python scripts/sync_spec.py --check
+EXIT: 0
+SECONDS: 0.477
+STDOUT:
+OK: ./spec is the pinned spec 1.1.8 (manifest sha256 0837c74c79c1dd0ee3bb51f515304f058fd85494856a0a58faeea4399de27cd5, 191 files + 2 v1 files + frozen 1.1.0, 1.1.1, 1.1.2, 1.1.3, 1.1.4, 1.1.5, 1.1.6, 1.1.7, synced 2026-11-03T16:12:23+01:00)
+
+STDERR:
+
+
+DEVELOPMENT FAILURE (superseded by release checks):
+test_compiler_rejects_invalid_control_flow (test_rel004_stdlib_baseline.AnalysisControls.test_compiler_rejects_invalid_control_flow) ... ok
+test_compiler_warning_and_tuple_assert (test_rel004_stdlib_baseline.AnalysisControls.test_compiler_warning_and_tuple_assert) ... ok
+test_declared_python311_grammar (test_rel004_stdlib_baseline.AnalysisControls.test_declared_python311_grammar) ... ok
+test_dictionary_overwrite_including_equal_literal_types (test_rel004_stdlib_baseline.AnalysisControls.test_dictionary_overwrite_including_equal_literal_types) ... ok
+test_duplicate_test_and_class_method_detected (test_rel004_stdlib_baseline.AnalysisControls.test_duplicate_test_and_class_method_detected) ... ok
+test_import_closure_builtin_and_implicit_names_are_accepted (test_rel004_stdlib_baseline.AnalysisControls.test_import_closure_builtin_and_implicit_names_are_accepted) ... ok
+test_missing_global_in_nested_scope (test_rel004_stdlib_baseline.AnalysisControls.test_missing_global_in_nested_scope) ... ok
+test_star_import_explicitly_records_coverage_limit (test_rel004_stdlib_baseline.AnalysisControls.test_star_import_explicitly_records_coverage_limit) ... ok
+test_target_source_is_never_executed_and_encoding_is_respected (test_rel004_stdlib_baseline.AnalysisControls.test_target_source_is_never_executed_and_encoding_is_respected) ... ok
+test_cli_exit_codes_distinguish_results_from_incomplete (test_rel004_stdlib_baseline.FrozenInputControls.test_cli_exit_codes_distinguish_results_from_incomplete) ... ok
+test_frozen_commit_ignores_dirty_and_untracked_sources (test_rel004_stdlib_baseline.FrozenInputControls.test_frozen_commit_ignores_dirty_and_untracked_sources) ... ok
+test_independent_verifier_rejects_noncompiling_source (test_rel004_stdlib_baseline.FrozenInputControls.test_independent_verifier_rejects_noncompiling_source) ... ERROR
+test_independent_verifier_rejects_tampered_inventory (test_rel004_stdlib_baseline.FrozenInputControls.test_independent_verifier_rejects_tampered_inventory) ... ERROR
+test_missing_revision_and_size_limit_fail_incomplete (test_rel004_stdlib_baseline.FrozenInputControls.test_missing_revision_and_size_limit_fail_incomplete) ... ok
+test_symlink_python_entry_fails_incomplete (test_rel004_stdlib_baseline.FrozenInputControls.test_symlink_python_entry_fails_incomplete) ... ok
+
+======================================================================
+ERROR: test_independent_verifier_rejects_noncompiling_source (test_rel004_stdlib_baseline.FrozenInputControls.test_independent_verifier_rejects_noncompiling_source)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "./audit/test_rel004_stdlib_baseline.py", line 123, in test_independent_verifier_rejects_noncompiling_source
+    code, report = self.verify_archive(baseline)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "./audit/test_rel004_stdlib_baseline.py", line 108, in verify_archive
+    return process.returncode, json.loads(process.stdout)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/json/decoder.py", line 338, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/json/decoder.py", line 356, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+======================================================================
+ERROR: test_independent_verifier_rejects_tampered_inventory (test_rel004_stdlib_baseline.FrozenInputControls.test_independent_verifier_rejects_tampered_inventory)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "./audit/test_rel004_stdlib_baseline.py", line 112, in test_independent_verifier_rejects_tampered_inventory
+    self.assertEqual(self.verify_archive(baseline)[0], 0)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "./audit/test_rel004_stdlib_baseline.py", line 108, in verify_archive
+    return process.returncode, json.loads(process.stdout)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/json/__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/json/decoder.py", line 338, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/codex/runtimes/codex-primary-runtime/dependencies/python/lib/python3.12/json/decoder.py", line 356, in raw_decode
+    raise JSONDecodeError("Expecting value", s, err.value) from None
+json.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)
+
+----------------------------------------------------------------------
+Ran 15 tests in 1.291s
+
+FAILED (errors=2)
+
+
+CHECK: synthetic-controls-release
+COMMAND: python3 -m unittest discover -s audit -p test_rel004_stdlib_baseline.py -v
+EXIT: 0
+SECONDS: 1.424
+STDOUT:
+
+STDERR:
+test_compiler_rejects_invalid_control_flow (test_rel004_stdlib_baseline.AnalysisControls.test_compiler_rejects_invalid_control_flow) ... ok
+test_compiler_warning_and_tuple_assert (test_rel004_stdlib_baseline.AnalysisControls.test_compiler_warning_and_tuple_assert) ... ok
+test_declared_python311_grammar (test_rel004_stdlib_baseline.AnalysisControls.test_declared_python311_grammar) ... ok
+test_dictionary_overwrite_including_equal_literal_types (test_rel004_stdlib_baseline.AnalysisControls.test_dictionary_overwrite_including_equal_literal_types) ... ok
+test_duplicate_test_and_class_method_detected (test_rel004_stdlib_baseline.AnalysisControls.test_duplicate_test_and_class_method_detected) ... ok
+test_import_closure_builtin_and_implicit_names_are_accepted (test_rel004_stdlib_baseline.AnalysisControls.test_import_closure_builtin_and_implicit_names_are_accepted) ... ok
+test_missing_global_in_nested_scope (test_rel004_stdlib_baseline.AnalysisControls.test_missing_global_in_nested_scope) ... ok
+test_star_import_explicitly_records_coverage_limit (test_rel004_stdlib_baseline.AnalysisControls.test_star_import_explicitly_records_coverage_limit) ... ok
+test_target_source_is_never_executed_and_encoding_is_respected (test_rel004_stdlib_baseline.AnalysisControls.test_target_source_is_never_executed_and_encoding_is_respected) ... ok
+test_cli_exit_codes_distinguish_results_from_incomplete (test_rel004_stdlib_baseline.FrozenInputControls.test_cli_exit_codes_distinguish_results_from_incomplete) ... ok
+test_frozen_commit_ignores_dirty_and_untracked_sources (test_rel004_stdlib_baseline.FrozenInputControls.test_frozen_commit_ignores_dirty_and_untracked_sources) ... ok
+test_independent_verifier_rejects_noncompiling_source (test_rel004_stdlib_baseline.FrozenInputControls.test_independent_verifier_rejects_noncompiling_source) ... ok
+test_independent_verifier_rejects_tampered_inventory (test_rel004_stdlib_baseline.FrozenInputControls.test_independent_verifier_rejects_tampered_inventory) ... ok
+test_missing_revision_and_size_limit_fail_incomplete (test_rel004_stdlib_baseline.FrozenInputControls.test_missing_revision_and_size_limit_fail_incomplete) ... ok
+test_symlink_python_entry_fails_incomplete (test_rel004_stdlib_baseline.FrozenInputControls.test_symlink_python_entry_fails_incomplete) ... ok
+
+----------------------------------------------------------------------
+Ran 15 tests in 1.141s
+
+OK
+
+
+CHECK: reliability-baseline-release
+COMMAND: python3 audit/rel004_stdlib_baseline.py --repo . --revision d4ad49ad1eae03cc41f144cb4a01bfb81d5fab36
+EXIT: 0
+SECONDS: 1.696
+STDOUT: full JSON in audit/REL-004-reliability-results.json
+STDERR:
+
+
+CHECK: main-baseline-release
+COMMAND: python3 audit/rel004_stdlib_baseline.py --repo . --revision ae95c68cc10240fe75b41cc30272c463d960f5e3
+EXIT: 0
+SECONDS: 1.866
+STDOUT: full JSON in audit/REL-004-main-results.json
+STDERR:
+
+
+CHECK: reliability-independent-release
+COMMAND: python3 audit/rel004_verify_archive.py --repo . --baseline audit/REL-004-reliability-results.json
+EXIT: 0
+SECONDS: 0.656
+STDOUT:
+{
+  "checks": [
+    "git archive inventory vs git ls-tree/cat-file inventory",
+    "py_compile",
+    "tabnanny"
+  ],
+  "diagnostics": [],
+  "files": 116,
+  "inventory_matches": true,
+  "inventory_sha256": "c765cffcca3903c839b6c4cd5107ce275a8dc0a7b577b9380c34a796a2bbdcbe",
+  "revision": "d4ad49ad1eae03cc41f144cb4a01bfb81d5fab36",
+  "target_code_executed": false,
+  "temporary_bytecode_removed": true
+}
+
+STDERR:
+
+
+CHECK: main-independent-release
+COMMAND: python3 audit/rel004_verify_archive.py --repo . --baseline audit/REL-004-main-results.json
+EXIT: 0
+SECONDS: 0.713
+STDOUT:
+{
+  "checks": [
+    "git archive inventory vs git ls-tree/cat-file inventory",
+    "py_compile",
+    "tabnanny"
+  ],
+  "diagnostics": [],
+  "files": 121,
+  "inventory_matches": true,
+  "inventory_sha256": "d379a40e14dba7d87a21cc4eed56d2f2db6f3e92a7b982737470048d0b973182",
+  "revision": "ae95c68cc10240fe75b41cc30272c463d960f5e3",
+  "target_code_executed": false,
+  "temporary_bytecode_removed": true
+}
+
+STDERR:

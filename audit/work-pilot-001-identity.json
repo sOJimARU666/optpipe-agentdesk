@@ -1,0 +1,138 @@
+{
+  "audit": "SOL AI LAB WORK PILOT 001",
+  "base_sha": "7ee665444eb4d3197effb95347af9bfbf9b7d787",
+  "closure_claim": "none",
+  "expected_regression_reproduced": true,
+  "git": "git version 2.52.0",
+  "integration_tree": "951bced2263d94b9e75441b9d1701be0f4d46a12",
+  "main_sha": "ae95c68cc10240fe75b41cc30272c463d960f5e3",
+  "mode": "original_identity_helper_and_independent_tree_oracle",
+  "observations": [
+    {
+      "expected_manifest": "dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504",
+      "failure": null,
+      "head": "26d7aa57666c55df4f77fea82c5aae9d832d1788",
+      "identity_accepted": true,
+      "independent_tree_manifest": "dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504",
+      "index_manifest": "dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504",
+      "input_pins": [
+        {
+          "actual": "f89369fe485d01cc42a548ae4a493b4bff53d181d5862f45e4c4693f8c7fd053",
+          "expected": "f89369fe485d01cc42a548ae4a493b4bff53d181d5862f45e4c4693f8c7fd053",
+          "path": "config/settings.yaml"
+        },
+        {
+          "actual": "6badc513716649de953b8689285f9b67a63035202541bcb575467f7999fa3b11",
+          "expected": "6badc513716649de953b8689285f9b67a63035202541bcb575467f7999fa3b11",
+          "path": "spec/risk_rules.yaml"
+        },
+        {
+          "actual": "21e294555b6795d6cacfea3c02ce8ea918a2bebd68250ed326a2b6f45a75ba10",
+          "expected": "21e294555b6795d6cacfea3c02ce8ea918a2bebd68250ed326a2b6f45a75ba10",
+          "path": "spec/watcher_rules.yaml"
+        },
+        {
+          "actual": "a724aaf3347fcb46544baddfdefe16bf3f90b421f16842adb77712c1c5582365",
+          "expected": "a724aaf3347fcb46544baddfdefe16bf3f90b421f16842adb77712c1c5582365",
+          "path": "spec/fixtures/market_data/valid/2026-10-20/pack.sha256"
+        }
+      ],
+      "label": "pr31_before",
+      "outside_slice_changed_paths": [],
+      "receipt_sha256": "f6cd001791bd00ed6ea4778234c38ac8f35cd0759bf9e040f0eadc453d2aed93",
+      "test_sha256": "5e9307e0d40e8fe71ab697f5dd4b2e0fd2ff2cca644588b33269c6eb5b7d0061",
+      "tree": "5fc6b510b9687f50a1bb929f2975be23033ead76",
+      "worktree_clean": true
+    },
+    {
+      "expected_manifest": "dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504",
+      "failure": {
+        "exception": "AssertionError",
+        "expression": "assert _outside_slice_sha256(root, slice_files) == outside_sha256",
+        "file": "tests/test_r7_7_failure_replay.py",
+        "line": 114
+      },
+      "head": "15edb2d37436e335690438d35a316644cd9086f8",
+      "identity_accepted": false,
+      "independent_tree_manifest": "c18425270b5c2c4673ff3601d4e67cba8c239670dd4f4e274d977c8b7fcbabe7",
+      "index_manifest": "c18425270b5c2c4673ff3601d4e67cba8c239670dd4f4e274d977c8b7fcbabe7",
+      "input_pins": [
+        {
+          "actual": "f89369fe485d01cc42a548ae4a493b4bff53d181d5862f45e4c4693f8c7fd053",
+          "expected": "f89369fe485d01cc42a548ae4a493b4bff53d181d5862f45e4c4693f8c7fd053",
+          "path": "config/settings.yaml"
+        },
+        {
+          "actual": "6badc513716649de953b8689285f9b67a63035202541bcb575467f7999fa3b11",
+          "expected": "6badc513716649de953b8689285f9b67a63035202541bcb575467f7999fa3b11",
+          "path": "spec/risk_rules.yaml"
+        },
+        {
+          "actual": "21e294555b6795d6cacfea3c02ce8ea918a2bebd68250ed326a2b6f45a75ba10",
+          "expected": "21e294555b6795d6cacfea3c02ce8ea918a2bebd68250ed326a2b6f45a75ba10",
+          "path": "spec/watcher_rules.yaml"
+        },
+        {
+          "actual": "a724aaf3347fcb46544baddfdefe16bf3f90b421f16842adb77712c1c5582365",
+          "expected": "a724aaf3347fcb46544baddfdefe16bf3f90b421f16842adb77712c1c5582365",
+          "path": "spec/fixtures/market_data/valid/2026-10-20/pack.sha256"
+        }
+      ],
+      "label": "current_main_plus_pr31",
+      "outside_slice_changed_paths": [
+        "src/optpipe/cli.py",
+        "src/optpipe/dashboard/app.py",
+        "src/optpipe/dashboard/data.py",
+        "src/optpipe/records/store.py",
+        "tests/test_dashboard.py",
+        "tests/test_session_ref.py"
+      ],
+      "receipt_sha256": "f6cd001791bd00ed6ea4778234c38ac8f35cd0759bf9e040f0eadc453d2aed93",
+      "test_sha256": "5e9307e0d40e8fe71ab697f5dd4b2e0fd2ff2cca644588b33269c6eb5b7d0061",
+      "tree": "951bced2263d94b9e75441b9d1701be0f4d46a12",
+      "worktree_clean": true
+    },
+    {
+      "expected_manifest": "dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504",
+      "failure": null,
+      "head": "26d7aa57666c55df4f77fea82c5aae9d832d1788",
+      "identity_accepted": true,
+      "independent_tree_manifest": "dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504",
+      "index_manifest": "dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504",
+      "input_pins": [
+        {
+          "actual": "f89369fe485d01cc42a548ae4a493b4bff53d181d5862f45e4c4693f8c7fd053",
+          "expected": "f89369fe485d01cc42a548ae4a493b4bff53d181d5862f45e4c4693f8c7fd053",
+          "path": "config/settings.yaml"
+        },
+        {
+          "actual": "6badc513716649de953b8689285f9b67a63035202541bcb575467f7999fa3b11",
+          "expected": "6badc513716649de953b8689285f9b67a63035202541bcb575467f7999fa3b11",
+          "path": "spec/risk_rules.yaml"
+        },
+        {
+          "actual": "21e294555b6795d6cacfea3c02ce8ea918a2bebd68250ed326a2b6f45a75ba10",
+          "expected": "21e294555b6795d6cacfea3c02ce8ea918a2bebd68250ed326a2b6f45a75ba10",
+          "path": "spec/watcher_rules.yaml"
+        },
+        {
+          "actual": "a724aaf3347fcb46544baddfdefe16bf3f90b421f16842adb77712c1c5582365",
+          "expected": "a724aaf3347fcb46544baddfdefe16bf3f90b421f16842adb77712c1c5582365",
+          "path": "spec/fixtures/market_data/valid/2026-10-20/pack.sha256"
+        }
+      ],
+      "label": "pr31_after",
+      "outside_slice_changed_paths": [],
+      "receipt_sha256": "f6cd001791bd00ed6ea4778234c38ac8f35cd0759bf9e040f0eadc453d2aed93",
+      "test_sha256": "5e9307e0d40e8fe71ab697f5dd4b2e0fd2ff2cca644588b33269c6eb5b7d0061",
+      "tree": "5fc6b510b9687f50a1bb929f2975be23033ead76",
+      "worktree_clean": true
+    }
+  ],
+  "pr31_sha": "26d7aa57666c55df4f77fea82c5aae9d832d1788",
+  "pytest_executed_by_this_script": false,
+  "python": "3.12.14",
+  "reliability_sha": "d4ad49ad1eae03cc41f144cb4a01bfb81d5fab36",
+  "synthetic_commit": "15edb2d37436e335690438d35a316644cd9086f8",
+  "synthetic_commit_published": false
+}

@@ -1,6 +1,14 @@
 # REL-001 — Phase 1 reliability baseline
 
-Status: **source inventory reviewed; execution evidence pending**. This document is not a claim that tests were executed or that any security gate has closed.
+Status: **historical source inventory; fresh execution evidence recorded in WORK-PILOT-001.md**. No security gate is closed by this document.
+
+## Verified follow-up — 2026-11-06
+
+Sol independently executed the offline application suite at `d4ad49ad1eae03cc41f144cb4a01bfb81d5fab36`: **1509 passed, 4 skipped, exit 0**. Spec pin, generated models, spec patch, network-guard self-check, and offline CLI run/validation also passed. See `audit/WORK-PILOT-001.md` and its machine-readable evidence for exact scope, versions, commands, and limits. The locally skipped cases remain opt-in; the pinned spec's separate full suite was not rerun locally.
+
+The PR #23 paragraph below is historical: its consumer integration is now in `main`; current `main` was verified as `ae95c68cc10240fe75b41cc30272c463d960f5e3`. The reliability branch still diverges from it at `e5de176f33553b65567a3764f62a1f5181adef5a`; this audit does not synchronize branches. PR #31's current-main integration failure was independently reproduced in disposable worktrees. REL-003 and REL-004 remain unexecuted proposals; R6 / R7 / MD-18 / SEC-GATE-001 remain open.
+
+The remaining sections preserve the original inventory and handoff context.
 
 Repository: `sOJimARU666/optpipe-agentdesk`
 Branch: `sol/phase1-reliability`

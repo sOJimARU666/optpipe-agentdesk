@@ -1,0 +1,123 @@
+# SOL AI LAB — WORK PILOT 001
+
+Date: 2026-11-06 (Europe/Berlin). Scope: paper-only Phase 1 Reliability. **closure_claim: none**.
+
+## Concrete result
+
+**PR #31's unchanged tests pass at its published head and fail when integrated with the verified current main tree.** Both failures are the frozen outside-slice manifest assertion at `tests/test_r7_7_failure_replay.py:114`, before the replay matrix runs. This converts the earlier source-review risk into an executed, reproducible integration blocker. It is not evidence of a market-data policy defect or a broken input pin.
+
+The same session independently executed the reliability branch's full offline application suite: **1509 passed, 4 skipped, exit 0**. No application, test, spec, CI, dependency declaration, security control, or remote main ref was modified.
+
+## Frozen identities
+
+| Object | Exact SHA |
+|---|---|
+| Reliability source head | `d4ad49ad1eae03cc41f144cb4a01bfb81d5fab36` |
+| Reliability source tree | `451b6ffd2f281efe2f4717db164b414280b68aca` |
+| Current main | `ae95c68cc10240fe75b41cc30272c463d960f5e3` |
+| Reliability/main merge base | `e5de176f33553b65567a3764f62a1f5181adef5a` |
+| PR #31 head | `26d7aa57666c55df4f77fea82c5aae9d832d1788` |
+| PR #31 tree | `5fc6b510b9687f50a1bb929f2975be23033ead76` |
+| PR #31 pinned base / main merge base | `7ee665444eb4d3197effb95347af9bfbf9b7d787` |
+| Pinned base tree | `35afda7460126e07f5a127a2a0043afeb315ed30` |
+| Integration tree from Git merge-tree | `951bced2263d94b9e75441b9d1701be0f4d46a12` |
+| Local synthetic commit used for pytest | `c16ba1db89c5386d28de1d1b18c23f96f807e1c7` |
+| Deterministic synthetic commit used by audit helper | `15edb2d37436e335690438d35a316644cd9086f8` |
+
+The two synthetic commits have the same tree and parents; their metadata differs. Neither was published. The clone was non-shallow. The integration was conflict-free and used detached disposable worktrees; no merge into a branch occurred.
+
+## Executed evidence
+
+| Execution by Sol | Result | Exit |
+|---|---|---|
+| Reliability offline application suite | 1509 passed, 4 skipped; 235.31 s | 0 |
+| Unchanged PR #31 test file at PR head | 2 passed; 192.84 s | 0 |
+| Same test file on current-main integration tree | 2 failed; 0.51 s | 1 |
+| Original identity helper: original / integrated / original | accept / reject / accept | 0 for expected reproduction |
+| Independent manifest from committed Git trees | agrees with original helper's index-based digest | 0 |
+| Spec pin before and after checks | pinned 1.1.8 intact | 0 / 0 |
+| Existing network-guard self-check | PASS; connection attempts blocked | 0 |
+| Generated models / historical spec patch | up to date / up to date | 0 / 0 |
+| Offline fixture CLI run / record validation | valid record / 0 errors | 0 / 0 |
+| Final audit hygiene and paper-only structural tests | 101 passed; 9.09 s | 0 |
+
+Failed tests: `test_r7_7_failure_replay_receipt` and `test_r7_7_shallow_checkout_enforces_identity`. Both reject the manifest. The latter reaches its replay call after its synthetic shallow-checkout checks; this pilot does not claim a full shallow clone of the integrated repository was tested.
+
+Expected manifest: `dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504`.
+
+Integrated manifest: `c18425270b5c2c4673ff3601d4e67cba8c239670dd4f4e274d977c8b7fcbabe7`.
+
+The four explicit input pins (settings, risk rules, watcher rules, pack manifest), test bytes, and receipt bytes remain identical. The manifest changes because PR #32 changed exactly these six paths outside PR #31's allowed slice:
+
+- `src/optpipe/cli.py`
+- `src/optpipe/dashboard/app.py`
+- `src/optpipe/dashboard/data.py`
+- `src/optpipe/records/store.py`
+- `tests/test_dashboard.py`
+- `tests/test_session_ref.py`
+
+The independent helper compiles the exact identity-function AST nodes from a SHA256-pinned test file; it does not import the application, mock a return value, alter an assertion, or execute pytest. Its second oracle computes the manifest from `git ls-tree`, independently of the test's `git ls-files -s`. The original pytest runs supply separate application-level evidence.
+
+## Reproduction and environment
+
+Fast, dependency-free reproduction in a clone containing the pinned commits:
+
+```sh
+python3 audit/work_pilot_001_reproduce.py
+```
+
+The script does not fetch or move branch refs. It removes its own worktrees, retains only local unreferenced Git objects, and records all identities in JSON. Exit 0 means the expected integration rejection was reproduced; inspect `identity_accepted: false` on the integration observation. Python optimization is refused so the original assertions execute.
+
+For the pytest comparison, create the integration tree with:
+
+```sh
+git merge-tree --write-tree ae95c68cc10240fe75b41cc30272c463d960f5e3 26d7aa57666c55df4f77fea82c5aae9d832d1788
+```
+
+Use a detached worktree at the recorded synthetic commit, or at the equivalent synthetic commit generated by the script. At each tested tree, set:
+
+```sh
+export OPTPIPE_NETGUARD=1 PYTHONDONTWRITEBYTECODE=1 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1
+export PYTHONPATH="$PWD/tests/netguard:$PWD/src"
+export OPTIONS_SPEC_DIR="$PWD/spec"
+```
+
+Run the existing environment's Python with:
+
+```sh
+python -m pytest -p no:cacheprovider -o addopts= -vv --tb=short tests/test_r7_7_failure_replay.py
+```
+
+The exact interpreter-relative invocations, working directories, check commands, environment versions, exit codes, and raw/sanitized log hashes are in `work-pilot-001-results.json`. Local Python was **3.12.14**, pytest **9.2.0**; CI used Python 3.13. The environment installed only the repository's existing `.[dev]` dependency set. No Ruff, history scanner, Hypothesis, or new project dependency was introduced. Automatic loading of unrelated third-party pytest plugins was disabled; repository conftest hooks and the network guard remained active.
+
+The full-suite command was `.venv/bin/python -m pytest -p no:cacheprovider -o addopts= -q -rs`. Four skips were the three opt-in live-spec tests and one live watcher test. Tracked application/tests/spec bytes remained at the recorded source head; audit artifacts were being authored during the run. Final audit hygiene is checked separately after packaging.
+
+## Reconciliation and evidence separation
+
+| Track | Verified state; no duplicate implementation |
+|---|---|
+| REL-001 | Historical baseline retained; fresh local execution linked here. Old PR #23 warning predates its integration into main. |
+| REL-002 | P01 at `2c8db3dd8fbfb78aeb93991fe69b32deee0becba`; P03 at the recorded reliability head. Both included in the local passing suite. P02/P04/P05/P06 remain proposed; P07 deferred. |
+| REL-003 | Current saved artifact is a history-scan proposal, not an executed scan. Approved scanner provenance remains unresolved. |
+| REL-004 | Current saved artifact is a Ruff proposal, not a measured lint baseline. Ruff not installed; no installation approval inferred. |
+| PR #31 | Draft, behind; earlier green CI does not establish current-main compatibility. This pilot supplies the missing simulation. |
+
+GitHub evidence was read directly: reliability run [42209539941](https://github.com/sOJimARU666/optpipe-agentdesk/actions/runs/42209539941), job `127864470584`, reported 1509 passed / 4 skipped and 911 spec tests passed. PR #31 run [42189891890](https://github.com/sOJimARU666/optpipe-agentdesk/actions/runs/42189891890), job `127799029489`, reported 1547 passed / 3 skipped and 911 spec tests passed. Its log explicitly checked out merge commit `bb04990b3dd3574209f866064df6a927c7848882`, before current-main PR #32. These are observed remote CI results, distinct from this session's local executions.
+
+Moodle's P03 mutation sequence (6 passed / 5 failed + 1 passed / 6 passed) is **team-reported via the Soodle relay**. Its private receipt was not available locally, and this pilot did not repeat that work. No independent-review completion is inferred.
+
+## Remaining risks and next executable action
+
+The current-main integration remains blocked. Removing the manifest assertion, broadening its slice simply to pass, or silently rewriting the historical receipt would weaken the evidence and was not done. Re-pinning once would also leave the test coupled to every subsequent unrelated repository change.
+
+Next: Soodle routes this exact package to Moodle/Noodle for independent reproduction using the single command above. The code owner can then separate immutable historical receipt verification from current-tree regression coverage, preserving explicit input pins and adversarial controls. Verify both the historical pinned tree and a fresh current-main integration before requesting any merge. No merge approval is supplied by this audit.
+
+REL-003/REL-004 require a separately approved tool path. R6 / R7 / MD-18 / SEC-GATE-001 remain open. The Python network guard is not OS-level egress isolation. Local full spec pytest, full current-main pytest, and full integrated-tree pytest were not run; only the recorded targeted integration tests were executed. There was no live trading, brokerage execution, deployment, spending, or network-permission change.
+
+## Deliverables
+
+All changed paths are under `audit/`: this report; the reproducible Python helper; identity JSON; structured results JSON; sanitized logs; SHA256 manifest; and narrow status corrections in REL-001/REL-002. `work-pilot-001-SHA256SUMS` covers every package member except itself. Full raw logs remain local; shared logs replace the workspace prefix with `<pilot-workspace>` and trim trailing whitespace without changing assertions, counts, exit codes, or commit identifiers.
+
+## Publication boundary
+
+The existing agent account's GitHub integration returned **HTTP 403, Resource not accessible by integration**, when creating the intended audit tree. No tree, commit, or remote branch update succeeded through that attempt. Read metadata advertised repository push permission; that does not establish the integration token's effective write permission. The package is therefore prepared as a local commit and complete patch for the existing Sol–Soodle Gmail relay. Its local commit and patch SHA256 are recorded in the handoff, avoiding a self-referential hash in this report. Applying the patch remains pending until Soodle supplies a new remote SHA and CI evidence; no remote completion is claimed.
