@@ -94,13 +94,7 @@ def _changed_against_head(root: Path) -> set[str]:
     return names
 
 
-def verify_base_identity(root: Path, receipt: dict, *, base_head: str, base_tree: str,
-                         slice_files: set[str], input_pins: tuple, outside_sha256: str) -> None:
-    """Require the pinned base identity. Never fetches. Does not return before the pin checks.
-
-    When the base commit object is present, also require its tree and ancestry.
-    When it is absent, the manifest, input pins, and HEAD diff are the whole check.
-    """
+def verify_receipt_pins(root, receipt, base_head, base_tree, input_pins, outside_sha256):
     assert receipt["closure_claim"] == "none"
     assert receipt["source"]["base_head"] == base_head
     assert receipt["source"]["base_tree"] == base_tree
@@ -112,6 +106,16 @@ def verify_base_identity(root: Path, receipt: dict, *, base_head: str, base_tree
         assert receipt["inputs"][field] == digest
         got = hashlib.sha256((root / rel).read_bytes()).hexdigest()
         assert got == digest, rel
+
+
+def verify_base_identity(root: Path, receipt: dict, *, base_head: str, base_tree: str,
+                         slice_files: set[str], input_pins: tuple, outside_sha256: str) -> None:
+    """Require the pinned base identity. Never fetches. Does not return before the pin checks.
+
+    When the base commit object is present, also require its tree and ancestry.
+    When it is absent, the manifest, input pins, and HEAD diff are the whole check.
+    """
+    verify_receipt_pins(root, receipt, base_head, base_tree, input_pins, outside_sha256)
     assert _outside_slice_sha256(root, slice_files) == outside_sha256
     dirty = _changed_against_head(root)
     assert dirty <= set(slice_files), dirty
@@ -197,9 +201,7 @@ def assert_receipt_contract(receipt: dict) -> None:
 def test_r7_7_failure_replay_receipt(tmp_path):
     """Byte-identical raw projections and, separately, id_status_v1 semantic files."""
     receipt = json.loads(RECEIPT.read_text())
-    verify_base_identity(
-        ROOT, receipt, base_head=BASE_HEAD, base_tree=BASE_TREE, slice_files=SLICE_FILES,
-        input_pins=INPUT_PINS, outside_sha256=OUTSIDE_SLICE_SHA256)
+    verify_receipt_pins(ROOT, receipt, BASE_HEAD, BASE_TREE, INPUT_PINS, OUTSIDE_SLICE_SHA256)
     assert_receipt_contract(receipt)
     assert Path(os.environ["OPTIONS_SPEC_DIR"]).resolve() == SPEC.resolve()
 
