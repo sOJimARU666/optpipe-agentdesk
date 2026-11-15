@@ -64,7 +64,7 @@
   <table><tr><th>screen</th><th>status</th><th class="num">rows</th><th>notes</th></tr>
   {% for sc in scan.screens %}<tr><td>{{ sc.name }}</td><td class="st-{{ sc.status }}">{{ sc.status }}</td><td class="num">{{ sc.rows|length }}</td>
   <td class="small">{{ sc.status_reason or '' }}{% if sc.rows %}<div class="mono">{% for r in sc.rows[:8] %}{{ r.ticker }}{% if not loop.last %}, {% endif %}{% endfor %}{% if sc.rows|length > 8 %} …{% endif %}</div>{% endif %}</td></tr>{% endfor %}</table>
-  {% for e in scan.earnings_reports %}<p class="small"><b>{{ e.ticker }}</b> {{ e.fiscal_period }}: EPS {{ f(e.eps_actual, 2) }} vs est {{ f(e.eps_estimate, 2) }}</p>{% endfor %}
+  {% for e in scan.earnings_reports %}<p class="small"><b>{{ e.ticker }}</b> {{ e.fiscal_period }}: EPS {{ f(e.eps_actual, 2) }} vs est {{ f(e.eps_estimate, 2) }} · premarket change (%) {{ f(e.premarket_change_pct, 2) }}</p>{% endfor %}
   {% else %}<p class="mute">No scan for this run.</p>{% endif %}
 </div>
 </div>

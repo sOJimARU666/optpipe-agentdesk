@@ -122,7 +122,7 @@ def history_model(od: OutDir) -> tuple[list[dict], list[dict]]:
         sessions.append({"date": d, "runs": s.runs, "tickets": len(s.record.get("tickets", [])),
                          "verdicts": dict(sorted(v.items(), key=lambda kv: VERDICT_ORDER[kv[0]])),
                          "recommendation": tr[-1].get("recommendation") if tr else None,
-                         "integrity": s.integrity, "origin": s.origin})
+                         "integrity": s.integrity, "origin": s.origin, "files": s.files})
         for i in s.record.get("idea_log", []):
             ideas.append({"date": d, **i})
     return sessions, ideas

@@ -20,6 +20,18 @@ def test_cli_run_writes_json_md_trace(pipeline_output):
     assert "PAPER ONLY" in md and "Hand-off trace" in md
 
 
+@pytest.mark.parametrize(("label", "evidence"), [
+    ("premarket", "-3.7 (src-wsj-jpm, as of 2026-10-13T07:03:00-04:00); "
+                  "0.78 (src-nasdaq-jpm-info-0752, as of 2026-10-13T07:52:00-04:00)"),
+    ("KOSPI", "-7.4 (src-ilsole, time unknown); -5.5 (src-eme, time unknown)"),
+    ("HSI", "-1.0 (src-ilsole, time unknown); 0.2 (src-alliance, time unknown)"),
+    ("SHCOMP", "-1.1 (src-ilsole, time unknown); 0.1 (src-alliance, time unknown)"),
+])
+def test_markdown_preserves_conflict_evidence(pipeline_output, label, evidence):
+    report = (pipeline_output["out"] / "session-2026-10-13.md").read_text()
+    assert f"{label} CONFLICTING [{evidence}]%" in report
+
+
 def test_output_passes_doodle_validator(rec, validator):
     assert validator.validate(rec) == []
 

@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Historical R7 receipt audit needs its immutable commit offline.
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -42,6 +44,8 @@ jobs:
         run: python scripts/gen_models.py --check
       - name: spec_patches/v1.1 matches the locked spec + ruling 5
         run: python scripts/make_spec_patch.py --check
+      - name: Verify historical R7 receipt against its recorded snapshot
+        run: python -m pytest tests/r7_history_audit.py -p no:cacheprovider
       - name: Test suite (offline)
         run: python -m pytest -p no:cacheprovider          # `live`-marked tests are skipped (opt-in only)
       - name: Doodle's spec tests

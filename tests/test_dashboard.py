@@ -5,6 +5,7 @@ import signal
 from pathlib import Path
 
 import pytest
+from bs4 import BeautifulSoup
 
 from fastapi.routing import APIRoute  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -35,6 +36,21 @@ def client(out):
 @pytest.fixture(scope="module")
 def v11(out):
     return json.loads((out / f"session-{DATE}.json").read_text())
+
+
+def test_today_conflicts_retain_evidence(client):
+    page = BeautifulSoup(client.get(f"/s/{DATE}/today").content, "html.parser")
+    earnings = next(p for p in page.find_all("p") if p.b and p.b.get_text() == "JPM")
+    kospi = next(row for row in page.select("tr") if "KOSPI" in row.stripped_strings)
+    for node, observations in [
+        (earnings, ["-3.7 · src-wsj-jpm · 2026-10-13T07:03:00-04:00",
+                    "0.78 · src-nasdaq-jpm-info-0752 · 2026-10-13T07:52:00-04:00"]),
+        (kospi, ["-7.4 · src-ilsole · time unknown", "-5.5 · src-eme · time unknown"]),
+    ]:
+        text = node.get_text(" ", strip=True)
+        assert "conflicting" in text
+        for observation in observations:
+            assert observation in text
 
 
 def test_all_routes_are_get_only(out):
@@ -139,6 +155,36 @@ def test_history_and_idea_log(client, v11):
         assert i["idea_id"] in html
     assert "8 VETO" in html                                     # 4 tickets x 2 runs
     assert "/files/session-2026-10-13.trace.json" in html
+
+
+@pytest.mark.parametrize("suffixes", [
+    (".json", ".trace.json", ".md"),
+    (".json", ".v1_1.json"),
+    (".json",),
+])
+def test_history_offers_readable_downloads(out, tmp_path, suffixes):
+    from optpipe.records.compat import to_v1
+
+    stem = f"session-{DATE}"
+    for suffix in suffixes:
+        name = stem + suffix
+        if suffix == ".v1_1.json":
+            raw = (out / (stem + ".json")).read_bytes()
+            (tmp_path / name).write_bytes(raw)
+            (tmp_path / (stem + ".json")).write_text(json.dumps(to_v1(json.loads(raw))))
+        else:
+            (tmp_path / name).write_bytes((out / name).read_bytes())
+
+    with TestClient(create_app(tmp_path)) as client:
+        history = client.get("/history")
+        assert history.status_code == 200
+        page = BeautifulSoup(history.content, "html.parser")
+        urls = [link["href"] for link in page.select('a[href^="/files/"]')]
+        assert urls == [f"/files/{stem}{suffix}" for suffix in suffixes]
+        for url in urls:
+            download = client.get(url)
+            assert download.status_code == 200
+            assert download.content == (tmp_path / Path(url).name).read_bytes()
 
 
 def test_raw_files_only_session_files(client, out):
