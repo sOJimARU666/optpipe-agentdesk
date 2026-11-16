@@ -149,7 +149,7 @@ def test_pipeline_runs_against_the_pinned_copy(pinned, tmp_path):
     r = subprocess.run([str(Path(sys.executable).parent / "optpipe"), "run", "--out", str(out)], env=env,
                        capture_output=True, text=True, cwd=ROOT)
     assert r.returncode == 0, r.stdout[-2000:] + r.stderr[-2000:]
-    assert "OK as 1.1.6 (schema + invariants INV-01..17)" in r.stdout
+    assert "OK as 1.1.8 (schema + invariants INV-01..17)" in r.stdout
     sc = subprocess.run([str(Path(sys.executable).parent / "optpipe"), "spec-check"], env=env, capture_output=True,
                         text=True, cwd=ROOT)
     assert f"risk_rules         {pinned}/risk_rules.yaml" in sc.stdout, sc.stdout

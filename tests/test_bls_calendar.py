@@ -75,18 +75,16 @@ def test_no_real_email_address_is_hardcoded():
     assert hits == []
 
 
-def test_live_pipeline_skips_bls_without_email_and_sets_ua_with_one(monkeypatch):
+def test_build_pipeline_no_longer_has_a_live_path(monkeypatch):
+    """FEAT-OODLE-01 PR B: --live is removed; build_pipeline takes fixtures XOR data_dir. The BLS UA rule is
+    still enforced by LiveMacroCalendars itself (kept for PR C); see test_live_calendars_* below."""
     monkeypatch.delenv("OPTPIPE_BLS_CONTACT_EMAIL", raising=False)
     s = load_settings()
     inputs = type("I", (), {"global_snapshot_record": None})()
-    p = build_pipeline(s, None, inputs, FETCHED)
-    assert p.macro.bls_fetcher is None
-    s2 = s.model_copy(update={"sources": s.sources.model_copy(update={"bls_contact_email": TEST_EMAIL})})
-    p2 = build_pipeline(s2, None, inputs, FETCHED)
-    ua = p2.macro.bls_fetcher.inner.headers["User-Agent"]
-    assert ua == f"optpipe/1.1 (calendar fetch; contact: {TEST_EMAIL})"
-    assert p2.fetcher.headers["User-Agent"] != ua               # the email only goes to bls.gov
-    assert p2.macro.bls_ics_url == "https://www.bls.gov/schedule/news_release/bls.ics"
+    with pytest.raises(ValueError, match="exactly one"):
+        build_pipeline(s, None, inputs, FETCHED)
+    assert bls_user_agent(None) is None
+    assert bls_user_agent(TEST_EMAIL) == f"optpipe/1.1 (calendar fetch; contact: {TEST_EMAIL})"
 
 
 # ---------------------------------------------------------------- bls.ics

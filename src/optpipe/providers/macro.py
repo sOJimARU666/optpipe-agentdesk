@@ -424,8 +424,15 @@ class ReplayMacroCalendars:
 def visible(snaps: list[CalendarSnapshot], as_of: datetime) -> tuple[list[CalendarSnapshot], list[str]]:
     keep, notes = [], []
     for s in snaps:
-        if s.fetched_at <= as_of:
+        try:
+            fetched = s.fetched_at
+        except (TypeError, ValueError):
+            fetched = None
+        if not isinstance(fetched, datetime) or fetched.tzinfo is None or fetched.utcoffset() is None:
+            notes.append(f"{getattr(s, 'kind', '?')} calendar has no usable fetched_at; ignored (fail closed)")
+            continue
+        if fetched <= as_of:
             keep.append(s)
         else:
-            notes.append(f"{s.kind} calendar fetched {s.fetched_at.isoformat()} is after as_of; ignored (point in time)")
+            notes.append(f"{s.kind} calendar fetched {fetched.isoformat()} is after as_of; ignored (point in time)")
     return keep, notes

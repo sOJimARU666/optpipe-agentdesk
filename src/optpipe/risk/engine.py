@@ -76,6 +76,12 @@ class Calendar:
     def __init__(self, mh: MarketHours):
         self.open, self.close, self.early = mh.open, mh.close, mh.early_close
         self.holidays, self.early_closes = set(mh.holidays), set(mh.early_closes)
+        # spec risk_rules.yaml lists 2026 only (Q-5 still OPEN: the file is not edited). The app calendar
+        # covers 2026–2027 and its 2026 rows are pinned equal to that file, so the union adds 2027 holidays
+        # and the 2027-11-26 early close without changing a 2026 session.
+        from ..nyse_calendar import COVERS_FROM, COVERS_TO, EARLY_CLOSES, HOLIDAYS
+        self.holidays |= {d for d in HOLIDAYS if COVERS_FROM <= d <= COVERS_TO}
+        self.early_closes |= {d for d in EARLY_CLOSES if COVERS_FROM <= d <= COVERS_TO}
 
     def is_trading_day(self, d: date) -> bool:
         return d.weekday() < 5 and d not in self.holidays

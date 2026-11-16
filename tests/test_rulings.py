@@ -1,6 +1,6 @@
 """Doodle's rulings (2026-10-29): review ids, tick rounding, per-run scans, closed phase, both schemas,
 trace hash, generated code/patch in sync. Since Doodle's spec 1.1.0 (merged + pinned 2026-10-29) the record itself is
-v1.1-shape (now 1.1.6) with trace_ref; compat.to_v1 remains for v1 readers."""
+v1.1-shape (now 1.1.8) with trace_ref; compat.to_v1 remains for v1 readers."""
 from __future__ import annotations
 
 import hashlib
@@ -107,11 +107,11 @@ def test_scans_and_snapshots_are_per_run(two_runs):
 # ---- ruling 5: both schemas pass ---------------------------------------------------------------
 def test_both_schemas_pass(two_runs, validator, spec):
     assert validator.validate(two_runs["v1"]) == []
-    assert validator.validate(two_runs["v11"]) == [], "the 1.1.6 record passes the pinned spec"
+    assert validator.validate(two_runs["v11"]) == [], "the 1.1.8 record passes the pinned spec"
     v11 = spec.validator_for_schema(PATCH / "session.schema.json")    # the frozen v1.1 proposal only knows 1.1.0
     assert v11.validate({**two_runs["v11"], "schema_version": "1.1.0"}) == []
     assert v11.validate(two_runs["v1"]) == [], "the v1.1 proposal stays backward compatible"
-    assert two_runs["v11"]["schema_version"] == "1.1.6" and two_runs["v1"]["schema_version"] == "1.0.0"
+    assert two_runs["v11"]["schema_version"] == "1.1.8" and two_runs["v1"]["schema_version"] == "1.0.0"
 
 
 def test_open_interest_is_integer_in_output(two_runs):
@@ -149,7 +149,7 @@ def test_closed_phase_written_as_closed_in_1_1_0(settings, spec, tmp_path):
     assert rec["runs"][0]["phase"] == "closed"
     w = write_session(rec, trace, tmp_path)
     on_disk = json.loads(w.json.read_text())
-    assert on_disk["schema_version"] == "1.1.6" and on_disk["runs"][0]["phase"] == "closed"
+    assert on_disk["schema_version"] == "1.1.8" and on_disk["runs"][0]["phase"] == "closed"
     errs = spec.load_module("session_validator").validate(on_disk, base_dir=tmp_path)
     assert not [e for e in errs if e.startswith(("INV-10", "INV-11", "INV-12", "INV-13"))], errs
     v1 = to_v1(on_disk)                                    # v1 readers still get afterhours + a note
@@ -169,7 +169,7 @@ def test_trace_sha256_matches_sidecar_and_trace_ref(two_runs):
     # record -> trace: trace file bytes (INV-11); trace -> record: canonical content minus trace_ref (no cycle)
     from optpipe.records.store import SESSION_REF_COVERS, session_content_sha256
     assert tr["session_ref"] == {"path": jp.name, "sha256": session_content_sha256(json.loads(jp.read_text())),
-                                 "sha256_covers": SESSION_REF_COVERS, "schema_version": "1.1.6"}
+                                 "sha256_covers": SESSION_REF_COVERS, "schema_version": "1.1.8"}
 
 
 # ---- generated code / patch in sync ------------------------------------------------------------

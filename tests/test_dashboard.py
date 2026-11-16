@@ -1,8 +1,11 @@
 """Milestone 2 dashboard: FastAPI TestClient over a fixture out/ dir (offline, read-only, GET only)."""
 import json
+import os
+import signal
 from pathlib import Path
 
 import pytest
+from bs4 import BeautifulSoup
 
 from fastapi.routing import APIRoute  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
@@ -13,7 +16,7 @@ from optpipe.dashboard.app import timeline_model, tickets_model  # noqa: E402
 from optpipe.dashboard.data import OutDir, berlin, clock, pair  # noqa: E402
 
 DATE = "2026-10-13"
-SV = "1.1.6"                     # Doodle's spec 1.1.6: the record is written as 1.1.6 (with trace_ref)
+SV = "1.1.8"                     # Doodle's spec 1.1.8: the record is written as 1.1.8 (with trace_ref)
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -33,6 +36,21 @@ def client(out):
 @pytest.fixture(scope="module")
 def v11(out):
     return json.loads((out / f"session-{DATE}.json").read_text())
+
+
+def test_today_conflicts_retain_evidence(client):
+    page = BeautifulSoup(client.get(f"/s/{DATE}/today").content, "html.parser")
+    earnings = next(p for p in page.find_all("p") if p.b and p.b.get_text() == "JPM")
+    kospi = next(row for row in page.select("tr") if "KOSPI" in row.stripped_strings)
+    for node, observations in [
+        (earnings, ["-3.7 · src-wsj-jpm · 2026-10-13T07:03:00-04:00",
+                    "0.78 · src-nasdaq-jpm-info-0752 · 2026-10-13T07:52:00-04:00"]),
+        (kospi, ["-7.4 · src-ilsole · time unknown", "-5.5 · src-eme · time unknown"]),
+    ]:
+        text = node.get_text(" ", strip=True)
+        assert "conflicting" in text
+        for observation in observations:
+            assert observation in text
 
 
 def test_all_routes_are_get_only(out):
@@ -139,11 +157,322 @@ def test_history_and_idea_log(client, v11):
     assert "/files/session-2026-10-13.trace.json" in html
 
 
+@pytest.mark.parametrize("suffixes", [
+    (".json", ".trace.json", ".md"),
+    (".json", ".v1_1.json"),
+    (".json",),
+])
+def test_history_offers_readable_downloads(out, tmp_path, suffixes):
+    from optpipe.records.compat import to_v1
+
+    stem = f"session-{DATE}"
+    for suffix in suffixes:
+        name = stem + suffix
+        if suffix == ".v1_1.json":
+            raw = (out / (stem + ".json")).read_bytes()
+            (tmp_path / name).write_bytes(raw)
+            (tmp_path / (stem + ".json")).write_text(json.dumps(to_v1(json.loads(raw))))
+        else:
+            (tmp_path / name).write_bytes((out / name).read_bytes())
+
+    with TestClient(create_app(tmp_path)) as client:
+        history = client.get("/history")
+        assert history.status_code == 200
+        page = BeautifulSoup(history.content, "html.parser")
+        urls = [link["href"] for link in page.select('a[href^="/files/"]')]
+        assert urls == [f"/files/{stem}{suffix}" for suffix in suffixes]
+        for url in urls:
+            download = client.get(url)
+            assert download.status_code == 200
+            assert download.content == (tmp_path / Path(url).name).read_bytes()
+
+
 def test_raw_files_only_session_files(client, out):
     r = client.get(f"/files/session-{DATE}.json")
     assert r.status_code == 200 and r.json()["schema_version"] == SV
     for bad in ("../pyproject.toml", "settings.yaml", "session-x.py", "..%2F..%2Fetc%2Fpasswd"):
         assert client.get(f"/files/{bad}").status_code == 404
+
+
+@pytest.mark.parametrize("date", ["../pyproject.toml", "..", "2026/10/13", "2026-10-13/../../outside", "2026-10-13\n"])
+def test_outdir_rejects_non_date_path(tmp_path, date):
+    outside = tmp_path / "session-2026-10-13.json"
+    outside.write_text('{"marker":"TRAVERSAL-MARKER"}')
+    nested = tmp_path / "nested" / "out"
+    nested.mkdir(parents=True)
+    with pytest.raises(KeyError):
+        OutDir(nested).load(date)
+    assert OutDir(nested).dates() == []
+    assert "TRAVERSAL-MARKER" in outside.read_text()
+
+
+def test_outside_session_symlink_is_omitted_and_rejected(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    marker = "OUTSIDE-SESSION-MARKER"
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"marker":"' + marker + '"}')
+    (out / f"session-{DATE}.json").symlink_to(Path("..") / outside.name)
+    od = OutDir(out)
+    assert DATE not in od.dates()
+    with pytest.raises(KeyError) as caught:
+        od.load(DATE)
+    assert marker not in str(caught.value)
+
+
+def test_inside_session_symlink_is_not_followed(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    marker = "INSIDE-LINK-TARGET"
+    (out / "decoy.json").write_text('{"marker":"' + marker + '"}')
+    (out / f"session-{DATE}.json").symlink_to("decoy.json")
+    od = OutDir(out)
+    assert od.dates() == []
+    with pytest.raises(KeyError) as caught:
+        od.load(DATE)
+    assert marker not in str(caught.value)
+
+
+@pytest.mark.parametrize("suffix", [
+    ".v1_1.json", ".trace.json", ".trace.json.sha256", ".md", ".watch.json", ".watch.json.sha256",
+])
+def test_artifact_symlink_outside_root_rejects_load(tmp_path, suffix):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / f"session-{DATE}.json").write_text('{"schema_version":"1.1.8"}')
+    marker = "OUTSIDE-ARTIFACT-MARKER"
+    outside = tmp_path / ("outside" + suffix)
+    outside.write_text(marker)
+    (out / f"session-{DATE}{suffix}").symlink_to(Path("..") / outside.name)
+    od = OutDir(out)
+    assert od.dates() == [DATE]
+    with pytest.raises(KeyError) as caught:
+        od.load(DATE)
+    assert marker not in str(caught.value)
+
+
+def test_fifo_sidecar_is_rejected_without_opening(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / f"session-{DATE}.json").write_text('{"schema_version":"1.1.8"}')
+    os.mkfifo(out / f"session-{DATE}.watch.json.sha256")
+    with pytest.raises(KeyError):
+        OutDir(out).load(DATE)
+
+
+def test_session_open_flags_are_nonblocking_and_nofollow():
+    from optpipe.dashboard.data import _FILE_FLAGS
+    assert _FILE_FLAGS & os.O_NONBLOCK
+    assert _FILE_FLAGS & os.O_NOFOLLOW
+    assert _FILE_FLAGS & os.O_CLOEXEC
+    assert (_FILE_FLAGS & os.O_ACCMODE) == os.O_RDONLY
+
+
+def test_single_link_regular_session_still_loads(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    body = '{"schema_version":"1.1.8","marker":"SINGLE-LINK-OK"}\n'
+    path = out / f"session-{DATE}.json"
+    path.write_text(body)
+    assert path.stat().st_nlink == 1
+    od = OutDir(out)
+    assert od.dates() == [DATE]
+    assert od.load(DATE).record["marker"] == "SINGLE-LINK-OK"
+    assert od.read_contained(path.name) == body.encode()
+
+
+def test_hardlink_of_outside_file_is_never_returned(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    marker = "OUTSIDE-HARDLINK-MARKER"
+    outside = tmp_path / "outside.json"
+    outside.write_text('{"marker":"' + marker + '"}')
+    inside = out / f"session-{DATE}.json"
+    os.link(outside, inside)
+    assert inside.stat().st_nlink >= 2 and inside.stat().st_ino == outside.stat().st_ino
+    good_day = "1999-01-05"
+    (out / f"session-{good_day}.json").write_text('{"schema_version":"1.1.8","marker":"GOOD-SESSION"}')
+    od = OutDir(out)
+    assert od.dates() == [good_day]
+    assert marker not in str(od.load(good_day).record)
+    with pytest.raises(KeyError) as caught:
+        od.load(DATE)
+    assert marker not in str(caught.value)
+    with pytest.raises(KeyError) as raw:
+        od.read_contained(inside.name)
+    assert marker not in str(raw.value)
+    response = TestClient(create_app(out)).get(f"/files/{inside.name}")
+    assert response.status_code == 404
+    assert marker not in response.text
+    assert marker in outside.read_text()
+
+
+def test_multi_link_names_sharing_an_inode_are_rejected(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    marker = "NLINK-MARKER"
+    first = out / f"session-{DATE}.json"
+    second = out / "session-1999-01-04.json"
+    first.write_text('{"marker":"' + marker + '"}')
+    os.link(first, second)
+    assert first.stat().st_nlink == 2 and first.stat().st_ino == second.stat().st_ino
+    od = OutDir(out)
+    assert od.dates() == []
+    for day in (DATE, "1999-01-04"):
+        with pytest.raises(KeyError) as caught:
+            od.load(day)
+        assert marker not in str(caught.value)
+    client = TestClient(create_app(out))
+    for name in (first.name, second.name):
+        response = client.get("/files/" + name)
+        assert response.status_code == 404
+        assert marker not in response.text
+
+
+def test_request_string_is_not_the_stat_or_open_path(tmp_path, monkeypatch):
+    out = tmp_path / "out"
+    out.mkdir()
+    body = b'{"schema_version":"1.1.8"}\n'
+    (out / f"session-{DATE}.json").write_bytes(body)
+    requested = f"session-{DATE}.json"
+    stat_paths, open_paths = [], []
+    real_stat, real_open = os.stat, os.open
+
+    def spy_stat(path, *args, **kwargs):
+        if kwargs.get("dir_fd") is not None:
+            stat_paths.append(path)
+        return real_stat(path, *args, **kwargs)
+
+    def spy_open(path, flags, *args, **kwargs):
+        if kwargs.get("dir_fd") is not None:
+            open_paths.append((path, flags))
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "stat", spy_stat)
+    monkeypatch.setattr(os, "open", spy_open)
+    assert OutDir(out).read_contained(requested) == body
+    assert stat_paths and open_paths
+    assert all(path == requested and path is not requested and "/" not in path for path in stat_paths)
+    assert all(path == requested and path is not requested and "/" not in path and flags & os.O_NONBLOCK
+               for path, flags in open_paths)
+    traversal = "../" + requested
+    stat_paths.clear()
+    open_paths.clear()
+    with pytest.raises(KeyError) as caught:
+        OutDir(out).read_contained(traversal)
+    assert "OUTSIDE" not in str(caught.value)
+    assert all(path is not traversal for path in stat_paths)
+    assert all(path is not traversal for path, _flags in open_paths)
+
+
+def test_second_link_between_stat_and_open_is_rejected(tmp_path, monkeypatch):
+    out = tmp_path / "out"
+    out.mkdir()
+    marker = "POST-OPEN-NLINK-MARKER"
+    session = out / f"session-{DATE}.json"
+    session.write_text('{"schema_version":"1.1.8","marker":"' + marker + '"}')
+    extra = out / "session-1999-01-04.json"
+    real_open = os.open
+    linked = {"done": False}
+
+    def linking_open(path, flags, *args, **kwargs):
+        if kwargs.get("dir_fd") is not None and not linked["done"] and path == session.name:
+            linked["done"] = True
+            os.link(session, extra)
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", linking_open)
+    with pytest.raises(KeyError) as caught:
+        OutDir(out).load(DATE)
+    assert marker not in str(caught.value)
+    assert linked["done"] and session.stat().st_nlink == 2
+
+
+def test_fifo_swapped_in_before_open_does_not_block(tmp_path, monkeypatch):
+    """Replace a regular file with a FIFO after lstat and before open.
+
+    This is the swap this process can make deterministically. An attacker in another
+    process is not scheduled here; O_NONBLOCK is what keeps that open from parking,
+    and the post-open fstat rejects the non-regular descriptor.
+    """
+    out = tmp_path / "out"
+    out.mkdir()
+    marker = "FIFO-RACE-MARKER"
+    session = out / f"session-{DATE}.json"
+    session.write_text('{"marker":"' + marker + '"}')
+    real_open = os.open
+    swapped = {"done": False}
+    file_flags = []
+
+    def swapping_open(path, flags, *args, **kwargs):
+        if kwargs.get("dir_fd") is not None and path == session.name:
+            file_flags.append(flags)
+            if not swapped["done"]:
+                swapped["done"] = True
+                os.unlink(session)
+                os.mkfifo(session)
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", swapping_open)
+
+    def _alarm(signum, frame):
+        raise TimeoutError("session open blocked on a FIFO")
+
+    previous = signal.signal(signal.SIGALRM, _alarm)
+    signal.alarm(2)
+    try:
+        with pytest.raises(KeyError) as caught:
+            OutDir(out).load(DATE)
+        assert marker not in str(caught.value)
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+    assert swapped["done"] and file_flags
+    assert all(flags & os.O_NONBLOCK and flags & os.O_NOFOLLOW for flags in file_flags)
+
+
+def test_session_page_rejects_watch_sidecar_symlink(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / f"session-{DATE}.json").write_text('{"schema_version":"1.1.8"}')
+    marker = "OUTSIDE-SIDECAR-MARKER"
+    outside = tmp_path / "outside.sha256"
+    outside.write_text(marker)
+    (out / f"session-{DATE}.watch.json.sha256").symlink_to(Path("..") / outside.name)
+    response = TestClient(create_app(out)).get(f"/s/{DATE}/today")
+    assert response.status_code == 404
+    assert marker not in response.text
+
+
+@pytest.mark.parametrize("name", [
+    "session-1999-01-01.json", "session-1999-01-01.md", "session-1999-01-01.trace.json.sha256",
+])
+def test_raw_symlink_outside_root_is_not_served(tmp_path, name):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / f"session-{DATE}.json").write_text('{"schema_version":"1.1.8"}')
+    marker = "RAW-OUTSIDE-MARKER"
+    outside = tmp_path / "leak-body"
+    outside.write_text(marker)
+    (out / name).symlink_to(outside)
+    client = TestClient(create_app(out))
+    response = client.get(f"/files/{name}")
+    assert response.status_code == 404
+    assert marker not in response.text
+    assert client.get(f"/files/session-{DATE}.json").status_code == 200
+
+
+def test_history_stays_up_when_sidecar_symlink_escapes(tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / f"session-{DATE}.json").write_text('{"schema_version":"1.1.8","risk_reviews":[],"idea_log":[]}')
+    outside = tmp_path / "outside.sha256"
+    outside.write_text("OUTSIDE-SIDECAR-MARKER")
+    (out / f"session-{DATE}.watch.json.sha256").symlink_to(Path("..") / outside.name)
+    response = TestClient(create_app(out)).get("/history")
+    assert response.status_code == 200
+    assert "OUTSIDE-SIDECAR-MARKER" not in response.text
+    assert "unreadable" in response.text
 
 
 def test_integrity_detects_tampering(out, tmp_path):

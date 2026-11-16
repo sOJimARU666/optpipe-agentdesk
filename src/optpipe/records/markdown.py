@@ -14,8 +14,11 @@ def _v(f: Any) -> str:
     if not isinstance(f, dict) or "status" not in f:
         return "-" if f is None else str(f)
     if f["status"] == "conflicting":
-        alts = "; ".join(f"{a.get('value')} ({a.get('source_id')})" for a in f.get("alternatives") or [])
-        return f"CONFLICTING [{alts}]"
+        evidence = []
+        for item in f["conflicts"]:
+            when = f"as of {item['as_of']}" if item["as_of"] is not None else "time unknown"
+            evidence.append(f"{item['value']} ({item['source_id']}, {when})")
+        return "CONFLICTING [" + "; ".join(evidence) + "]"
     if f["value"] is None:
         return f"{f['status'].upper()}"
     return f"{f['value']}" + ("" if f["status"] == "ok" else f" ({f['status']})")

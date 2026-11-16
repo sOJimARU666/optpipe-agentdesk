@@ -19,6 +19,11 @@ from .iv import BS_NOTE, ExpiryIv, IvHistoryStore, atm_iv, implied_vol, interpol
 
 MAX_SLICE_DTE = 60          # keep chain slices within ~2 months (record size)
 PRIOR_NOTE = "prior-session close quote; options do not trade premarket"
+
+
+def _publisher(url: Optional[str], default: str) -> str:
+    u = str(url or "")
+    return "Oodle pack" if u.startswith("pack:") or u.startswith("urn:optpipe:pack:") else default
 GREEK_NOTE = "not provided by Nasdaq chain"
 MACRO_HORIZON_DAYS = 120    # macro events kept in the record; coverage is capped to the same horizon
 
@@ -122,7 +127,8 @@ class ResearchAgent(Agent[ResearchInput, ResearchOutput]):
         if q is not None:
             fetched = q.fetched_at or inp.as_of
             sources.append({"id": info_id, "url": q.source or "urn:poodle:unknown", "fetched_at": fetched.isoformat(),
-                            "kind": "quote_api", "publisher": "Nasdaq", "realtime": bool(q.is_realtime)})
+                            "kind": "quote_api", "publisher": _publisher(q.source, "Nasdaq"),
+                            "realtime": bool(q.is_realtime)})
             quote, volume = self._quote(q, info_id, fetched)
             if self.events is not None:
                 try:
@@ -138,7 +144,8 @@ class ResearchAgent(Agent[ResearchInput, ResearchOutput]):
             chain = self.chains.get_chain(p.symbol, q)
             fetched = chain.fetched_at or inp.as_of
             sources.append({"id": chain_id, "url": chain.source or "urn:poodle:unknown",
-                            "fetched_at": fetched.isoformat(), "kind": "option_chain_api", "publisher": "Nasdaq",
+                            "fetched_at": fetched.isoformat(), "kind": "option_chain_api",
+                            "publisher": _publisher(chain.source, "Nasdaq"),
                             "realtime": chain.quote_basis == QuoteBasis.REALTIME})
             slices, per_exp, spot_note = self._slices(chain, q, chain_id, fetched, inp, self.rate)
             iv, iv_src, n = self._iv30(p.symbol, slices, per_exp, chain_id, inp, spot_note)
@@ -170,9 +177,24 @@ class ResearchAgent(Agent[ResearchInput, ResearchOutput]):
         if self.iv_store is None or obs_date is None:
             hist = MISS(note="no IV history store configured" if self.iv_store is None else "no current IV")
         else:
-            h = self.iv_store.history(symbol, obs_date, inp.as_of)
+            from ..mdfeeds import history_reasons
+            raw_dates = []
+            for o in self.iv_store.load(symbol):
+                try:
+                    raw_dates.append(date.fromisoformat(str(o["date"])))
+                except (KeyError, TypeError, ValueError):
+                    continue
+            # LOOKAHEAD / a naive clock must not be shown as a usable series. A short series that simply
+            # does not reach the last completed session stays visible: R10 then says UNKNOWN (below 20 points)
+            # or scores it. decision_reasons applies the full history_reasons check, including STALE-HISTORY,
+            # when a caller passes the observation dates.
+            blocked = [e for e in history_reasons(raw_dates, now=inp.as_of, what=f"{symbol}.iv_history")
+                       if "MD-19-LOOKAHEAD" in e or "MD-19-TZ" in e or "MD-19-CALENDAR" in e]
+            h = [] if blocked else self.iv_store.history(symbol, obs_date, inp.as_of)
             hid = f"src-optpipe-iv-history-{slug(symbol)}"
-            if not h:
+            if blocked:
+                hist = MISS(note="; ".join(blocked))
+            elif not h:
                 hist = MISS(note=f"0 daily IV30 observations before {obs_date.isoformat()} "
                                  f"(R10 needs {self.iv_min_history}); history starts accumulating with this run")
             else:
