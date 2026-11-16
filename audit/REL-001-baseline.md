@@ -2,6 +2,15 @@
 
 Status: **source inventory reviewed; execution evidence pending**. This document is not a claim that tests were executed or that any security gate has closed.
 
+## Correction notes (2026-11-16)
+
+The original text below is preserved unchanged as historical evidence of the 2026-11-06 inspection. Two statements in it are corrected here. Verified against GitHub (main `871b1b620dc4564a30d81723bb07a362be8156f4`) and the tree on 2026-11-16:
+
+1. **PR #23 is merged, not draft.** PR #23 (`feat/oodle-pr-b`, "FEAT-OODLE-01 PR B") was merged into `main` on 2026-11-06T06:01:27Z as merge commit `1b1d7c4cabd0d68b38cd2fb02bc28421abb47b1b`, merged by `sOJimARU666`. Its final head was `6ec3cf30165f77ca84ab9dbf4139fac2fb0fc3cf` (33 changed files), not the `432d9fd1...` head (27 files) quoted in the section "PR #23 isolation and open blockers". The CHANGES REQUIRED state and the unverified R7 closure claims quoted there describe `432d9fd1...` only; they say nothing about the merged head. R6 / R7 / MD-18 / SEC-GATE-001 gate status is not changed by this note.
+2. **`tests/test_marketdata_review22.py` has 20 named test definitions, not 19.** Verified by counting `def test_` in the file on both main `871b1b62` and this branch's pre-merge head `d4ad49ad`: 20 in each. The 36 (`test_marketdata_loader.py`) and 46 (`test_marketdata_r7.py`) counts re-verified unchanged. Like the other counts, 20 is a source-level count of definitions, not a pytest collection total (parametrised tests expand further).
+
+Additional observation (not a correction of a stated claim): on main, `tests/test_pr_b_packs.py` has 12 and `tests/test_pr_b_sol_r7.py` has 9 `def test_` definitions, versus 11 and 8 quoted for the draft head `432d9fd1...`.
+
 Repository: `sOJimARU666/optpipe-agentdesk`
 Branch: `sol/phase1-reliability`
 Baseline: `e5de176f33553b65567a3764f62a1f5181adef5a` (main / PR #22 merge at inspection)
