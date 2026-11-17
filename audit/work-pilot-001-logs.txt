@@ -1,0 +1,139 @@
+===== cli-run.log =====
+PAPER ONLY | FICTIONAL DEMO | sess-2026-10-13 | run run-premarket (premarket, fixtures) | 07:52 New York / 13:52 CEST Berlin
+candidates: JPM, WDC, AAPL, MSFT
+  VETO  tkt-jpm-bcs-340-350            qty 1 limit 3.1 debit max loss $310.0 <- R01_QUOTE_FRESHNESS, R02_BID_ASK_WIDTH, R03_OPEN_INTEREST, R09_EARLY_ASSIGNMENT flags R08_MACRO_EVENTS, R10_IV_VS_HISTORY
+  VETO  tkt-jpm-bps-335-325            qty 1 limit 3.85 debit max loss $385.0 <- R01_QUOTE_FRESHNESS, R02_BID_ASK_WIDTH, R03_OPEN_INTEREST flags R08_MACRO_EVENTS, R10_IV_VS_HISTORY
+  VETO  tkt-wdc-bps-360-350            qty 1 limit 2.9 debit max loss $290.0 <- R01_QUOTE_FRESHNESS, R02_BID_ASK_WIDTH, R07_EARNINGS_IN_WINDOW flags R08_MACRO_EVENTS, R10_IV_VS_HISTORY
+  VETO  tkt-wdc-bcs-365-375            qty 1 limit 3.9 debit max loss $390.0 <- R01_QUOTE_FRESHNESS, R02_BID_ASK_WIDTH, R03_OPEN_INTEREST, R07_EARNINGS_IN_WINDOW, R09_EARLY_ASSIGNMENT flags R08_MACRO_EVENTS, R10_IV_VS_HISTORY
+recommendation: NO TRADE - every ticket was vetoed by the Risk Officer (or none could be built)
+data quality: 960 missing, 1333 stale, 10 conflicting
+validate_session: OK (record 1.1.6, Doodle's schema)
+trace: discovery(320ms) -> research(93ms) -> planner(10ms) -> risk_officer(94ms) -> watcher(1ms)
+wrote ../pilot001/smoke/session-2026-10-13.json  sha256 b405421aa8e818c76e8bd0fc1c6bfc627d4c40bfe3fd1a5b42457483bd8c93c9  (schema 1.1.6, trace_ref -> session-2026-10-13.trace.json)
+wrote ../pilot001/smoke/session-2026-10-13.trace.json  sha256 07e6780ef148b95793277bfcaf5ddbb6baa428d8b1a85b79b90756b5305bf58c
+wrote ../pilot001/smoke/session-2026-10-13.md
+validate_session session-2026-10-13.json: OK as 1.1.6 (schema + invariants INV-01..17)
+
+===== cli-validate.log =====
+session_ref OK (606bfaaa39416296...)
+OK: 0 errors
+
+===== generated-models.log =====
+models up to date
+
+===== integration-initial.log =====
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-9.2.0, pluggy-1.7.0 -- <pilot-workspace>/pilot001/integration/../../optpipe-agentdesk/.venv/bin/python
+rootdir: <pilot-workspace>/pilot001/integration
+configfile: pyproject.toml
+collecting ... collected 2 items
+
+tests/test_r7_7_failure_replay.py::test_r7_7_failure_replay_receipt FAILED [ 50%]
+tests/test_r7_7_failure_replay.py::test_r7_7_shallow_checkout_enforces_identity FAILED [100%]
+
+=================================== FAILURES ===================================
+_______________________ test_r7_7_failure_replay_receipt _______________________
+tests/test_r7_7_failure_replay.py:199: in test_r7_7_failure_replay_receipt
+    verify_base_identity(
+tests/test_r7_7_failure_replay.py:114: in verify_base_identity
+    assert _outside_slice_sha256(root, slice_files) == outside_sha256
+E   AssertionError: assert 'c18425270b5c2c4673ff3601d4e67cba8c239670dd4f4e274d977c8b7fcbabe7' == 'dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504'
+E
+E     - dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504
+E     + c18425270b5c2c4673ff3601d4e67cba8c239670dd4f4e274d977c8b7fcbabe7
+_________________ test_r7_7_shallow_checkout_enforces_identity _________________
+tests/test_r7_7_failure_replay.py:355: in test_r7_7_shallow_checkout_enforces_identity
+    test_r7_7_failure_replay_receipt(tmp_path / "replay")
+tests/test_r7_7_failure_replay.py:199: in test_r7_7_failure_replay_receipt
+    verify_base_identity(
+tests/test_r7_7_failure_replay.py:114: in verify_base_identity
+    assert _outside_slice_sha256(root, slice_files) == outside_sha256
+E   AssertionError: assert 'c18425270b5c2c4673ff3601d4e67cba8c239670dd4f4e274d977c8b7fcbabe7' == 'dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504'
+E
+E     - dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504
+E     + c18425270b5c2c4673ff3601d4e67cba8c239670dd4f4e274d977c8b7fcbabe7
+----------------------------- Captured stdout call -----------------------------
+[master (root-commit) 71d80d1] base
+ 4 files changed, 4 insertions(+)
+ create mode 100644 config/settings.yaml
+ create mode 100644 src/prod.py
+ create mode 100644 tests/keep.py
+ create mode 100644 tests/slice_a.py
+[master 90c2b08] slice
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+[master 8dd10b1] prod edit
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+=========================== short test summary info ============================
+FAILED tests/test_r7_7_failure_replay.py::test_r7_7_failure_replay_receipt - AssertionError: assert 'c18425270b5c2c4673ff3601d4e67cba8c239670dd4f4e274d977c8b7fcbabe7' == 'dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504'
+
+  - dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504
+  + c18425270b5c2c4673ff3601d4e67cba8c239670dd4f4e274d977c8b7fcbabe7
+FAILED tests/test_r7_7_failure_replay.py::test_r7_7_shallow_checkout_enforces_identity - AssertionError: assert 'c18425270b5c2c4673ff3601d4e67cba8c239670dd4f4e274d977c8b7fcbabe7' == 'dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504'
+
+  - dbab3605ce50ba1f7e136f7de58f131334322aeb7e6ca3062c3bc4d73b6f3504
+  + c18425270b5c2c4673ff3601d4e67cba8c239670dd4f4e274d977c8b7fcbabe7
+============================== 2 failed in 0.51s ===============================
+
+===== network-guard.log =====
+ok: socket.create_connection blocked by the network guard (network guard: socket.create_connection is blocked during tests (PAPER ONLY, offline suite))
+ok: urllib GET blocked by the network guard (network guard: urllib.request.urlopen is blocked during tests (PAPER ONLY, offline suite))
+ok: requests GET blocked by the network guard (network guard: requests.Session.request GET http://127.0.0.1:9/ is blocked during tests (PAPER ONLY, offline suite))
+netguard CI check: PASS
+
+===== pr31-initial.log =====
+============================= test session starts ==============================
+platform linux -- Python 3.12.14, pytest-9.2.0, pluggy-1.7.0 -- <pilot-workspace>/pilot001/../optpipe-agentdesk/.venv/bin/python
+rootdir: <pilot-workspace>/pilot001/pr31
+configfile: pyproject.toml
+collecting ... collected 2 items
+
+pr31/tests/test_r7_7_failure_replay.py::test_r7_7_failure_replay_receipt PASSED [ 50%]
+pr31/tests/test_r7_7_failure_replay.py::test_r7_7_shallow_checkout_enforces_identity PASSED [100%]
+
+======================== 2 passed in 192.84s (0:03:12) =========================
+
+===== reliability-baseline.log =====
+........................................................................ [  4%]
+....................sss................................................. [  9%]
+........................................................................ [ 14%]
+........................................................................ [ 19%]
+........................................................................ [ 23%]
+........................................................................ [ 28%]
+........................................................................ [ 33%]
+........................................................................ [ 38%]
+........................................................................ [ 42%]
+........................................................................ [ 47%]
+........................................................................ [ 52%]
+........................................................................ [ 57%]
+........................................................................ [ 61%]
+........................................................................ [ 66%]
+........................................................................ [ 71%]
+........................................................................ [ 76%]
+........................................................................ [ 80%]
+........................................................................ [ 85%]
+..........................................................s............. [ 90%]
+........................................................................ [ 95%]
+........................................................................ [ 99%]
+.                                                                        [100%]
+=========================== short test summary info ============================
+SKIPPED [3] tests/test_live_spec.py: live-spec comparison: opt in with `-m live_spec` or OPTPIPE_LIVE_SPEC_TESTS=1
+SKIPPED [1] tests/test_watch_live.py:23: live test: run with `-m live` or OPTPIPE_LIVE_TESTS=1
+1509 passed, 4 skipped in 235.31s (0:03:55)
+
+===== spec-patch.log =====
+spec_patches up to date
+
+===== spec-pin-after.log =====
+OK: spec is the pinned spec 1.1.8 (manifest sha256 0837c74c79c1dd0ee3bb51f515304f058fd85494856a0a58faeea4399de27cd5, 191 files + 2 v1 files + frozen 1.1.0, 1.1.1, 1.1.2, 1.1.3, 1.1.4, 1.1.5, 1.1.6, 1.1.7, synced 2026-11-03T16:12:23+01:00)
+
+===== spec-pin-before.log =====
+OK: spec is the pinned spec 1.1.8 (manifest sha256 0837c74c79c1dd0ee3bb51f515304f058fd85494856a0a58faeea4399de27cd5, 191 files + 2 v1 files + frozen 1.1.0, 1.1.1, 1.1.2, 1.1.3, 1.1.4, 1.1.5, 1.1.6, 1.1.7, synced 2026-11-03T16:12:23+01:00)
+
+===== final-hygiene.log =====
+........................................................................ [ 71%]
+.............................                                            [100%]
+101 passed in 9.09s
+
+===== packaged-hygiene.log =====
+.......                                                                  [100%]
+7 passed in 3.04s

@@ -1,0 +1,7 @@
+9ee9834f7eb8a6779efa38e79a010a64c205ff82f08251aa0a50f2a7a34fd9bc  audit/REL-001-baseline.md
+6d048063f04bc7259424c56e5b83468dd491830ac94bb0f536400994a900f550  audit/REL-002-test-gap-matrix.md
+814fecbb025368d283de93596b71752528d60978de25230b90259e695a00388f  audit/WORK-PILOT-001.md
+6ca57364db0408a85ad3205359f16740004ab7df7727a83b351123fc4aad7617  audit/work_pilot_001_reproduce.py
+c502ebc7754a0b396b4f511b3875c1f5b580b0fb9bb0a90e3df4d6e53879d04a  audit/work-pilot-001-identity.json
+f5ab3bb3b3ca8c5d89bd5e9c559aae3c597e815e075c62b991bacb94b5f2fd18  audit/work-pilot-001-results.json
+039f7e66a06284e5fa6df42db21bc4a4a8fcd9bcbae1604e5ad99f7d8ac1c942  audit/work-pilot-001-logs.txt

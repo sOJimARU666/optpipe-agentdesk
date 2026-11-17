@@ -1,0 +1,277 @@
+{
+  "closure_claim": "none",
+  "date": "2026-11-06",
+  "environment": {
+    "dependencies": {
+      "Jinja2": "3.1.6",
+      "PyYAML": "6.0.3",
+      "beautifulsoup4": "4.15.0",
+      "datamodel-code-generator": "0.90.0",
+      "fastapi": "0.141.1",
+      "httpx": "0.28.1",
+      "jsonschema": "4.26.0",
+      "lxml": "6.1.1",
+      "pydantic": "2.13.4",
+      "pytest": "9.2.0",
+      "requests": "2.34.2",
+      "uvicorn": "0.52.1"
+    },
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.41",
+    "python": "3.12.14"
+  },
+  "environment_setup": "python3 -m venv --system-site-packages .pilot-venv; .pilot-venv/bin/python -m pip install -e '.[dev]' --disable-pip-version-check; renamed to .venv and refreshed editable optpipe and datamodel-code-generator==0.90.0 entry points; dependency declarations unchanged",
+  "executed_checks": [
+    {
+      "argv": [
+        ".venv/bin/python",
+        "scripts/sync_spec.py",
+        "--check",
+        "--dest",
+        "spec"
+      ],
+      "check": "spec-pin-before",
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "tests/netguard/ci_check_blocked.py"
+      ],
+      "check": "network-guard",
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "scripts/gen_models.py",
+        "--check"
+      ],
+      "check": "generated-models",
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "scripts/make_spec_patch.py",
+        "--check"
+      ],
+      "check": "spec-patch",
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "optpipe.cli",
+        "run",
+        "--fixtures",
+        "tests/fixtures/2026-10-13",
+        "--out",
+        "../pilot001/smoke"
+      ],
+      "check": "cli-run",
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "-m",
+        "optpipe.cli",
+        "validate",
+        "../pilot001/smoke/session-2026-10-13.json"
+      ],
+      "check": "cli-validate",
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        ".venv/bin/python",
+        "scripts/sync_spec.py",
+        "--check",
+        "--dest",
+        "spec"
+      ],
+      "check": "spec-pin-after",
+      "exit_code": 0
+    }
+  ],
+  "executed_tests": [
+    {
+      "command": ".venv/bin/python -m pytest -p no:cacheprovider -o addopts= -q -rs",
+      "cwd": "optpipe-agentdesk",
+      "exit_code": 0,
+      "failed": 0,
+      "name": "reliability_full_offline",
+      "passed": 1509,
+      "seconds": 235.31,
+      "sha": "d4ad49ad1eae03cc41f144cb4a01bfb81d5fab36",
+      "skipped": 4
+    },
+    {
+      "command": "../optpipe-agentdesk/.venv/bin/python -m pytest -p no:cacheprovider -o addopts= -vv --tb=short pr31/tests/test_r7_7_failure_replay.py",
+      "cwd": "pilot001",
+      "exit_code": 0,
+      "failed": 0,
+      "name": "pr31_original",
+      "passed": 2,
+      "seconds": 192.84,
+      "sha": "26d7aa57666c55df4f77fea82c5aae9d832d1788",
+      "skipped": 0
+    },
+    {
+      "command": "../../optpipe-agentdesk/.venv/bin/python -m pytest -p no:cacheprovider -o addopts= -vv --tb=short tests/test_r7_7_failure_replay.py",
+      "cwd": "pilot001/integration",
+      "exit_code": 1,
+      "failed": 2,
+      "failure_location": "tests/test_r7_7_failure_replay.py:114",
+      "name": "pr31_current_main_simulation",
+      "passed": 0,
+      "seconds": 0.51,
+      "sha": "c16ba1db89c5386d28de1d1b18c23f96f807e1c7",
+      "skipped": 0,
+      "synthetic": true,
+      "tree": "951bced2263d94b9e75441b9d1701be0f4d46a12"
+    },
+    {
+      "command": ".venv/bin/python -m pytest -p no:cacheprovider -o addopts= -q tests/test_repo_hygiene.py tests/test_paper_only.py",
+      "exit_code": 0,
+      "failed": 0,
+      "name": "final_audit_hygiene_and_paper_only",
+      "passed": 101,
+      "seconds": 9.09,
+      "skipped": 0
+    },
+    {
+      "command": ".venv/bin/python -m pytest -p no:cacheprovider -o addopts= -q tests/test_repo_hygiene.py",
+      "exit_code": 0,
+      "failed": 0,
+      "name": "packaged_audit_hygiene",
+      "passed": 7,
+      "skipped": 0
+    }
+  ],
+  "final_identity_recheck": {
+    "byte_identical_to_saved_identity_json": true,
+    "exit_code": 0
+  },
+  "github_observed": [
+    {
+      "app": "1509 passed, 4 skipped",
+      "conclusion": "success",
+      "head_sha": "d4ad49ad1eae03cc41f144cb4a01bfb81d5fab36",
+      "job_id": 127864470584,
+      "run_id": 42209539941,
+      "spec": "911 passed"
+    },
+    {
+      "app": "1547 passed, 3 skipped",
+      "conclusion": "success",
+      "job_id": 127799029489,
+      "pr_head_sha": "26d7aa57666c55df4f77fea82c5aae9d832d1788",
+      "run_id": 42189891890,
+      "spec": "911 passed",
+      "tested_merge_sha": "bb04990b3dd3574209f866064df6a927c7848882"
+    }
+  ],
+  "independent_oracle": {
+    "command": "python3 audit/work_pilot_001_reproduce.py > audit/work-pilot-001-identity.json",
+    "exit_code": 0,
+    "outcomes": [
+      "accept_original",
+      "reject_integration",
+      "accept_original"
+    ],
+    "uses_new_dependencies": false,
+    "uses_pytest": false
+  },
+  "limits": [
+    "Python 3.12.14 locally versus Python 3.13 in CI",
+    "Dependency versions differ from PR author capture",
+    "Python guard is not OS-level egress isolation",
+    "No closure of R6/R7/MD-18/SEC-GATE-001"
+  ],
+  "log_sanitization": "workspace prefix replaced; trailing whitespace removed; raw source hashes retained",
+  "not_executed": [
+    "REL-003 historical secret scan",
+    "REL-004 Ruff baseline",
+    "full pinned-spec pytest suite locally",
+    "full current-main application suite",
+    "full application suite on simulated integration"
+  ],
+  "pilot": "SOL AI LAB WORK PILOT 001",
+  "publication": {
+    "error": "Resource not accessible by integration",
+    "github_write": "blocked",
+    "handoff": "complete local patch for existing Sol-Soodle Gmail relay; remote application not yet confirmed",
+    "http_status": 403,
+    "operation": "create_tree",
+    "remote_ref_changed": false
+  },
+  "raw_logs": {
+    "cli-run.log": {
+      "raw_sha256": "e1dde1b4e1552de64fbd7b9928e0e336551d34f5569c36fb1943d6962f8b843d",
+      "sanitized_sha256": "e1dde1b4e1552de64fbd7b9928e0e336551d34f5569c36fb1943d6962f8b843d"
+    },
+    "cli-validate.log": {
+      "raw_sha256": "dae44440888758f23c87e740542642db6a1a7e352597278034393f3f8a684083",
+      "sanitized_sha256": "dae44440888758f23c87e740542642db6a1a7e352597278034393f3f8a684083"
+    },
+    "final-hygiene.log": {
+      "raw_sha256": "9b6a11a000f5db1c3217046fac3587e2ba28991c6073e46dd4e83398d488d23b",
+      "sanitized_sha256": "9b6a11a000f5db1c3217046fac3587e2ba28991c6073e46dd4e83398d488d23b"
+    },
+    "generated-models.log": {
+      "raw_sha256": "7e2d44b137da4282ad775451a61f8959db6de8891bc6d1f0d3836cac621c2a0c",
+      "sanitized_sha256": "7e2d44b137da4282ad775451a61f8959db6de8891bc6d1f0d3836cac621c2a0c"
+    },
+    "integration-initial.log": {
+      "raw_sha256": "c1313e02ef771f065a3b113a60cf44f8a0ef38498fdafe434c9b1c66c1e614f2",
+      "sanitized_sha256": "f6b7a1107c9165072180c0ff3c72760a579abaa7357d24d1897d8c7a809d8764"
+    },
+    "network-guard.log": {
+      "raw_sha256": "14f3d3f7f1dbbb81fbc58984ca15925b4ae013360af849bd2b4b4534b8bce278",
+      "sanitized_sha256": "14f3d3f7f1dbbb81fbc58984ca15925b4ae013360af849bd2b4b4534b8bce278"
+    },
+    "packaged-hygiene.log": {
+      "raw_sha256": "7f80ef12350636847098508bca85b72dc30f3ad3e1b48a41400e3c0a8360dacf",
+      "sanitized_sha256": "7f80ef12350636847098508bca85b72dc30f3ad3e1b48a41400e3c0a8360dacf"
+    },
+    "pr31-initial.log": {
+      "raw_sha256": "f152740b23287a44766d8abaf6434f4927b364c846cb3009ca1f062d9a1d776d",
+      "sanitized_sha256": "d7f148460d511ed12a422d5fd3a5d82166fa4707d5427d5685a06a453f5c8c90"
+    },
+    "reliability-baseline.log": {
+      "raw_sha256": "eb901f004562ece6cd5b8e74f8d8dfa39144c7a68b037b0166439e8790869e64",
+      "sanitized_sha256": "eb901f004562ece6cd5b8e74f8d8dfa39144c7a68b037b0166439e8790869e64"
+    },
+    "spec-patch.log": {
+      "raw_sha256": "c30b14b38b1d0dce7c4b08c1f6f752bd996491c74465fe8f411d58639e24af62",
+      "sanitized_sha256": "c30b14b38b1d0dce7c4b08c1f6f752bd996491c74465fe8f411d58639e24af62"
+    },
+    "spec-pin-after.log": {
+      "raw_sha256": "bca3340ead00318474bd422da6fa2a5635d080b1f88d68bba3052c54398b2220",
+      "sanitized_sha256": "bca3340ead00318474bd422da6fa2a5635d080b1f88d68bba3052c54398b2220"
+    },
+    "spec-pin-before.log": {
+      "raw_sha256": "bca3340ead00318474bd422da6fa2a5635d080b1f88d68bba3052c54398b2220",
+      "sanitized_sha256": "bca3340ead00318474bd422da6fa2a5635d080b1f88d68bba3052c54398b2220"
+    }
+  },
+  "source_sha": "d4ad49ad1eae03cc41f144cb4a01bfb81d5fab36",
+  "team_reported_not_reproduced": {
+    "P03_mutation": [
+      "6 passed",
+      "5 failed / 1 passed",
+      "6 passed"
+    ],
+    "independent_reviewer_receipt": "not retrieved",
+    "source": "Soodle relay dated 2026-11-06, Moodle execution"
+  },
+  "test_environment": {
+    "OPTIONS_SPEC_DIR": "<tested-tree>/spec",
+    "OPTPIPE_NETGUARD": "1",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONPATH": "<tested-tree>/tests/netguard:<tested-tree>/src"
+  }
+}
