@@ -125,8 +125,9 @@ def test_the_48_frozen_cases_are_unchanged_and_keep_their_outcomes():
     cur = {c["id"]: c for c in twr.CASES}
     for c in old:
         assert cur[c["id"]] == c, c["id"]          # same case, same expectation
-        twr.test_watcher_case(c)                   # and the 1.1.5 reference still produces it
-    assert sorted(set(cur) - {c["id"] for c in old}) == [f"SCOPE-{x}" for x in "hijklmnopqr"]
+        twr.test_watcher_case(c)                   # and the current reference still produces it
+    extra = sorted([f"SCOPE-{x}" for x in "hijklmnopqr"] + list(twr.SLICE1_NEW_IDS))
+    assert sorted(set(cur) - {c["id"] for c in old}) == extra
 
 
 def test_only_scope_and_version_changed_in_watcher_rules_yaml():
@@ -134,8 +135,9 @@ def test_only_scope_and_version_changed_in_watcher_rules_yaml():
     assert set(cur) - set(old) <= {"real_approval"}   # spec 1.1.6 added real_approval (its top-level target_precedence was removed in 1.1.7)
     assert set(old) <= set(cur)
     for k in old:
-        if k not in ("watcher_version", "scope", "tests"):
+        if k not in ("watcher_version", "scope", "tests", "config", "dedupe", "rules"):
             assert old[k] == cur[k], k
+    twr.assert_slice1_watcher_delta(old, cur)
     assert {k: v for k, v in cur["scope"].items() if k != "target_precedence"} == old["scope"]
 
 

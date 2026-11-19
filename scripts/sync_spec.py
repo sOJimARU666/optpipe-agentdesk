@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SOURCE = ROOT.parent / "trading" / "spec"     # Doodle's live folder, the sibling of this repo
 DEFAULT_DEST = ROOT / "spec"
 EXPECTED_VERSION = "1.1.8"
-EXPECTED_MANIFEST_SHA256 = "0837c74c79c1dd0ee3bb51f515304f058fd85494856a0a58faeea4399de27cd5"
+EXPECTED_MANIFEST_SHA256 = "757f04d78b1dbe0695d5691c9c3ecdd69fcaa220f2b963b9bd0d8bd01ca4d037"
 MANIFEST, VERSION, PIN = "MANIFEST.sha256", "VERSION", "PIN.json"
 V1_FILES = ("_v1_backup/session.schema.json", "_v1_backup/session.example.json")
 # Frozen earlier releases that Doodle's own tests read (spec 1.1.8 test_release_v1_1_8.py runs the frozen 1.1.7

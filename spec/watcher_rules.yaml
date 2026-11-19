@@ -21,7 +21,8 @@ config:
   iv_exit_change_long_premium: "-0.35"     # W03 long premium (debit) only
   time_stop_warn_extra_days: 2             # W04 warn when DTE <= time-stop DTE + 2
   time_stop_exit_at: "10:00"               # W04 NY, on the time-stop date
-  expiry_exit_at: "14:00"                  # W04 NY, on expiry day while any leg is open
+  expiry_exit_before_close_minutes: 120    # W04: exit when now >= session close minus this, while the session is still open (14:00 on a 16:00 close, 11:00 on a 13:00 early close)
+  expiry_exit_at: "14:00"                  # derived label only: equals close-120 on a 16:00 regular close. Not the compare used on early-close days.
   assignment_warn_dte: 5                   # W05
   assignment_min_extrinsic: "0.05"         # W05
   event_kinds: [CPI, PPI, FOMC, NFP, earnings]   # W07
@@ -76,10 +77,14 @@ polling:
 dedupe:
   key: "(rule_id, target_id, level)"
   rule: >-
+    A watcher trading session is the America/New_York calendar date of now while the NYSE regular session is open
+    (09:30 until that day's close, including a 13:00 early close). Weekends and holidays are not sessions.
     An alert is sent only if its level is higher than the highest level already sent for (rule_id, target_id) this session
     (same level again = duplicate, lower = no de-escalation alert). Within cooldown_minutes after the last alert sent for
     (rule_id, target_id), a new alert is held back unless it escalates to exit_signal. Suppressed or held-back alerts do
-    not update the state. The shadow summary is deduped per (target_id, NY date).
+    not update the state. At the start of poll, if state.session_date is set and differs from the NY date of now, sent
+    and last_at entries whose keys do not start with SHADOW_EOD| are cleared, wide_streak is cleared, and session_date
+    becomes that NY date. The shadow summary stays deduped per (target_id, NY date) and is not cleared by that reset.
 
 alert_fields: [rule_id, level, target_id, value, threshold, quote_as_of, at, detail, message]
 message_format: "[{level}] {rule_id} {target_id}: {detail} | value={value} threshold={threshold} quote_as_of={quote_as_of} | alert only, no order"
@@ -114,7 +119,7 @@ rules:
   - id: W04_TIME
     inputs: ["now", "time_stop", "legs[].expiry"]
     warn: "DTE <= time-stop DTE + 2"
-    exit_signal: "time_stop set and now >= 10:00 NY on the time-stop date (persists on later days while open); OR now on an open leg's expiry date and NY time >= 14:00"
+    exit_signal: "time_stop set and now >= 10:00 NY on the time-stop date (persists on later days while open); OR any open leg expires on the NY date of now and now >= session close minus expiry_exit_before_close_minutes (120; 14:00 on a 16:00 close, 11:00 on a 13:00 early close) while the session is still open"
     no_time_stop: "time_stop null -> warn at DTE <= 2 (time-stop DTE taken as 0), expiry-day rule only"
   - id: W05_SHORT_LEG_ASSIGNMENT
     inputs: ["legs[side=sell]", "underlying.last", "ex_dividend"]
@@ -124,7 +129,7 @@ rules:
   - id: W06_DATA_HEALTH
     inputs: ["underlying.last", "legs[].bid", "legs[].ask", "state.wide_streak"]
     warn: "any quote stale (see definitions) during market hours; OR a leg's (ask-bid)/mid > 0.25 for 3 consecutive polls (mid <= 0 counts as wide)"
-    effect: "while any quote is stale, exit_signal alerts from W01-W05 are suppressed (not sent, not recorded) - they fire on the first fresh poll"
+    effect: "while any quote is stale, exit_signal alerts from W01-W03 and W05 are suppressed (not sent, not recorded) - they fire on the first fresh poll; W04_TIME is never suppressed for staleness"
   - id: W07_EVENT_EVE
     inputs: ["events", "hold_window", "underlying.symbol"]
     info: "NY date(now) is the trading day before an event's NY date, kind in event_kinds (earnings only for this underlying), and the event lies inside [hold_window.start, hold_window.end]"
@@ -233,3 +238,15 @@ tests:
   - {id: W07-b, desc: "Fri 10-23: JPM earnings Mon 10-26 (prev trading day is Fri) -> info", append: {events: [{event_id: ev-jpm-earn, kind: earnings, underlying: JPM, at: "2026-10-26T07:00:00-04:00"}]}, set: {now: "2026-10-23T11:00:00-04:00", underlying.last.as_of: "2026-10-23T10:59:00-04:00", legs.0.bid.as_of: "2026-10-23T10:59:00-04:00", legs.0.ask.as_of: "2026-10-23T10:59:00-04:00", legs.1.bid.as_of: "2026-10-23T10:59:00-04:00", legs.1.ask.as_of: "2026-10-23T10:59:00-04:00", underlying.bars_5m: []}, expect: {alerts: [[W07_EVENT_EVE, info]]}}
   - {id: W07-c, desc: "other underlying's earnings eve (WFC 10-21) and a PPI on 10-21 before the hold window starts (10-22) -> nothing", append: {events: [{event_id: ev-wfc, kind: earnings, underlying: WFC, at: "2026-10-21T07:00:00-04:00"}, {event_id: ev-ppi, kind: PPI, underlying: null, at: "2026-10-21T08:30:00-04:00"}]}, set: {target: {kind: ticket, id: tk-1, ticket_id: tk-1, status: approved_pending}, hold_window.start: "2026-10-22T09:30:00-04:00"}, expect: {alerts: []}}
   - {id: W07-d, desc: "same PPI with the window starting 10-14 -> info", append: {events: [{event_id: ev-ppi, kind: PPI, underlying: null, at: "2026-10-21T08:30:00-04:00"}]}, expect: {alerts: [[W07_EVENT_EVE, info]]}}
+  # D01-D06 behaviour on the 1.1.8 pin (no version bump). Original cases, including W06-d, are unchanged.
+  - {id: W04-g, desc: "early-close expiry 2026-11-27 11:00 NY (13:00 close minus 120 min) -> exit_signal while the session is open", set: {now: "2026-11-27T11:00:00-05:00", time_stop: null, legs.0.expiry: "2026-11-27", legs.1.expiry: "2026-11-27", underlying.last.as_of: "2026-11-27T10:59:00-05:00", legs.0.bid.as_of: "2026-11-27T10:59:00-05:00", legs.0.ask.as_of: "2026-11-27T10:59:00-05:00", legs.1.bid.as_of: "2026-11-27T10:59:00-05:00", legs.1.ask.as_of: "2026-11-27T10:59:00-05:00", underlying.bars_5m: []}, expect: {alerts: [[W04_TIME, exit_signal]], next_poll: 300}}
+  - {id: W04-h, desc: "early-close expiry 2026-12-24 10:59 NY -> warn only, not the expiry exit yet", set: {now: "2026-12-24T10:59:00-05:00", time_stop: null, legs.0.expiry: "2026-12-24", legs.1.expiry: "2026-12-24", underlying.last.as_of: "2026-12-24T10:58:00-05:00", legs.0.bid.as_of: "2026-12-24T10:58:00-05:00", legs.0.ask.as_of: "2026-12-24T10:58:00-05:00", legs.1.bid.as_of: "2026-12-24T10:58:00-05:00", legs.1.ask.as_of: "2026-12-24T10:58:00-05:00", underlying.bars_5m: []}, expect: {alerts: [[W04_TIME, warn]], next_poll: 300}}
+  - {id: W04-i, desc: "regular expiry 2026-11-20 14:00 NY still exit_signal (16:00 close minus 120 min)", set: {now: "2026-11-20T14:00:00-05:00", time_stop: null, legs.0.expiry: "2026-11-20", legs.1.expiry: "2026-11-20", underlying.last.as_of: "2026-11-20T13:59:00-05:00", legs.0.bid.as_of: "2026-11-20T13:59:00-05:00", legs.0.ask.as_of: "2026-11-20T13:59:00-05:00", legs.1.bid.as_of: "2026-11-20T13:59:00-05:00", legs.1.ask.as_of: "2026-11-20T13:59:00-05:00", underlying.bars_5m: []}, expect: {alerts: [[W04_TIME, exit_signal]], next_poll: 300}}
+  - {id: DD-g, desc: "same NY session: a second W06 warn stays suppressed", set: {now: "2026-10-20T11:00:00-04:00", legs.1.ask.as_of: "2026-10-20T10:30:00-04:00"}, state: {session_date: "2026-10-20", sent: {"W06_DATA_HEALTH|pos-1": "warn"}, last_at: {"W06_DATA_HEALTH|pos-1": "2026-10-20T10:40:00-04:00"}}, expect: {alerts: []}}
+  - {id: W06-e, desc: "session_date of the previous NY date clears the W06 dedupe key; a new stale episode warns again. SHADOW_EOD is kept", set: {now: "2026-10-21T11:00:00-04:00", underlying.last.as_of: "2026-10-21T10:59:00-04:00", legs.0.bid.as_of: "2026-10-21T10:59:00-04:00", legs.0.ask.as_of: "2026-10-21T10:59:00-04:00", legs.1.bid.as_of: "2026-10-21T10:59:00-04:00", legs.1.ask.as_of: "2026-10-21T10:30:00-04:00", underlying.bars_5m: []}, state: {session_date: "2026-10-20", sent: {"W06_DATA_HEALTH|pos-1": "warn", "SHADOW_EOD|tk-1|2026-10-20": "info"}, last_at: {"W06_DATA_HEALTH|pos-1": "2026-10-20T11:00:00-04:00"}}, expect: {alerts: [[W06_DATA_HEALTH, warn]], state: {sent: {"W06_DATA_HEALTH|pos-1": "warn", "SHADOW_EOD|tk-1|2026-10-20": "info"}}}}
+  - {id: POLL-e, desc: "naive now: no alerts, next_poll null, poll does not raise", set: {now: "2026-10-20T11:00:00"}, expect: {alerts: [], next_poll: null}}
+  - {id: ISO-a, desc: "missing mark_levels.entry is a W01 failure, not a poll crash", remove: [mark_levels.entry], set: {legs.0.bid.value: 3.55, legs.0.ask.value: 3.65, legs.1.bid.value: 1.50, legs.1.ask.value: 1.50}, expect: {alerts: [[W06_DATA_HEALTH, warn]], next_poll: 300}}
+  - {id: ISO-b, desc: "missing hold_window omits W07; W01 still exits", remove: [hold_window], set: {legs.0.bid.value: 3.55, legs.0.ask.value: 3.65, legs.1.bid.value: 1.50, legs.1.ask.value: 1.50}, expect: {alerts: [[W01_MARK_VS_STOP_TARGET, exit_signal], [W06_DATA_HEALTH, warn]], next_poll: 60}}
+  - {id: ISO-c, desc: "entry_iv 0 fails W03 only; W01 still exits", set: {legs.0.entry_iv: 0, legs.0.bid.value: 3.55, legs.0.ask.value: 3.65, legs.1.bid.value: 1.50, legs.1.ask.value: 1.50}, expect: {alerts: [[W01_MARK_VS_STOP_TARGET, exit_signal], [W06_DATA_HEALTH, warn]], next_poll: 60}}
+  - {id: W06-f, desc: "stale underlying on a regular expiry at 14:00 keeps the W04 exit and warns", set: {now: "2026-10-30T14:00:00-04:00", time_stop: null, hold_window.end: "2026-10-30T16:00:00-04:00", underlying.last.as_of: "2026-10-30T13:30:00-04:00", legs.0.bid.as_of: "2026-10-30T13:59:00-04:00", legs.0.ask.as_of: "2026-10-30T13:59:00-04:00", legs.1.bid.as_of: "2026-10-30T13:59:00-04:00", legs.1.ask.as_of: "2026-10-30T13:59:00-04:00", underlying.bars_5m: []}, expect: {alerts: [[W04_TIME, exit_signal], [W06_DATA_HEALTH, warn]]}}
+  - {id: W06-g, desc: "stale underlying with the mark at the stop still suppresses the W01 exit (W06-d); W06 warns", set: {legs.0.bid.value: 3.55, legs.0.ask.value: 3.65, legs.1.bid.value: 1.50, legs.1.ask.value: 1.50, underlying.last.as_of: "2026-10-20T10:30:00-04:00"}, expect: {alerts: [[W06_DATA_HEALTH, warn]]}}

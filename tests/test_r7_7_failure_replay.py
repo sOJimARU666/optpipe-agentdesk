@@ -34,7 +34,7 @@ INPUT_PINS = (
     ("risk_rules_sha256", "spec/risk_rules.yaml",
      "6badc513716649de953b8689285f9b67a63035202541bcb575467f7999fa3b11"),
     ("watcher_rules_sha256", "spec/watcher_rules.yaml",
-     "21e294555b6795d6cacfea3c02ce8ea918a2bebd68250ed326a2b6f45a75ba10"),
+     "7550e7b01b67d846d47d55bbcafc111eb345eef462316c6ae7de08cff2e2d26a"),
     ("pack_pin_sha256", "spec/fixtures/market_data/valid/2026-10-20/pack.sha256",
      "a724aaf3347fcb46544baddfdefe16bf3f90b421f16842adb77712c1c5582365"),
 )
@@ -97,9 +97,15 @@ def _changed_against_head(root: Path) -> set[str]:
 
 # Bytes captured at the immutable PR #33 merge. The working verifier is reviewed
 # code; the historical driver and receipt are data/executable inputs with fixed identities.
-def read_replay_receipt(receipt_path, driver_path):
+# Receipt at tests/r7_history_audit.RECEIPT_COMMIT. Slice 1 re-pins watcher_rules.yaml only;
+# the case raw/semantic hashes are unchanged because that replay does not depend on the W04/W06 text.
+HISTORICAL_RECEIPT_SHA256 = "19591c50d1256d5500ef3ca4ba1660b6d00022b684e0c23efa9e5e8d0172ce24"
+CURRENT_RECEIPT_SHA256 = "26b170b48c660958f18eda7379c7435eba20fa85a7fcdf8e465cdb015d318e75"
+
+
+def read_replay_receipt(receipt_path, driver_path, receipt_sha=CURRENT_RECEIPT_SHA256):
     raw = receipt_path.read_bytes()
-    assert hashlib.sha256(raw).hexdigest() == "19591c50d1256d5500ef3ca4ba1660b6d00022b684e0c23efa9e5e8d0172ce24", "receipt bytes changed"
+    assert hashlib.sha256(raw).hexdigest() == receipt_sha, "receipt bytes changed"
     assert hashlib.sha256(driver_path.read_bytes()).hexdigest() == "bde43a42e0a6ba6879f132e0a989f9f45df6881d317404205c0c586ba81b70dd", "driver bytes changed"
     return json.loads(raw)
 

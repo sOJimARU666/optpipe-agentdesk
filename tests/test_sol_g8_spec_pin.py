@@ -132,12 +132,12 @@ def test_runtime_pin_matches_sync_spec_pin():
         (mod.EXPECTED_VERSION, mod.EXPECTED_MANIFEST_SHA256)
 
 
-SPEC_PIN = ("1.1.8", "0837c74c79c1dd0ee3bb51f515304f058fd85494856a0a58faeea4399de27cd5")   # FEAT-OODLE-01 PR A (was 1.1.6)
+SPEC_PIN = ("1.1.8", "757f04d78b1dbe0695d5691c9c3ecdd69fcaa220f2b963b9bd0d8bd01ca4d037")   # slice 1 D01-D06 re-pin; VERSION stays 1.1.8 (was 0837c74c)
 
 
 def test_runtime_pin_is_spec_1_1_8(tmp_path, monkeypatch, capsys):
     """Negative (#12 review): after the 1.1.8 re-pin (FEAT-OODLE-01 PR A; 1.1.6 in #16) the runtime pin must be
-    1.1.8 / 0837c74c..., so the pinned spec/ itself passes spec-check. A runtime still pinned to 1.1.6 / 6b4c51ce
+    1.1.8 / 757f04d7..., so the pinned spec/ itself passes spec-check. A runtime still pinned to 1.1.6 / 6b4c51ce
     refuses the real spec (SPEC-PIN-MISMATCH, exit 2)."""
     from optpipe import spec_pin
     assert (spec_pin.EXPECTED_VERSION, spec_pin.EXPECTED_MANIFEST_SHA256) == SPEC_PIN

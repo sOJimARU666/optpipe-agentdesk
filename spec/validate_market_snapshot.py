@@ -7,13 +7,14 @@ Usage:
   python validate_market_snapshot.py [PATH ...]
     PATH = a date dir (<root>/<YYYY-MM-DD>/: full pack check through market_data_loader.load_pack: layout, pack.sha256
            manifest, every file, cross-file consistency) or a single pack JSON file (document checks only).
-    No PATH = the example pack fixtures/market_data/valid/2026-10-20.
+    No PATH is an error (exit 2). The example pack is fixtures/market_data/valid/2026-10-20 and must be passed explicitly.
 
 Exit codes (same fail-closed contract as validate_session.py):
-  0  every path was read and validated with no errors
-  1  at least one pack / document has rule errors (MD-01..MD-15)
-  2  at least one path is missing / unreadable, a file is not UTF-8 JSON or not a JSON object (MD-01-DIR,
-     MD-01-UNREADABLE, MD-03-JSON), or the validator / loader raised (MD-00-CRASH)
+  0  at least one path was supplied, and every path was read and validated with no errors
+  1  at least one pack / document has rule errors only (MD-01..MD-15)
+  2  no path was supplied, or at least one path is missing / unreadable, a file is not UTF-8 JSON or not a JSON object
+     (MD-01-DIR, MD-01-UNREADABLE, MD-03-JSON), or the validator / loader raised (MD-00-CRASH), including a
+     broken market_data_rules.yaml and a failed market_data_loader import
 Consumers must treat ANY non-zero exit, and a missing or unimportable validator, as FAIL.
 
 Every error string starts with its id token, e.g. `MD-05-STALE JPM.json last_price: ...`.
@@ -33,8 +34,22 @@ from jsonschema import Draft202012Validator
 
 SPEC = Path(__file__).resolve().parent
 NY = ZoneInfo("America/New_York")
-SCHEMA = json.loads((SPEC / "market_snapshot.schema.json").read_text(encoding="utf-8"))
 EXAMPLE_PACK = SPEC / "fixtures" / "market_data" / "valid" / "2026-10-20"
+
+
+def _load_or_exit(loader, what):
+    """Import-time load. A script crash exits 2; an import of this module still raises."""
+    try:
+        return loader()
+    except Exception as ex:  # noqa: BLE001
+        if __name__ == "__main__":
+            print(f"ERROR: cannot load {what}: {type(ex).__name__}: {ex}", file=sys.stderr)
+            raise SystemExit(2) from ex
+        raise
+
+
+SCHEMA = _load_or_exit(lambda: json.loads((SPEC / "market_snapshot.schema.json").read_text(encoding="utf-8")),
+                       "market_snapshot.schema.json")
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 FATAL_IDS = ("MD-01-DIR", "MD-01-UNREADABLE", "MD-03-JSON", "MD-00-CRASH")   # exit 2 classes
 
@@ -43,7 +58,7 @@ def load_rules() -> dict:
     return yaml.safe_load((SPEC / "market_data_rules.yaml").read_text(encoding="utf-8"))
 
 
-RULES = load_rules()
+RULES = _load_or_exit(load_rules, "market_data_rules.yaml")
 STALENESS_LIMIT = timedelta(minutes=RULES["staleness"]["staleness_limit_minutes"])
 QUOTE_FIELDS = frozenset(RULES["staleness"]["quote_fields"])
 EARNINGS_FIELDS = frozenset(RULES["earnings"]["fields"])
@@ -488,12 +503,15 @@ def _pack_errors_v117(index: dict, snapshots: dict[str, dict], dir_name: str) ->
 
 
 def main(argv: list[str]) -> int:
-    """CLI: 0 all valid; 1 any rule error; 2 any unreadable / unparsable path or a crash. Worst code wins."""
-    import market_data_loader as mdl   # the loader imports this module; import late
-    paths = [Path(a) for a in argv] or [EXAMPLE_PACK]
+    """CLI: 0 all valid; 1 any rule error; 2 no path, or any unreadable / unparsable path or a crash. Worst code wins."""
+    if not argv:
+        print("ERROR: at least one path is required", file=sys.stderr)
+        return 2
+    paths = [Path(a) for a in argv]
     rc = 0
     for p in paths:
         try:
+            import market_data_loader as mdl   # the loader imports this module; import late, inside the path try
             if p.is_dir() or p.is_symlink() or not p.suffix:
                 res = mdl.load_pack(p)
                 errs = res.errors
@@ -518,4 +536,8 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except Exception as ex:  # noqa: BLE001 - a crash after import is exit 2, not a traceback exit 1
+        print(f"ERROR: validator crashed: {type(ex).__name__}: {ex}", file=sys.stderr)
+        sys.exit(2)

@@ -175,7 +175,7 @@ def test_fixture_documents_through_the_cli():
 
 def test_cli_default_mixed_and_missing_paths(tmp_path):
     out = cli()
-    assert out.returncode == 0 and "OK:" in out.stdout
+    assert out.returncode == 2 and "path" in out.stderr.lower() and "OK:" not in out.stdout
     assert cli(FIX / "valid" / bmf.DATE, FIX / "stale" / bmf.DATE).returncode == 1
     assert cli(FIX / "stale" / bmf.DATE, FIX / "malformed_json" / bmf.DATE).returncode == 2   # worst wins
     assert cli(tmp_path / "2026-01-02").returncode == 2                                      # MD-01-DIR

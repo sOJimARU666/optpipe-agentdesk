@@ -35,7 +35,7 @@ def pinned(source, tmp_path):
 
 def test_pin_constants():
     assert sync_spec.EXPECTED_VERSION == "1.1.8"
-    assert sync_spec.EXPECTED_MANIFEST_SHA256 == "0837c74c79c1dd0ee3bb51f515304f058fd85494856a0a58faeea4399de27cd5"
+    assert sync_spec.EXPECTED_MANIFEST_SHA256 == "757f04d78b1dbe0695d5691c9c3ecdd69fcaa220f2b963b9bd0d8bd01ca4d037"
     assert sync_spec.FROZEN_RELEASES == {          # the earlier pins of this file, in order (git history)
         "_v1_1_0_backup": ("1.1.0", "3b25cfe562bbd818589e82e069235b188c4f2b4aac434c04fce54d238fd95e07"),
         "_v1_1_1_backup": ("1.1.1", "477401b68298f5b4513aa9b46eed9a56df5d1097e85175bdcf8a166cd3d4f489"),
