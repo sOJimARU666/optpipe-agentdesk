@@ -188,8 +188,14 @@ def w04(w: _Poll) -> Optional[Alert]:
         sd = _ts(stop).astimezone(NY).date()
         if w.at_or_after(sd, w.cfg["time_stop_exit_at"]):
             return w.alert("W04_TIME", "exit_signal", dte, thr, f"time stop {sd} reached (>= {w.cfg['time_stop_exit_at']} NY)", [])
-    if any(date.fromisoformat(l["expiry"]) == w.today for l in w.legs) and w.n.time() >= time.fromisoformat(w.cfg["expiry_exit_at"]):
-        return w.alert("W04_TIME", "exit_signal", dte, thr, f"expiry day, >= {w.cfg['expiry_exit_at']} NY with open legs", [])
+    minutes = int(w.cfg["expiry_exit_before_close_minutes"])
+    close = w.cal.close_dt(w.today)
+    threshold = close - timedelta(minutes=minutes)
+    on_expiry = any(date.fromisoformat(l["expiry"]) == w.today for l in w.legs)
+    if on_expiry and w.n >= threshold and w.cal.is_open(w.t):
+        label = threshold.astimezone(NY).strftime("%H:%M")
+        return w.alert("W04_TIME", "exit_signal", dte, thr,
+                       f"expiry day, >= {label} NY (close minus {minutes} min) with open legs", [])
     if dte <= thr["warn_dte"]:
         return w.alert("W04_TIME", "warn", dte, thr,
                        f"DTE {dte} <= time-stop DTE {ts_dte} + {w.cfg['time_stop_warn_extra_days']}", [])
@@ -247,7 +253,7 @@ def w06(w: _Poll, state: dict) -> tuple[Optional[Alert], bool, dict]:
         return None, False, streak
     why = []
     if stale:
-        why.append(f"{len(stale)} quote(s) stale/older than {max_age // 60} min; exit signals suppressed")
+        why.append(f"{len(stale)} quote(s) stale/older than {max_age // 60} min; exit signals from W01-W03 and W05 suppressed")
     if wide:
         why.append(f"spread > {w.cfg['max_spread_pct_of_mid']} of mid for {w.cfg['wide_spread_polls']}+ polls: {', '.join(wide)}")
     a = w.alert("W06_DATA_HEALTH", "warn", len(stale) + len(wide),
@@ -311,13 +317,41 @@ def check_rules(rules: dict) -> None:
         raise NotImplementedError(f"watcher rules without an implementation: {sorted(missing)}")
 
 
+def _roll_session(state: dict, ny_date) -> None:
+    """Dedupe state belongs to one NY trading date. SHADOW_EOD keys stay; they are already dated."""
+    today = ny_date.isoformat()
+    prev = state.get("session_date")
+    if isinstance(prev, str) and prev != today:
+        sent = state.get("sent") or {}
+        state["sent"] = {k: v for k, v in sent.items() if str(k).startswith("SHADOW_EOD|")}
+        last = state.get("last_at") or {}
+        state["last_at"] = {k: v for k, v in last.items() if str(k).startswith("SHADOW_EOD|")}
+        state["wide_streak"] = {}
+    state["session_date"] = today
+
+
+def _note_rule_errors(w: _Poll, cands: list[Alert], health: Optional[Alert], errors: list[tuple[str, str]]) -> None:
+    if not errors:
+        return
+    detail = "; ".join(f"rule_error:{rid}:{exc}" for rid, exc in errors)
+    if health is not None:
+        health["detail"] = f"{health['detail']}; {detail}"
+        return
+    cands.append(w.alert("W06_DATA_HEALTH", "warn", len(errors), None, detail, []))
+
+
 def poll(inp: dict, state: Optional[dict], rules: dict, cal: Calendar) -> tuple[list[Alert], dict, Optional[int]]:
-    """Pure: same input + state + rules -> same output; never mutates its arguments."""
+    """Pure: same input + state + rules -> same output; never mutates its arguments.
+    A missing, naive, or unparsable `now` returns no alerts. One rule's exception does not abort the others."""
     check_rules(rules)
     cfg = rules["config"]
+    try:
+        t = _ts(inp["now"])
+    except (KeyError, TypeError, ValueError):
+        return [], copy.deepcopy(state or {}), None
     state = copy.deepcopy(state or {})
-    t = _ts(inp["now"])
     n = t.astimezone(NY)
+    _roll_session(state, n.date())
     tgt = inp["target"]
     if tgt["status"] in SHADOW:
         key = f"{SHADOW_RULE}|{tgt['id']}|{n.date()}"
@@ -333,15 +367,39 @@ def poll(inp: dict, state: Optional[dict], rules: dict, cal: Calendar) -> tuple[
         return [], state, None
     w = _Poll(inp, cfg, cal)
     enabled = {r["id"] for r in rules["rules"]}
-    cands = [a for rid, f in QUOTE_RULES.items() if rid in enabled and (a := f(w))]
-    health, stale, streak = w06(w, state)
-    state["wide_streak"] = streak
-    if stale:                                   # W06: no exit_signal from stale data (not sent, not recorded)
-        cands = [a for a in cands if a["level"] != "exit_signal"]
+    errors: list[tuple[str, str]] = []
+    cands: list[Alert] = []
+    for rid, fn in QUOTE_RULES.items():
+        if rid not in enabled:
+            continue
+        try:
+            a = fn(w)
+        except Exception as ex:  # noqa: BLE001 - one rule must not abort the poll
+            errors.append((rid, type(ex).__name__))
+        else:
+            if a:
+                cands.append(a)
+    try:
+        health, stale, streak = w06(w, state)
+    except Exception as ex:  # noqa: BLE001
+        errors.append(("W06_DATA_HEALTH", type(ex).__name__))
+        health, stale = None, False
+    else:
+        state["wide_streak"] = streak
+    if stale:                                   # W06: quote-using exits only; W04 uses no quotes
+        cands = [a for a in cands if a["level"] != "exit_signal" or a["rule_id"] == "W04_TIME"]
     if health and "W06_DATA_HEALTH" in enabled:
         cands.append(health)
-    if "W07_EVENT_EVE" in enabled and (e := w07(w)):
-        cands.append(e)
+    if "W07_EVENT_EVE" in enabled:
+        try:
+            e = w07(w)
+        except Exception as ex:  # noqa: BLE001
+            errors.append(("W07_EVENT_EVE", type(ex).__name__))
+            e = None
+        if e:
+            cands.append(e)
+    if "W06_DATA_HEALTH" in enabled:
+        _note_rule_errors(w, cands, health, errors)
     sent, state["sent"], state["last_at"] = gate(sorted(cands, key=lambda a: a["rule_id"]), state, t, cfg)
     for a in sent:
         a["message"] = message(a, cfg)

@@ -555,7 +555,8 @@ def cli(*args, cwd=SPEC, script=SPEC / "validate_session.py"):
 def test_cli_valid_exit_0(tmp_path):
     p = tmp_path / "ok.json"; p.write_text(json.dumps(rec()))
     r = cli(p); assert r.returncode == 0 and "OK:" in r.stdout
-    assert cli().returncode == 0                          # default: session.example.json
+    empty = cli()
+    assert empty.returncode == 2 and "path" in empty.stderr.lower() and "OK:" not in empty.stdout
 
 
 def test_cli_invalid_exit_1(tmp_path):
@@ -642,7 +643,7 @@ def test_watcher_md_case_count_matches_yaml():          # row 16
     import re
     n = len(_yaml("watcher_rules.yaml")["tests"])
     m = re.search(r"(\d+) test cases", (HERE / "watcher_rules.md").read_text())
-    assert m and int(m.group(1)) == n == 59   # 1.1.4: + SCOPE-e/f/g (approval status -> target); 1.1.5: + SCOPE-h..r
+    assert m and int(m.group(1)) == n == 70   # 59 through 1.1.7; D01-D06 adds 11 cases on the 1.1.8 pin
 
 
 def test_message_format_placeholders_are_alert_fields():  # row 17

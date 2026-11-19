@@ -1,11 +1,12 @@
 """Validate a session record (schema v1.0.0, v1.1.0, v1.1.1, v1.1.2, v1.1.3, v1.1.4, v1.1.5, v1.1.6, v1.1.7 or v1.1.8): JSON Schema (draft 2020-12) + x-invariants INV-01..17.
-Usage: python validate_session.py session.example.json [more.json ...]
+Usage: python validate_session.py session.json [more.json ...]
 
-Exit codes (fail-closed contract, see AGENTS.md / CHANGELOG 1.1.3):
-  0  every file was read, parsed as a JSON object and validated with no errors
-  1  at least one record has schema / invariant errors (an unknown schema_version is a schema error)
-  2  at least one file could not be read or parsed, is not a JSON object, or the validator itself raised
+Exit codes (fail-closed contract, see CHANGELOG 1.1.3; empty argv and crashes are exit 2):
+  0  at least one path was supplied, and every path was read, parsed as a JSON object and validated with no errors
+  1  at least one path was read as a JSON object and has schema / invariant errors only (an unknown schema_version is a schema error)
+  2  no path was supplied, or at least one path could not be read or parsed (including RecursionError), is not a JSON object, or the validator itself raised
 Consumers must treat ANY non-zero exit, and a missing or unimportable validate_session.py, as FAIL.
+An empty argument list does not validate the bundled example. Pass that file explicitly.
 
 1.1.3 records get the stricter checks (INV-03/04 tightening, INV-05 flag acknowledgement + specific error ids,
 INV-06 approval status/ticket/terms checks, INV-16 overall-verdict consistency);
@@ -663,14 +664,17 @@ def vertical_errors(t: dict) -> list[str]:
 
 
 def main(argv: list[str]) -> int:
-    """CLI: 0 all valid; 1 any record invalid; 2 any file unreadable / unparsable / not an object, or the validator raised.
-    Every file is still checked; the worst code wins. Fail closed: nothing is 'OK' unless it validated."""
-    paths = [Path(a) for a in argv] or [SPEC / "session.example.json"]
+    """CLI: 0 all valid; 1 any record invalid; 2 no path, or any file unreadable / unparsable / not an object, or the validator raised.
+    Every supplied file is still checked; the worst code wins. Fail closed: nothing is 'OK' unless it validated."""
+    if not argv:
+        print("ERROR: at least one path is required", file=sys.stderr)
+        return 2
+    paths = [Path(a) for a in argv]
     rc = 0
     for path in paths:
         try:
             sess = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, ValueError) as ex:
+        except Exception as ex:  # noqa: BLE001 - RecursionError and any other read/parse crash are exit 2
             print(f"{path}: ERROR cannot read/parse record: {type(ex).__name__}: {ex}", file=sys.stderr)
             rc = 2
             continue
@@ -691,4 +695,8 @@ def main(argv: list[str]) -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+    try:
+        sys.exit(main(sys.argv[1:]))
+    except Exception as ex:  # noqa: BLE001 - a crash after import is exit 2, not a traceback exit 1
+        print(f"ERROR: validator crashed: {type(ex).__name__}: {ex}", file=sys.stderr)
+        sys.exit(2)

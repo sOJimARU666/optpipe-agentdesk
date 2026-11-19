@@ -167,7 +167,8 @@ def test_cli_ok_message_names_md15():
     assert "schema_version 1.1.8," in out.stdout
     old = cli(SPEC / "fixtures" / "market_data_v1_1_7" / "valid" / bmf.DATE)   # the OK line names the pack's own version
     assert old.returncode == 0 and "schema_version 1.1.7," in old.stdout
-    assert cli().returncode == 0                                           # no PATH: the example pack
+    empty = cli()
+    assert empty.returncode == 2 and "path" in empty.stderr.lower() and "OK:" not in empty.stdout
     assert cli(FIX / "valid" / bmf.DATE / "catalysts.json").returncode == 0
     assert cli(FIX / "catalysts_bad" / bmf.DATE / "catalysts.json").returncode == 1
 

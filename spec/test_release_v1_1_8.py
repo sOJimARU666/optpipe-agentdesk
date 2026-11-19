@@ -135,11 +135,19 @@ def test_frozen_1_1_7_rejects_1_1_8_label():
 
 
 def test_watcher_and_risk_yaml_only_labels_changed():
-    for name, key in (("watcher_rules.yaml", "watcher_version"), ("risk_rules.yaml", "ruleset_version")):
-        old = yaml.safe_load((BACKUP_117 / name).read_text())
-        cur = yaml.safe_load((SPEC / name).read_text())
-        assert set(old) == set(cur) and {k for k in cur if cur[k] != old[k]} == {key}, name
-    assert yaml.safe_load((BACKUP_117 / "watcher_rules.yaml").read_text())["tests"] == twr.CASES
+    old_risk = yaml.safe_load((BACKUP_117 / "risk_rules.yaml").read_text())
+    cur_risk = yaml.safe_load((SPEC / "risk_rules.yaml").read_text())
+    assert set(old_risk) == set(cur_risk) and {k for k in cur_risk if cur_risk[k] != old_risk[k]} == {"ruleset_version"}
+    old = yaml.safe_load((BACKUP_117 / "watcher_rules.yaml").read_text())
+    cur = yaml.safe_load((SPEC / "watcher_rules.yaml").read_text())
+    assert set(old) == set(cur)
+    assert {k for k in cur if cur[k] != old[k]} == {"watcher_version", "config", "dedupe", "rules", "tests"}
+    by_id = {c["id"]: c for c in cur["tests"]}
+    for c in old["tests"]:
+        assert by_id[c["id"]] == c
+    old_ids = {c["id"] for c in old["tests"]}
+    assert [c["id"] for c in cur["tests"] if c["id"] not in old_ids] == list(twr.SLICE1_NEW_IDS)
+    twr.assert_slice1_watcher_delta(old, cur)
 
 
 def test_session_cases_and_grid_identical_to_frozen_1_1_7_reference():

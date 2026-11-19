@@ -123,11 +123,16 @@ def test_frozen_1_1_6_rejects_1_1_7_label():
 # ------------------------------------------------------------------ W / R cases: nothing changed
 def test_watcher_yaml_only_the_duplicate_precedence_removed():
     old = yaml.safe_load((BACKUP_116 / "watcher_rules.yaml").read_text())
-    assert old["tests"] == twr.CASES and len(twr.CASES) == 59
+    assert len(old["tests"]) == 59
+    by_id = {c["id"]: c for c in twr.CASES}
+    for c in old["tests"]:
+        assert by_id[c["id"]] == c
+    assert [c["id"] for c in twr.CASES if c["id"] not in {c["id"] for c in old["tests"]}] == list(twr.SLICE1_NEW_IDS)
     assert set(old) - set(twr.WR) == {"target_precedence"} and set(twr.WR) <= set(old)
     for k in twr.WR:
-        if k != "watcher_version":
+        if k not in ("watcher_version", "config", "dedupe", "rules", "tests"):
             assert old[k] == twr.WR[k], k
+    twr.assert_slice1_watcher_delta(old, twr.WR)
 
 
 def test_session_cases_and_grid_identical_to_frozen_1_1_6_reference():

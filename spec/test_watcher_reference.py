@@ -8,6 +8,35 @@ import watcher_reference as wr
 WR = wr.load_watcher_rules()
 CASES = WR["tests"]
 RULE_IDS = [r["id"] for r in WR["rules"]]
+# Appended on the 1.1.8 pin for D01-D06. Original cases, including W06-d, stay byte-for-byte.
+SLICE1_NEW_IDS = (
+    "W04-g", "W04-h", "W04-i", "DD-g", "W06-e", "POLL-e",
+    "ISO-a", "ISO-b", "ISO-c", "W06-f", "W06-g",
+)
+
+
+def assert_slice1_watcher_delta(old, cur):
+    """Frozen watcher_rules.yaml (1.1.4 through 1.1.7) vs the live file: only the D01-D06 keys differ.
+    VERSION stays 1.1.8. Callers that compare an older, shorter `tests` list check case ids themselves."""
+    assert set(cur["config"]) - set(old["config"]) == {"expiry_exit_before_close_minutes"}
+    assert cur["config"]["expiry_exit_before_close_minutes"] == 120
+    for key, value in old["config"].items():
+        assert cur["config"][key] == value, key
+    assert old["dedupe"]["key"] == cur["dedupe"]["key"]
+    assert "session_date" in cur["dedupe"]["rule"] and cur["dedupe"]["rule"] != old["dedupe"]["rule"]
+    old_rules = {r["id"]: r for r in old["rules"]}
+    cur_rules = {r["id"]: r for r in cur["rules"]}
+    assert set(old_rules) == set(cur_rules)
+    for rid, rule in old_rules.items():
+        if rid == "W04_TIME":
+            assert {k: v for k, v in cur_rules[rid].items() if k != "exit_signal"} == {k: v for k, v in rule.items() if k != "exit_signal"}
+            assert "120" in cur_rules[rid]["exit_signal"] and cur_rules[rid]["exit_signal"] != rule["exit_signal"]
+        elif rid == "W06_DATA_HEALTH":
+            assert {k: v for k, v in cur_rules[rid].items() if k != "effect"} == {k: v for k, v in rule.items() if k != "effect"}
+            assert "W04_TIME is never suppressed" in cur_rules[rid]["effect"]
+            assert "W01-W03 and W05" in cur_rules[rid]["effect"]
+        else:
+            assert cur_rules[rid] == rule, rid
 
 
 SESSION_NOW = "2026-10-13T13:00:00-04:00"   # inside session_fixtures approval ap-1's window (12:25-16:00 NY)

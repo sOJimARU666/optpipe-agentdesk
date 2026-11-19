@@ -170,10 +170,16 @@ def test_frozen_1_1_5_rejects_1_1_6_label():
 # ------------------------------------------------------------------ W / R cases: nothing changed
 def test_watcher_yaml_cases_unchanged_vs_frozen_1_1_5():
     old = yaml.safe_load((BACKUP_115 / "watcher_rules.yaml").read_text())
-    assert old["tests"] == twr.CASES and len(twr.CASES) == 59
+    assert len(old["tests"]) == 59
+    by_id = {c["id"]: c for c in twr.CASES}
+    for c in old["tests"]:
+        assert by_id[c["id"]] == c
+    old_ids = {c["id"] for c in old["tests"]}
+    assert [c["id"] for c in twr.CASES if c["id"] not in old_ids] == list(twr.SLICE1_NEW_IDS)
     for k in old:
-        if k not in ("watcher_version",):
+        if k not in ("watcher_version", "config", "dedupe", "rules", "tests"):
             assert old[k] == twr.WR[k], k
+    twr.assert_slice1_watcher_delta(old, twr.WR)
     assert set(twr.WR) - set(old) == {"real_approval"}   # 1.1.6 also added a top-level target_precedence; 1.1.7 removed it
 
 
