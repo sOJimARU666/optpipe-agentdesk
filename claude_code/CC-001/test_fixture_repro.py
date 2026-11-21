@@ -1,4 +1,4 @@
-"""CC-001: scripts/check_fixture_repro.py (fixture-workflow reproducibility and integrity check). Paper only.
+"""CC-001: claude_code/CC-001/check_fixture_repro.py (fixture-workflow reproducibility and integrity check). Paper only.
 
 In-process: one real cell output (the CLI's run + replay watch) is the positive control, and copies of it are
 tampered to show each check catches what it claims. A wall-clock-only change, with every hash re-chained, must
@@ -18,8 +18,8 @@ from pathlib import Path
 
 import pytest
 
-ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "scripts" / "check_fixture_repro.py"
+ROOT = Path(__file__).resolve().parents[2]
+SCRIPT = Path(__file__).resolve().parent / "check_fixture_repro.py"
 FIXTURES = ROOT / "tests" / "fixtures" / "2026-10-13"
 STEM = "session-2026-10-13"
 

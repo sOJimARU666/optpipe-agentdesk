@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """CC-001: reproducibility and integrity check for the documented offline fixture workflow. PAPER ONLY.
 
+Lives in claude_code/ (see claude_code/README.md): nothing in optpipe imports it, and the main test suite and CI do
+not collect it. Run it as  python claude_code/CC-001/check_fixture_repro.py  from the repo root.
+
 It runs the README's 60-second demo the way a user runs it (the installed `optpipe` console script, one process
 per command), once per cell of a TZ x PYTHONHASHSEED matrix:
 
@@ -49,7 +52,8 @@ from datetime import datetime, timezone
 from importlib import metadata
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]          # claude_code/CC-001/<this file> -> repo root
+TOOL = Path(__file__).resolve().relative_to(ROOT).as_posix()
 TASK_ID = "CC-001"
 RECEIPT_VERSION = 1
 FIXTURES = "tests/fixtures/2026-10-13"
@@ -74,7 +78,7 @@ DEPENDENCIES = ("pydantic", "PyYAML", "requests", "beautifulsoup4", "lxml", "fas
                 "jsonschema", "tzdata")
 # Inputs that decide the outputs; their byte digest identifies the source even without git (e.g. an archive).
 INPUT_GLOBS = ("src/optpipe/**/*", f"{FIXTURES}/*", "spec/MANIFEST.sha256", "spec/PIN.json", "config/settings.yaml",
-               "pyproject.toml", "scripts/check_fixture_repro.py")
+               "pyproject.toml", TOOL)
 
 
 class HarnessError(Exception):
@@ -440,7 +444,7 @@ def main(argv: list[str] | None = None) -> int:
                                                       s["reproducible"], s["expect_match"])
 
     receipt = {
-        "task_id": TASK_ID, "receipt_version": RECEIPT_VERSION, "tool": "scripts/check_fixture_repro.py",
+        "task_id": TASK_ID, "receipt_version": RECEIPT_VERSION, "tool": TOOL,
         "closure_claim": "none", "paper_only": True, "generated_at_utc": started.isoformat(timespec="seconds"),
         "source": source, "spec": spec, "environment": environment(),
         "workflow": {"fixtures": FIXTURES, "tape": TAPE, "commands": [
