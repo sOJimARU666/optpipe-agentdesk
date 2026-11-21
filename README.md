@@ -286,7 +286,8 @@ records keep every 1.1.1 check. That ruleset was 1.1.1 at the time; the pinned s
 
 `scripts/check_fixture_repro.py` runs the 60-second demo as a user does (`optpipe run --fixtures`, `optpipe validate`,
 `optpipe watch --replay`, one process each) in every cell of a `TZ` x `PYTHONHASHSEED` matrix (default: UTC,
-Europe/Berlin, America/New_York x 0, 1). Each cell has its own temp `out/`, state and cache dirs and the pinned `spec/`.
+Europe/Berlin, America/New_York x 0, 1). Each cell has its own temp `out/`, state and cache dirs. It reads the pinned
+`spec/`, or `$OPTIONS_SPEC_DIR` if set, and refuses (exit 2) a spec folder that fails the pin.
 
 ```bash
 .venv/bin/python scripts/check_fixture_repro.py --receipt receipt.json          # exit 0 PASS, 1 FAIL, 2 cannot run
