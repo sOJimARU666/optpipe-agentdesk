@@ -282,6 +282,27 @@ flagged as missing or duplicated, and applies to **1.1.2 records only**: 1.1.0/1
 records keep every 1.1.1 check. That ruleset was 1.1.1 at the time; the pinned spec's risk ruleset label is now
 `ruleset_version` 1.1.8 (label-only changes since 1.1.6), while records are still written as 1.1.6.
 
+## Reproducibility check for the fixture demo (CC-001)
+
+`scripts/check_fixture_repro.py` runs the 60-second demo as a user does (`optpipe run --fixtures`, `optpipe validate`,
+`optpipe watch --replay`, one process each) in every cell of a `TZ` x `PYTHONHASHSEED` matrix (default: UTC,
+Europe/Berlin, America/New_York x 0, 1). Each cell has its own temp `out/`, state and cache dirs and the pinned `spec/`.
+
+```bash
+.venv/bin/python scripts/check_fixture_repro.py --receipt receipt.json          # exit 0 PASS, 1 FAIL, 2 cannot run
+.venv/bin/python scripts/check_fixture_repro.py --expect <fingerprint>          # compare with another machine's run
+```
+
+Per cell it checks the environment really applied (C0), exit codes (C1), the hash chain with optpipe's own functions
+(trace sidecar, `trace_ref`, `session_ref`, watch sidecar + `validate_watch`, `watch.session`: C2-C6) and that every
+output is UTF-8 with LF endings (C7). Across cells, the outputs with only the wall-clock fields masked (trace
+`started_at` / `duration_ms`, the hashes over them, and the Markdown "N ms" lines) must be identical. Their digest is
+the **fingerprint**: a teammate who gets the same one from `--expect` has reproduced the run. The JSON receipt records the
+git head and dirty paths, an input-file digest (for an archive without git), the spec pin, Python and dependency
+versions, and each cell's probe. It contains no absolute paths. `closure_claim: none`. `tests/test_fixture_repro.py`
+covers it, with tampered copies as negative controls. On a platform without `time.tzset` (Windows), the TZ axis is
+not exercised and the receipt says so.
+
 ## CI (local only)
 
 `.github/workflows/ci.yml` sets `OPTIONS_SPEC_DIR=spec/` and runs `sync_spec.py --check` (before and after the run), pytest,
