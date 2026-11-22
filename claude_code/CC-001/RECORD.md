@@ -18,7 +18,41 @@ Delivery words: proposed, implemented locally, **under review**, accepted.
 | Dependencies | An installed package (`pip install -e '.[dev]'`), the pinned spec 1.1.8 (manifest `757f04d7...`), and a time zone database (the system one or `tzdata`). Git is optional: without it, the receipt identifies the source by `inputs_sha256`. |
 | Acceptance criteria (proposed; Noodle to confirm) | A1: one command, exit 0 PASS / 1 FAIL / 2 cannot run. A2: every cell checks C0-C7 with the existing functions. A3: only the declared wall-clock fields are masked. A wall-clock-only change is not a difference; a content change with consistent hashes is. A4: a JSON receipt with source, spec, environment and per-cell results, and no absolute paths. A5: another machine can compare its run with `--expect`. A6: paper-only, hygiene, full suite and the CI step list all stay green. A7: the repo's `out/` and `var/` are never touched. A8 (added with the folder move): nothing outside `claude_code/` differs from `main`, and the main suite's counts equal `main`'s. |
 | Target platforms | Linux: executed. macOS and Windows: designed for, **not run** (see limitations). |
-| Candidate | **Code: `ae247a7f749932740da218b5796693bfc1138f9f`**, tree `b5bc7c9082561611298aff17025112ddfa5e3f2a`: 6 files under `claude_code/`, +1045 lines. The PR head is one docs-only commit on top of it that changes only this file; Zoodle tests that head. History: `a799235` (first version, in `scripts/` and `tests/`) -> `d0fe504` (record) -> `ae247a7` (moved into `claude_code/`, logic unchanged). |
+| Candidate | **Code: `1c8855dab2640f86d29121fd10ddd09198a67f76`**, tree `5ca48995ca2e53c57c8f70432639be62672d7281`. Its only change over `ae247a7` answers the code-scanning finding (see the 2026-11-22 update). The record commit on top changes only this file; Zoodle tests whatever PR #38's head is. History: `a799235` (first version) -> `d0fe504` (record) -> `ae247a7` (moved into `claude_code/`) -> `90ac1d7` (record) -> `1c8855d` (receipt fix). |
+
+## Update 2026-11-22: code-scanning finding fixed, and reconciliation
+
+**Finding (PR #38, `github-advanced-security`, open thread on `check_fixture_repro.py`).** `run_cell` copied the last 5 lines of a
+failing step's stderr/stdout, with only paths scrubbed, into the receipt, which is meant to be shared. The finding was
+confirmed by reading the code (Verified). Its second half was already true: raw logs went to a temp dir that is deleted unless `--keep`.
+**Fix in `1c8855d`**:
+* The receipt keeps only `failed_step_output`: the line counts and the sha256 of stdout and stderr, never the text.
+* Raw logs are written only with `--keep`.
+* A failure without `--keep` prints a hint to rerun with it.
+
+I did not add pattern-based secret redaction: it would only catch the patterns it knows. Leaving the text out avoids that.
+
+| # | Command (at `1c8855d`, clean tree; network guard on) | Result | Status |
+|---|---|---|---|
+| 17 | `pytest -p no:cacheprovider claude_code` | 30 passed (+2: a stand-in `optpipe` prints a canary to stderr and exits 3; the canary never reaches the cell result, the digest matches, and logs exist only with `keep_logs`) | Verified |
+| 18 | `claude_code/CC-001/check_fixture_repro.py` (6 cells) | PASS, fingerprint `42d76be8...` unchanged; the guard logged 0 attempts; no `stderr_tail` key | Verified |
+| 19 | 18-mutant run (script sha256 `33c0a9cf...`), including "text back in the receipt" and "logs without `--keep`" | 18 of 18 killed; control passes; restore sha checked | Verified |
+| 20 | `pytest tests/test_repo_hygiene.py` | 7 passed | Verified |
+| 21 | `git diff --stat 7deb5ca..1c8855d -- . ':(exclude)claude_code'` | empty | Verified |
+
+The main suite, the spec suite and the CLI steps were not re-run at `1c8855d`. No file they read changed: only
+`claude_code/` changed, and they do not collect it. Hosted CI re-runs them on the new head.
+
+**Reconciliation (team request of 2026-11-22).**
+* **Lesson 001 is still unreachable.** `main` is still `7deb5ca`, no branch moved after 2026-11-21, and code search over this account's
+  repositories finds no "Lesson 001", "lesson_001" or "evidence panel" (Verified). So the replay and evidence-panel journey guide
+  and the `#` evidence-link correction stay with the Lesson 001 owner (Blocked from here). No coordinator handoff was
+  received, so CC-001's scope is unchanged.
+* The videos named in the request did not reach this session. The review-package ZIP that Gmail rejected has not been received
+  by any channel visible here, so package receipt stays **unconfirmed** (Reported by Eugene).
+* **The `#` pattern in optpipe itself** (static inspection only): `dashboard/templates/history.html:14` writes
+  `href="/files/{{ name }}"` unencoded. But `/files/` only serves names matching `_SESSION_NAME` (`dashboard/data.py:32-35`:
+  `session-YYYY-MM-DD` plus a fixed suffix list). A `#`, `%` or `?` cannot occur there, so it is latent, not a defect, and no change is proposed.
 
 ## Commands actually run
 
@@ -123,8 +157,8 @@ Windows, macOS or physical device. Hosted CI is GitHub's `ubuntu-latest` with Py
 
 | | |
 |---|---|
-| Delivery status | **Under review.** Pushed to `origin/claude/optpipe-integration-m3rzed` with Eugene's authorization. PR #38 was opened by the `sOJimARU666` account at 18:03:23 UTC, not by Claude Code: base `main` `7deb5ca`, not a draft. **Not accepted, not merged.** |
-| Evidence status | Verified on Linux in this container, and hosted CI green on `d0fe504`. **Unverified** on the new head's hosted CI, on other platforms, and by any other agent. Waiting on: Zoodle's tests on the PR head, Noodle's review, the coordinator's record of CC-001. |
+| Delivery status | **Under review.** `1c8855d` and this record commit are pushed only if Eugene authorizes moving PR #38's head off `90ac1d7`. Before that: pushed to `origin/claude/optpipe-integration-m3rzed` with Eugene's authorization. PR #38 was opened by the `sOJimARU666` account at 18:03:23 UTC, not by Claude Code: base `main` `7deb5ca`, not a draft. **Not accepted, not merged.** |
+| Evidence status | Verified on Linux in this container. Hosted CI was green on `d0fe504` and on `90ac1d7` (all 6 checks each). **Unverified** on any newer head's hosted CI, on other platforms, and by any other agent. Waiting on: Zoodle's tests on the PR head, Noodle's review, the coordinator's record of CC-001. |
 | Artifact location and recipient access | GitHub: branch `claude/optpipe-integration-m3rzed` and PR #38. The receipts, mutation logs and CI-step summaries stay in this session's container (`out/CC-001/`, git-ignored) and are not needed to reproduce: every result above can be rerun from the branch. |
 | Next action | Zoodle, on the PR head: `python claude_code/CC-001/check_fixture_repro.py --expect 42d76be8ab8bd78e814956dcdd867ddcdf3d72ed846965406cead6874a96557e --receipt r.json` and `python -m pytest claude_code`, then returns `r.json`. Noodle reviews A1-A8. Then Soodle merges, per Moodle's rule. |
 
