@@ -294,15 +294,23 @@ def spec_identity(spec_dir: Path) -> dict:
 
 
 # ------------------------------------------------------------------ one cell
+def output_summary(stdout: str, stderr: str) -> dict:
+    """What the receipt keeps of a failing step's output: counts and a digest, never the text. Process output can
+    carry anything a dependency prints (tokens, addresses), and the receipt is made to be shared. The text itself is
+    only in the --keep logs, which stay on the machine that ran the check; the digest ties a log to its receipt."""
+    return {"stdout_lines": len(stdout.splitlines()), "stderr_lines": len(stderr.splitlines()),
+            "stdout_sha256": sha256(stdout.encode("utf-8")), "stderr_sha256": sha256(stderr.encode("utf-8"))}
+
+
 def run_cell(exe: str, tz: str | None, seed: str, cell: Path, spec_dir: Path, fixtures: Path, tape: Path,
-             scrub) -> dict:
+             keep_logs: bool = False) -> dict:
     out = cell / "out"
     env = dict(os.environ, PYTHONHASHSEED=seed, OPTPIPE_STATE_DIR=str(cell / "state"),
                OPTPIPE_CACHE_DIR=str(cell / "cache"), OPTIONS_SPEC_DIR=str(spec_dir), PYTHONDONTWRITEBYTECODE="1")
     if tz is not None:
         env["TZ"] = tz
     t0 = time.monotonic()
-    res: dict = {"TZ": tz or "<host>", "PYTHONHASHSEED": seed, "exit": {}, "stderr_tail": {}}
+    res: dict = {"TZ": tz or "<host>", "PYTHONHASHSEED": seed, "exit": {}, "failed_step_output": {}}
 
     def call(name: str, argv: list[str]) -> int | str:
         try:
@@ -311,12 +319,13 @@ def run_cell(exe: str, tz: str | None, seed: str, cell: Path, spec_dir: Path, fi
         except subprocess.TimeoutExpired:
             res["exit"][name] = "timeout"
             return "timeout"
-        (cell / "logs").mkdir(parents=True, exist_ok=True)
-        (cell / "logs" / f"{name}.stdout").write_text(r.stdout, encoding="utf-8", newline="\n")
-        (cell / "logs" / f"{name}.stderr").write_text(r.stderr, encoding="utf-8", newline="\n")
+        if keep_logs:                            # raw output on disk only when asked for (--keep)
+            (cell / "logs").mkdir(parents=True, exist_ok=True)
+            (cell / "logs" / f"{name}.stdout").write_text(r.stdout, encoding="utf-8", newline="\n")
+            (cell / "logs" / f"{name}.stderr").write_text(r.stderr, encoding="utf-8", newline="\n")
         res["exit"][name] = r.returncode
         if r.returncode != 0:
-            res["stderr_tail"][name] = [scrub(x) for x in (r.stderr or r.stdout).strip().splitlines()[-5:]]
+            res["failed_step_output"][name] = output_summary(r.stdout, r.stderr)
         return r.stdout if name == "probe" and r.returncode == 0 else r.returncode
 
     got = call("probe", [sys.executable, str(Path(__file__).resolve()), "--probe"])
@@ -338,7 +347,7 @@ def run_cell(exe: str, tz: str | None, seed: str, cell: Path, spec_dir: Path, fi
         chk["errors"].insert(0, f"C0: {c0[1]}")
     if not chk["checks"]["C1"]:
         chk["errors"].insert(0, f"C1: exit codes run={rc_run} validate={rc_val} watch={rc_watch}")
-    res.update(checks=chk["checks"], errors=[scrub(e) for e in chk["errors"]], normalized_sha256=chk["digests"],
+    res.update(checks=chk["checks"], errors=chk["errors"], normalized_sha256=chk["digests"],
                masked_values=chk["masked"], fingerprint=fingerprint(chk["digests"]) if chk["digests"] else None,
                seconds=round(time.monotonic() - t0, 1))
     return res
@@ -431,7 +440,8 @@ def main(argv: list[str] | None = None) -> int:
         for i, (tz, seed) in enumerate(cells):
             slug = re.sub(r"[^A-Za-z0-9]+", "-", tz or "host").strip("-")
             results.append(run_cell(exe, tz, seed, work / f"cell{i}-{slug}-seed{seed}", spec_dir, ROOT / FIXTURES,
-                                    ROOT / TAPE, scrub))
+                                    ROOT / TAPE, keep_logs=bool(a.keep)))
+            results[-1]["errors"] = [scrub(e) for e in results[-1]["errors"]]
     except Exception as e:                       # noqa: BLE001 - a harness crash is exit 2, never a verdict
         print(f"check_fixture_repro: crashed: {type(e).__name__}: {scrub(str(e))}", file=sys.stderr)
         return 2
@@ -480,6 +490,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"--expect: {'match' if expect_ok else 'MISMATCH'}")
     if a.receipt:
         print(f"receipt: {a.receipt}")
+    if verdict == "FAIL" and not a.keep and any(r["failed_step_output"] for r in results):
+        print("a step failed: the receipt keeps only line counts and sha256 of its output; "
+              "rerun with --keep DIR to keep the raw logs on this machine")
     print(f"verdict: {verdict}")
     return 0 if verdict == "PASS" else 1
 

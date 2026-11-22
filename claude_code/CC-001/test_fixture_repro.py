@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -232,6 +233,33 @@ def test_summarize_verdicts():
     assert s["verdict"] == "FAIL" and s["reproducible"] and not s["integrity_ok"] and "C4: x" in s["failures"][0]
     assert cfr.summarize([_cell()], "b" * 64)["verdict"] == "FAIL"                    # --expect mismatch
     assert cfr.summarize([], None)["verdict"] == "FAIL"                               # no cells is no evidence
+
+
+# ------------------------------------------------------------------ failing-step output stays out of the receipt
+CANARY = "CANARY-cc001-do-not-share"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="the stand-in executable is a POSIX shell script")
+@pytest.mark.parametrize("keep_logs", [False, True])
+def test_failing_step_output_never_reaches_the_receipt(tmp_path, keep_logs):
+    """PR #38 code-scanning finding: a failing step's output (which could carry anything a dependency prints) must not be
+    copied into the shareable receipt. The receipt keeps counts and a digest; raw logs exist only with --keep."""
+    fake = tmp_path / "optpipe"
+    fake.write_text(f"#!/bin/sh\necho 'starting'\necho '{CANARY}' >&2\nexit 3\n", encoding="utf-8")
+    fake.chmod(0o755)
+    cell = tmp_path / "cell"
+    res = cfr.run_cell(str(fake), "UTC", "0", cell, ROOT / "spec", FIXTURES, FIXTURES / "watch_tape.yaml",
+                       keep_logs=keep_logs)
+    assert res["exit"] == {"probe": 0, "run": 3, "validate": 3, "watch": 3}
+    assert res["checks"]["C0"] and not res["checks"]["C1"]
+    assert CANARY not in json.dumps(res)                               # nothing of the text in the cell result
+    run = res["failed_step_output"]["run"]
+    assert (run["stdout_lines"], run["stderr_lines"]) == (1, 1)
+    assert run["stderr_sha256"] == _sha(f"{CANARY}\n".encode())       # ties a kept log to its receipt
+    logs = cell / "logs"
+    assert logs.is_dir() is keep_logs
+    if keep_logs:
+        assert CANARY in (logs / "run.stderr").read_text(encoding="utf-8")
 
 
 # ------------------------------------------------------------------ the script, end to end
