@@ -57,7 +57,7 @@ def export_html(out_dir: Path, dest: Path) -> dict[str, Path]:
     dates = od.dates()
     if not dates:
         raise SystemExit(f"no sessions in {out_dir}")
-    c = TestClient(create_app(out_dir, export=True))
+    c = TestClient(create_app(out_dir, export=True), base_url="http://127.0.0.1")
     dest.mkdir(parents=True, exist_ok=True)
     written = {}
     for page in PAGES:

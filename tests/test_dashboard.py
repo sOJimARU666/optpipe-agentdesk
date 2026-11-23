@@ -30,7 +30,7 @@ def out(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def client(out):
-    return TestClient(create_app(out))
+    return TestClient(create_app(out), base_url="http://127.0.0.1")
 
 
 @pytest.fixture(scope="module")
@@ -72,7 +72,7 @@ def test_index_redirects_to_latest(client):
 
 
 def test_empty_out_dir(tmp_path):
-    r = TestClient(create_app(tmp_path)).get("/")
+    r = TestClient(create_app(tmp_path), base_url="http://127.0.0.1").get("/")
     assert r.status_code == 200 and "No sessions yet" in r.text
 
 
@@ -175,7 +175,7 @@ def test_history_offers_readable_downloads(out, tmp_path, suffixes):
         else:
             (tmp_path / name).write_bytes((out / name).read_bytes())
 
-    with TestClient(create_app(tmp_path)) as client:
+    with TestClient(create_app(tmp_path), base_url="http://127.0.0.1") as client:
         history = client.get("/history")
         assert history.status_code == 200
         page = BeautifulSoup(history.content, "html.parser")
@@ -301,7 +301,7 @@ def test_hardlink_of_outside_file_is_never_returned(tmp_path):
     with pytest.raises(KeyError) as raw:
         od.read_contained(inside.name)
     assert marker not in str(raw.value)
-    response = TestClient(create_app(out)).get(f"/files/{inside.name}")
+    response = TestClient(create_app(out), base_url="http://127.0.0.1").get(f"/files/{inside.name}")
     assert response.status_code == 404
     assert marker not in response.text
     assert marker in outside.read_text()
@@ -322,7 +322,7 @@ def test_multi_link_names_sharing_an_inode_are_rejected(tmp_path):
         with pytest.raises(KeyError) as caught:
             od.load(day)
         assert marker not in str(caught.value)
-    client = TestClient(create_app(out))
+    client = TestClient(create_app(out), base_url="http://127.0.0.1")
     for name in (first.name, second.name):
         response = client.get("/files/" + name)
         assert response.status_code == 404
@@ -439,7 +439,7 @@ def test_session_page_rejects_watch_sidecar_symlink(tmp_path):
     outside = tmp_path / "outside.sha256"
     outside.write_text(marker)
     (out / f"session-{DATE}.watch.json.sha256").symlink_to(Path("..") / outside.name)
-    response = TestClient(create_app(out)).get(f"/s/{DATE}/today")
+    response = TestClient(create_app(out), base_url="http://127.0.0.1").get(f"/s/{DATE}/today")
     assert response.status_code == 404
     assert marker not in response.text
 
@@ -455,7 +455,7 @@ def test_raw_symlink_outside_root_is_not_served(tmp_path, name):
     outside = tmp_path / "leak-body"
     outside.write_text(marker)
     (out / name).symlink_to(outside)
-    client = TestClient(create_app(out))
+    client = TestClient(create_app(out), base_url="http://127.0.0.1")
     response = client.get(f"/files/{name}")
     assert response.status_code == 404
     assert marker not in response.text
@@ -469,7 +469,7 @@ def test_history_stays_up_when_sidecar_symlink_escapes(tmp_path):
     outside = tmp_path / "outside.sha256"
     outside.write_text("OUTSIDE-SIDECAR-MARKER")
     (out / f"session-{DATE}.watch.json.sha256").symlink_to(Path("..") / outside.name)
-    response = TestClient(create_app(out)).get("/history")
+    response = TestClient(create_app(out), base_url="http://127.0.0.1").get("/history")
     assert response.status_code == 200
     assert "OUTSIDE-SIDECAR-MARKER" not in response.text
     assert "unreadable" in response.text
@@ -483,7 +483,7 @@ def test_integrity_detects_tampering(out, tmp_path):
     tp.write_text(tp.read_text().replace("NO TRADE", "NO-TRADE", 1))
     s = OutDir(d).load(DATE)
     assert not s.integrity.ok and s.integrity.sidecar_ok is False and s.integrity.trace_ref_ok is False
-    html = TestClient(create_app(d)).get(f"/s/{DATE}/timeline").text
+    html = TestClient(create_app(d), base_url="http://127.0.0.1").get(f"/s/{DATE}/timeline").text
     assert "sidecar ✗" in html and "check failed" in html
 
 
@@ -496,7 +496,7 @@ def test_v1_only_session_is_upgraded(out, tmp_path):
     jp.write_text(json.dumps(to_v1(json.loads(jp.read_text()))))     # an older, v1-only output
     s = OutDir(d).load(DATE)
     assert s.origin.startswith("v1 ") and s.record["schema_version"].startswith("1.1")
-    assert TestClient(create_app(d)).get(f"/s/{DATE}/tickets").status_code == 200
+    assert TestClient(create_app(d), base_url="http://127.0.0.1").get(f"/s/{DATE}/tickets").status_code == 200
 
 
 def test_time_formatting():

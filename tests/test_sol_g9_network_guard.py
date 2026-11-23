@@ -287,7 +287,7 @@ def test_full_offline_run_makes_no_network_call(tmp_path):
 def test_testclient_in_process_is_allowed(tmp_path):
     from fastapi.testclient import TestClient
     from optpipe.dashboard.app import create_app
-    assert TestClient(create_app(tmp_path)).get("/").status_code == 200
+    assert TestClient(create_app(tmp_path), base_url="http://127.0.0.1").get("/").status_code == 200
 
 
 def test_httpx_mock_transport_is_allowed():

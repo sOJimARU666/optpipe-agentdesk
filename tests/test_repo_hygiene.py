@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import os
 import re
 import subprocess
 from pathlib import Path
@@ -22,16 +23,30 @@ SECRET = re.compile(
     r"ghp_[A-Za-z0-9]{20,}|gho_[A-Za-z0-9]{20,}|github_pat_\w{20,}|AKIA[0-9A-Z]{16}|\bsk-[A-Za-z0-9_-]{20,}"
     r"|-----BEGIN [A-Z ]*PRIVATE KEY|xox[abprs]-[\w-]{10,}|eyJ[\w-]{20,}\.[\w-]{20,}\."
     r"|(?i:\b(?:password|passwd|api[_-]?key|secret|access[_-]?token|auth[_-]?token)\b\s*[:=]\s*['\"][^'\"\s]{6,}['\"])")
+# A whole environment-style assignment, not a key-name mention or a Python call.
+# This supplements known credential formats; it is not proof that arbitrary text is secret-free.
+ENV_SECRET = re.compile(
+    r"(?i)^[ \t]*(?:export[ \t]+)?(?:[a-z_][a-z0-9_]*_)?"
+    r"(?:password|passwd|api_?key|secret|access_?key|private_?key|(?:access|auth|refresh)_token|token)"
+    r"[ \t]*=[ \t]*[^ \t\r\n'\"#(){}\[\]]{6,}[ \t]*(?:#[^\r\n]*)?$")
 EMAIL = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
 EMAIL_OK = re.compile(r"@(?:example\.(?:com|org|net)|localhost)$|^fred@stlouisfed\.org$")   # placeholders; FRED's
 #                                                         public contact inside captured fixture pages
 
 
-def _files():
-    r = subprocess.run(["git", "ls-files", "-co", "--exclude-standard"], cwd=ROOT, capture_output=True, text=True)
+def _git_paths(*, tracked_only=False):
+    args = ["git", "ls-files", "--cached", "-z"]
+    if not tracked_only:
+        args += ["--others", "--exclude-standard"]
+    r = subprocess.run(args, cwd=ROOT, capture_output=True)
     if r.returncode:
         pytest.skip("not a git checkout")
-    for name in r.stdout.split():
+    # Git's NUL form preserves spaces, newlines and non-ASCII filenames without C quoting.
+    return list(dict.fromkeys(os.fsdecode(name) for name in r.stdout.split(b"\0") if name))
+
+
+def _files():
+    for name in _git_paths():
         p = ROOT / name
         if name == "tests/test_repo_hygiene.py" or not p.is_file():
             continue
@@ -41,9 +56,44 @@ def _files():
             continue
 
 
+def _display_name(name):
+    # Keep filenames useful without allowing credential-shaped names or control characters into logs.
+    name = ENV_SECRET.sub("[redacted]", SECRET.sub("[redacted]", name))
+    return name.encode("unicode_escape").decode("ascii")
+
+
 def _hits(rx, allow=lambda n, m: False):
-    return [f"{n}:{i}: {m.group(0)[:60]}" for n, text in _files() for i, line in enumerate(text.splitlines(), 1)
+    return [f"{_display_name(n)}:{i}: matched content (redacted)" for n, text in _files() for i, line in enumerate(text.splitlines(), 1)
             for m in rx.finditer(line) if not allow(n, m)]
+
+
+def _empty_environment_template(path):
+    if path.is_symlink() or not path.is_file():
+        return False
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return False
+    blank_assignment = re.compile(r"(?:export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*[ \t]*=[ \t]*(?:\"\"|'')?[ \t]*(?:#.*)?")
+    return all(not line.strip() or line.lstrip().startswith("#")
+               or blank_assignment.fullmatch(line.strip()) for line in lines)
+
+
+def _credential_file_hits():
+    hits = []
+    key_names = {"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"}
+    key_suffixes = {".pem", ".key", ".p12", ".pfx"}
+    for name in _git_paths(tracked_only=True):
+        parts = Path(name).parts
+        env_parts = [p for p in parts if p.lower() == ".env" or p.lower().startswith(".env.")]
+        if env_parts:
+            # Only this exact final filename is an exception; every value must be empty.
+            template = len(env_parts) == 1 and parts[-1] == ".env.example"
+            if not template or not _empty_environment_template(ROOT / name):
+                hits.append(f"{_display_name(name)}: prohibited environment file or populated template")
+        if parts[-1].lower() in key_names or Path(parts[-1].lower()).suffix in key_suffixes:
+            hits.append(f"{_display_name(name)}: prohibited credential-container filename")
+    return hits
 
 
 def _frozen_release_copy(n):
@@ -91,7 +141,8 @@ def test_live_pinned_spec_has_no_absolute_paths():
 
 
 def test_no_secrets_or_tokens():
-    assert _hits(SECRET) == []
+    # Ignores prevent accidental staging; this separate tracked-name gate also catches forced adds.
+    assert _credential_file_hits() + _hits(SECRET) + _hits(ENV_SECRET) == []
 
 
 def test_only_placeholder_emails():

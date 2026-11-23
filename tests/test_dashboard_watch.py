@@ -28,7 +28,7 @@ def out(tmp_path_factory):
 
 @pytest.fixture(scope="module")
 def client(out):
-    return TestClient(create_app(out))
+    return TestClient(create_app(out), base_url="http://127.0.0.1")
 
 
 def test_session_loads_watch_and_checks_integrity(out):
@@ -75,7 +75,7 @@ def test_no_watch_file_message(tmp_path, out):
     shutil.copytree(out, d)
     for p in d.glob("*.watch.json*"):
         p.unlink()
-    c = TestClient(create_app(d))
+    c = TestClient(create_app(d), base_url="http://127.0.0.1")
     assert "No watcher output for this session" in c.get(f"/s/{DATE}/today").text
     assert "No watcher output for this session" in c.get(f"/s/{DATE}/timeline").text
 
@@ -88,7 +88,7 @@ def test_tampered_watch_is_reported(tmp_path, out):
     wp.write_text(json.dumps(doc))
     s = OutDir(d).load(DATE)
     assert s.integrity.watch_sidecar_ok is False and not s.integrity.ok
-    assert "sidecar ✗" in TestClient(create_app(d)).get(f"/s/{DATE}/today").text
+    assert "sidecar ✗" in TestClient(create_app(d), base_url="http://127.0.0.1").get(f"/s/{DATE}/today").text
 
 
 def test_stale_watch_vs_session_is_reported(tmp_path, out):

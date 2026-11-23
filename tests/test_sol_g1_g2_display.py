@@ -67,7 +67,7 @@ IDS_STRIPPED = dict(verdict="VETO", blocking_rule_ids=[], flag_rule_ids=[])
 # --- G1: dashboard -------------------------------------------------------------------------------------------------
 def test_dashboard_tickets_tampered_pass_shows_recomputed_veto(tmp_path, pipeline_output):
     out = _write(tmp_path, pipeline_output, _tamper(pipeline_output["record"], **PASS_OVER_VETO))
-    r = TestClient(create_app(out)).get(f"/s/{DATE}/tickets")
+    r = TestClient(create_app(out), base_url="http://127.0.0.1").get(f"/s/{DATE}/tickets")
     assert r.status_code == 200
     card = _card(r.text)
     badges = _verdict_badges(card)
@@ -78,7 +78,7 @@ def test_dashboard_tickets_tampered_pass_shows_recomputed_veto(tmp_path, pipelin
 
 def test_dashboard_review_fragment_tampered_pass_shows_recomputed_veto(tmp_path, pipeline_output):
     out = _write(tmp_path, pipeline_output, _tamper(pipeline_output["record"], **PASS_OVER_VETO))
-    r = TestClient(create_app(out)).get(f"/s/{DATE}/review/{RID}")
+    r = TestClient(create_app(out), base_url="http://127.0.0.1").get(f"/s/{DATE}/review/{RID}")
     assert r.status_code == 200
     badges = _verdict_badges(r.text)
     assert badges == ["VETO"], f"review fragment shows the stored verdict over VETO rule results: {badges}"
@@ -87,7 +87,7 @@ def test_dashboard_review_fragment_tampered_pass_shows_recomputed_veto(tmp_path,
 
 def test_dashboard_blocking_and_flag_ids_are_recomputed(tmp_path, pipeline_output):
     out = _write(tmp_path, pipeline_output, _tamper(pipeline_output["record"], **IDS_STRIPPED))
-    card = _card(TestClient(create_app(out)).get(f"/s/{DATE}/tickets").text)
+    card = _card(TestClient(create_app(out), base_url="http://127.0.0.1").get(f"/s/{DATE}/tickets").text)
     pills = re.findall(r'<span class="pill">([A-Z0-9_]+)</span>', card)
     for rid in BLOCKING + FLAGS:
         assert rid in pills, f"{rid} missing: dashboard shows the stored (emptied) rule_id lists"
@@ -97,7 +97,7 @@ def test_dashboard_empty_review_is_not_pass(tmp_path, pipeline_output):
     rec = _tamper(pipeline_output["record"], **PASS_OVER_VETO)
     _review(rec)["results"] = []
     out = _write(tmp_path, pipeline_output, rec)
-    card = _card(TestClient(create_app(out)).get(f"/s/{DATE}/tickets").text)
+    card = _card(TestClient(create_app(out), base_url="http://127.0.0.1").get(f"/s/{DATE}/tickets").text)
     badges = _verdict_badges(card)
     assert badges and set(badges) == {"VETO"}, f"a review with no rule results is shown as {badges}"
     assert "INV-16-EMPTY" in card
@@ -105,7 +105,7 @@ def test_dashboard_empty_review_is_not_pass(tmp_path, pipeline_output):
 
 def test_dashboard_integrity_lists_guard_errors(tmp_path, pipeline_output):
     out = _write(tmp_path, pipeline_output, _tamper(pipeline_output["record"], **PASS_OVER_VETO))
-    html = TestClient(create_app(out)).get("/history").text
+    html = TestClient(create_app(out), base_url="http://127.0.0.1").get("/history").text
     row = html[html.index(f">{DATE}</a>"):]
     row = row[: row.index("</tr>")]
     assert "✓ sha256" not in row, "history marks a guard-failing record as intact"
@@ -114,7 +114,7 @@ def test_dashboard_integrity_lists_guard_errors(tmp_path, pipeline_output):
 
 def test_dashboard_untampered_record_has_no_guard_problems(tmp_path, pipeline_output):
     out = _write(tmp_path, pipeline_output, copy.deepcopy(pipeline_output["record"]))
-    c = TestClient(create_app(out))
+    c = TestClient(create_app(out), base_url="http://127.0.0.1")
     assert "INV-16" not in _card(c.get(f"/s/{DATE}/tickets").text)
     row = c.get("/history").text
     assert "guard:" not in row

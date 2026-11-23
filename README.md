@@ -378,6 +378,14 @@ The global snapshot, single-name events and earnings have no pack field of their
 | Watcher (M3) | Replay tape (HAND-MADE FICTIONAL) tested offline. Pack quotes are `watch --data-dir` (file reads). `--live` was removed. |
 | EODHD | Stub |
 
+## Security requirements
+
+Security requirements and feature acceptance are recorded in
+[the fourteen-control security plan](docs/SECURITY-14.md). It distinguishes the
+current local, paper-only boundaries from controls required before adding accounts,
+payments, uploads, database access, or AI-controlled tools. Execution receipts apply
+only to their identified source and environment.
+
 ## Placeholders (pending Eugene)
 
 * **Spec placeholders:** `per_trade_max_loss_usd` 500, `max_underlying_risk_usd` 1000, `max_total_open_risk_usd` 2000 and `max_open_positions` 5.

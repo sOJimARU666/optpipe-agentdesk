@@ -1,6 +1,10 @@
 """Typed Risk Officer input ("review input"), shape defined by Doodle's risk_rules.yaml `fixture`.
 
 Every sourced datum is an RField {value, status, as_of}. Owner: Doodle (shape) / Poodle (code).
+
+The typed engine boundary accepts positive native integers for contract counts.
+Rejecting booleans, integral floats and numeric strings is an intentional
+compatibility tightening; the pinned session schema is unchanged.
 """
 from __future__ import annotations
 
@@ -11,7 +15,9 @@ from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
 class _M(BaseModel):
-    model_config = ConfigDict(extra="forbid")
+    # evaluate() revalidates root and nested models, including caller mutations
+    # and instances built with model_copy() or model_construct().
+    model_config = ConfigDict(extra="forbid", revalidate_instances="always")
 
 
 class RField(BaseModel):
@@ -42,7 +48,7 @@ class RLimit(_M):
 class RTicket(_M):
     underlying: str
     strategy: Optional[str] = None
-    quantity: int
+    quantity: int = Field(strict=True, ge=1)
     limit_price: RLimit
     hold_window_start: AwareDatetime
     hold_window_end: AwareDatetime
@@ -55,7 +61,7 @@ class RLeg(_M):
     side: Literal["buy", "sell"]
     strike: float
     expiry: date
-    ratio: int = 1
+    ratio: int = Field(default=1, strict=True, ge=1)
     bid: RField = MISSING
     ask: RField = MISSING
     open_interest: RField = MISSING
