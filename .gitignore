@@ -5,3 +5,16 @@ __pycache__/
 .pytest_cache/
 out/
 var/
+
+# Local credentials stay outside Git. Only a blank-value template is permitted.
+.[eE][nN][vV]
+.[eE][nN][vV].*
+!.env.example
+*.[pP][eE][mM]
+*.[kK][eE][yY]
+*.[pP]12
+*.[pP][fF][xX]
+id_rsa
+id_dsa
+id_ecdsa
+id_ed25519

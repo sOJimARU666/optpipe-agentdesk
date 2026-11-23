@@ -17,6 +17,7 @@ from fastapi.templating import Jinja2Templates
 
 from ..scenario import tag_for_record
 from .data import OutDir, Session, berlin, clock, compact, fval, ftitle, pair
+from .security import LocalHostMiddleware
 from ..records.guards import effective_verdict, review_view, reviews_by_time
 
 HERE = Path(__file__).parent
@@ -133,6 +134,7 @@ def create_app(out_dir: Path | str, export: bool = False) -> FastAPI:
     od = OutDir(out_dir)
     tpl = _templates(export)
     app = FastAPI(title="optpipe dashboard (paper only)", docs_url=None, redoc_url=None, openapi_url=None)
+    app.add_middleware(LocalHostMiddleware)
     app.state.out = od
     app.mount("/static", StaticFiles(directory=str(HERE / "static")), name="static")
 

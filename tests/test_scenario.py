@@ -89,7 +89,7 @@ def test_dashboard_banner_has_tag(pipeline_output):
     pytest.importorskip("fastapi")
     from fastapi.testclient import TestClient
     from optpipe.dashboard import create_app
-    c = TestClient(create_app(pipeline_output["out"]))
+    c = TestClient(create_app(pipeline_output["out"]), base_url="http://127.0.0.1")
     for url in ("/", "/history", "/s/2026-10-13/tickets"):
         html = c.get(url).text
         assert "PAPER ONLY" in html and f'<b class="demo">{TAG}</b>' in html, url
