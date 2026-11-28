@@ -56,7 +56,9 @@ equal `FROZEN_CSV_SHA`. The recorded `code_sha256` is compared to the running so
 The expected policy identity comes from the repo configuration (`config/replay_bridge_price_policy.json`) or
 from `--expect-policy-sha256`, never from the receipt. Approval status is never read from the receipt. The
 "Policy status PROPOSED is not owner-approved" notice is printed when the *configured* policy file has that
-status, not when the folder claims it.
+status, not when the folder claims it. If the configured file is missing, a directory, unreadable or invalid,
+`verify` refuses unless `--expect-policy-sha256` is given, and it prints that policy status is unknown and the
+folder is not approved.
 
 The CLI `verify` command applies the repo pins by default (archive, frozen decisions, frozen tape, running
 code, and the configured policy file). In pinned official mode it also recomputes `decision_tape_labeled.csv`,
@@ -69,7 +71,10 @@ projection was compared, and as skipped in `--self-consistency-only` (and when p
 non-official archive). `--self-consistency-only` turns the archive, decisions and official-recompute
 pins off; it does not turn off the receipt-versus-configured-policy compare. File-derived checks
 (counts, tape cross-check, running code, configured policy identity/status/numbers, official-fixture
-claims) always run. Optional flags are an independent check against values you supply:
+claims) run in every mode. If the configured policy file is missing, a directory, unreadable or
+invalid, verification is refused (self-only and the unpinned API included) unless
+`--expect-policy-sha256` is given, in which case the receipt's policy hash is compared to that sha.
+Optional flags are an independent check against values you supply:
 
 - `--expect-archive-sha256` — must equal the receipt `archive_sha256` and, when present, `labels.fixture_set_sha256`
 - `--expect-decisions-sha256` — must equal the receipt `decisions_sha256`
@@ -80,14 +85,18 @@ Any pin that is given must match; a mismatch, or a missing receipt field, fails 
 In pinned mode `--expect-policy-sha256` must equal the configured policy file. The Python `verify()` API defaults
 to unpinned (file-derived checks only) so offline test-bundle folders can be checked; pass `pinned=True` to apply
 the repo pins. `--price-policy` on `export` still accepts any path; `load_policy` records the `status` the file
-declares. There is no approval flag and no way to mark a policy owner-approved. A folder exported from a test
+declares. A folder exported from a byte-identical copy of the policy at another path is refused by
+`verify` in every mode, including `--self-consistency-only`, because identity is pinned to the
+configured path and content. To check such a folder, pass `--expect-policy-sha256` of that file
+(self-only or the unpinned API). There is no approval flag and no way to mark a policy owner-approved. A folder exported from a test
 zip (not the official archive) is labeled `fixture_set=test-fixture` and is refused by the pinned CLI default.
 
 The receipt records `price_policy.file_sha256` and `price_policy.path` (repo-relative when the file is in the repo,
 otherwise the basename, never an absolute box path) and always includes `price_policy.status_note`: a policy with
 status PROPOSED is not owner-approved, and the receipt has no approval mechanism. `verify` prints that sentence
-when the configured policy file is PROPOSED, even if a re-signed receipt claims APPROVED. `export` prints it
-from the same configured file. Receipt fields `command` and `generated_at_utc` are produced at export time and
+when the configured policy file is PROPOSED, even if a re-signed receipt claims APPROVED. If the configured
+file cannot be read, it prints that policy status is unknown and the folder is not approved. `export` prints
+the notice from the same configured file. Receipt fields `command` and `generated_at_utc` are produced at export time and
 are not pinned (they differ between genuine official runs).
 
 ## The seven fixes
@@ -102,7 +111,9 @@ are not pinned (they differ between genuine official runs).
    the policy file sha256 and path, and a note that status PROPOSED is not owner-approved (no approval mechanism).
    CLI `verify` applies the repo pins by default; `--self-consistency-only` turns the archive, decisions
    and official-recompute pins off. File-derived checks (counts, tape cross-check, running code, the
-   configured policy's identity, status and numbers, official-fixture claims) always run.
+   configured policy's identity, status and numbers, official-fixture claims) run in every mode. A
+   missing, directory, unreadable or invalid configured policy file is refused unless
+   `--expect-policy-sha256` is given.
 4. **Tests.** Network guard (bridge runs in a process with the repo guard on; the only guard hit is the probe),
    existing output folder refused (empty and non-empty, contents untouched), signal with a missing price.
 5. **Atomic output** plus negative controls for a missing receipt, a mismatched receipt (with and without
@@ -195,8 +206,12 @@ compares archive, decisions, tape, code and the default policy file to the repo 
 flags add caller-supplied pins; and even `--self-consistency-only` still recomputes counts from the files,
 cross-checks the plain tape against the labeled CSV, compares the code hash to the running source, and
 compares the receipt's policy identity, status and numbers to the configured policy file (never to a path
-claimed by the receipt). The output reports the pins that were actually checked or skipped, including
-`official_sidecars`.
+claimed by the receipt). If that file is missing, a directory, unreadable or invalid, verification is
+refused unless `--expect-policy-sha256` is given. `--price-policy` still accepts any path on export, but
+a byte-identical copy at another path is refused by verify unless that flag is given, because identity
+is pinned to the configured path and content. The output reports the pins that were actually checked or
+skipped, including `official_sidecars`. When the configured file cannot be read, verify prints that
+policy status is unknown and the folder is not approved.
 In pinned official mode, the labeled CSV, both price logs and the receipt policy fields are recomputed from the
 pinned archive plus that configured policy and compared byte-for-byte, so an official folder that is only
 internally consistent after an edit-and-resign no longer passes. The Python `verify()` API stays unpinned by

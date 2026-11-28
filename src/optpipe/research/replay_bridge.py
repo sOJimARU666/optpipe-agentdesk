@@ -488,13 +488,32 @@ def _policy_display_path(path: Path) -> str:
         return path.name
 
 
+def _configured_policy_problem() -> str | None:
+    """Why the configured policy file cannot be the trust root, or None if it can.
+
+    Reasons are path-free (repo hygiene). Approval status is never taken from a receipt.
+    """
+    path = POLICY_FILE
+    if path.is_dir():
+        return "default policy file is a directory"
+    if not path.is_file():
+        return "default policy file is missing"
+    try:
+        read_policy(path)
+    except PolicyError:
+        return "default policy file is invalid"
+    except OSError:
+        return "default policy file is unreadable"
+    return None
+
+
 def _configured_policy_status() -> str | None:
     """Status of the repo policy file. Approval status is never taken from a receipt."""
-    if not POLICY_FILE.is_file():
+    if _configured_policy_problem() is not None:
         return None
     try:
         raw = json.loads(POLICY_FILE.read_bytes())
-    except ValueError:
+    except (ValueError, OSError):
         return None
     if not isinstance(raw, dict):
         return None
@@ -503,9 +522,15 @@ def _configured_policy_status() -> str | None:
 
 
 def _policy_notice(_receipt: dict | None = None) -> str | None:
-    """The not-owner-approved notice comes from the configured policy file, never from the folder."""
-    if _configured_policy_status() == "PROPOSED":
+    """The not-owner-approved notice comes from the configured policy file, never from the folder.
+
+    When the configured file cannot be read, status is reported as unknown and the folder is not approved.
+    """
+    status = _configured_policy_status()
+    if status == "PROPOSED":
         return "Policy status PROPOSED is not owner-approved."
+    if status is None:
+        return "Policy status is unknown; this folder is not approved."
     return None
 
 
@@ -769,18 +794,25 @@ def verify(out: Path, *, expect_archive_sha256: str | None = None, expect_decisi
     must equal FROZEN_CSV_SHA. The recorded code hash is compared to the running source.
 
     Optional ``--expect-*-sha256`` flags compare archive, decisions, code and policy hashes to the values
-    you supply. The expected policy identity comes from that flag or, in pinned mode, from the default
-    policy file on disk -- never from the receipt. ``pinned=True`` (the CLI default) applies every repo
-    pin (ARCHIVE_SHA, FROZEN_DECISIONS_SHA, FROZEN_CSV_SHA, the running source, and the default policy
-    file) and refuses if a required pin cannot be resolved. ``--self-consistency-only`` sets pinned=False.
-    The in-memory ``_verification`` result and the CLI output list the pins that were checked and the
-    pins that were skipped (including ``official_sidecars`` in every mode), and name the sidecar fields
-    that are DIAGNOSTIC (not derivable from the plain tape). The receipt's policy identity, status and
-    numbers are compared to the configured policy file in every mode, including
-    ``--self-consistency-only``. In pinned official mode, the sidecar files and the receipt policy
-    fields are also recomputed from the pinned archive plus that configured policy and compared
-    byte-for-byte. The not-owner-approved notice comes from the configured policy, never from the
-    receipt. This function never writes into `out`.
+    you supply. The expected policy identity comes from the configured policy file or from
+    ``--expect-policy-sha256``, never from the receipt. ``pinned=True`` (the CLI default) applies every
+    repo pin (ARCHIVE_SHA, FROZEN_DECISIONS_SHA, FROZEN_CSV_SHA, the running source, and the default
+    policy file) and refuses if a required pin cannot be resolved. ``--self-consistency-only`` sets
+    pinned=False: the archive, decisions and official-sidecar-recompute pins are off, but the
+    configured-policy compare still runs. If the configured file is missing, a directory, unreadable
+    or invalid, verification is refused in every mode, including self-only and the unpinned API,
+    unless ``--expect-policy-sha256`` is given, in which case the receipt's policy hash is compared
+    to that sha. The in-memory ``_verification`` result and the CLI output list the pins that were
+    checked and the pins that were skipped (including ``official_sidecars`` in every mode), and name
+    the sidecar fields that are DIAGNOSTIC (not derivable from the plain tape). The receipt's policy
+    identity, status and numbers are compared to the configured policy file in every mode, including
+    ``--self-consistency-only``. Identity is pinned to the configured path and content: a
+    byte-identical policy copy used via ``--price-policy`` at another path is refused unless
+    ``--expect-policy-sha256`` is given. In pinned official mode, the sidecar files and the receipt
+    policy fields are also recomputed from the pinned archive plus that configured policy and
+    compared byte-for-byte. The not-owner-approved notice comes from the configured policy, never
+    from the receipt. When the configured file cannot be read, the notice states that policy status
+    is unknown and the folder is not approved. This function never writes into `out`.
     """
     out = Path(out)
     if is_partial_output(out):
@@ -894,28 +926,30 @@ def verify(out: Path, *, expect_archive_sha256: str | None = None, expect_decisi
 
     # Receipt-vs-configured-policy compare runs in every mode, including self-only (R14 at 72078004).
     # Identity, status and numbers come from the configured file or a CLI flag, never from the receipt.
+    # Fail closed: a missing, directory, unreadable or invalid configured file is refused unless
+    # --expect-policy-sha256 is given (then the receipt is compared to that sha only).
+    problem = _configured_policy_problem()
     if expect_policy_sha256 is not None:
         expected_policy = expect_policy_sha256
-    elif POLICY_FILE.is_file():
+        if pinned and problem is None and expect_policy_sha256 != digest(POLICY_FILE.read_bytes()):
+            raise TapeError("policy file sha256 does not match the configured policy file")
+    elif problem is not None:
+        raise TapeError(f"required policy pin cannot be resolved: {problem}")
+    else:
         expected_policy = digest(POLICY_FILE.read_bytes())
-    elif pinned:
-        raise TapeError("required policy pin cannot be resolved: default policy file is missing")
-    else:
-        expected_policy = None
-    if (pinned and POLICY_FILE.is_file() and expect_policy_sha256 is not None
-            and expect_policy_sha256 != digest(POLICY_FILE.read_bytes())):
-        raise TapeError("policy file sha256 does not match the configured policy file")
-    if expected_policy:
-        _pin((receipt.get("price_policy") or {}).get("file_sha256"), expected_policy, "policy file sha256")
-        if POLICY_FILE.is_file() and expected_policy == digest(POLICY_FILE.read_bytes()):
-            want = _receipt_policy_from_file(POLICY_FILE)
-            got = receipt.get("price_policy") if isinstance(receipt.get("price_policy"), dict) else {}
-            for key, val in want.items():
-                if got.get(key) != val:
-                    raise TapeError(f"receipt price_policy.{key} does not match the configured policy")
-        checked.append("policy_file_sha256")
-    else:
-        skipped.append("policy_file_sha256")
+    _pin((receipt.get("price_policy") or {}).get("file_sha256"), expected_policy, "policy file sha256")
+    if problem is None and expected_policy == digest(POLICY_FILE.read_bytes()):
+        want = _receipt_policy_from_file(POLICY_FILE)
+        got = receipt.get("price_policy") if isinstance(receipt.get("price_policy"), dict) else {}
+        # --expect-policy-sha256 is the documented escape hatch for a byte-identical copy
+        # at another --price-policy path: still compare identity, status and numbers, not path.
+        skip = {"path"} if expect_policy_sha256 is not None else set()
+        for key, val in want.items():
+            if key in skip:
+                continue
+            if got.get(key) != val:
+                raise TapeError(f"receipt price_policy.{key} does not match the configured policy")
+    checked.append("policy_file_sha256")
 
     if pinned:
         missing = [name for name in IDENTITY_PINS if name not in checked]
@@ -957,7 +991,7 @@ def main(argv=None, *, _archive_sha: str = ARCHIVE_SHA) -> int:
     v = sub.add_parser("verify", help="check an output folder against its receipt, SHA256SUMS and repo pins")
     v.add_argument("out", type=Path)
     v.add_argument("--self-consistency-only", action="store_true",
-                   help="do not apply repo pins (archive, decisions, tape, code, default policy)")
+                   help="do not apply archive, decisions or official-sidecar pins; the configured-policy compare still runs")
     v.add_argument("--expect-archive-sha256", dest="expect_archive_sha256", default=None,
                    help="fail if the receipt archive / fixture sha256 is not this value")
     v.add_argument("--expect-decisions-sha256", dest="expect_decisions_sha256", default=None,
@@ -988,6 +1022,10 @@ def main(argv=None, *, _archive_sha: str = ARCHIVE_SHA) -> int:
         r = export(a.bundle, a.out, a.price_policy, command=f"{MODULE_CMD} {shlex.join(raw_args)}",
                    archive_sha=_archive_sha)
     except (OSError, KeyError, ValueError, InvalidOperation, zipfile.BadZipFile) as err:
+        if getattr(a, "cmd", None) == "verify":
+            note = _policy_notice(None)
+            if note:
+                print(note, file=sys.stderr)
         print(f"bridge: {err}", file=sys.stderr)
         return 2
     print(f"Verified and exported {r['rows']} synthetic decision rows; {r['price_blocks']['total']} decision-time "

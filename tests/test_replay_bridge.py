@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import zipfile
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -1216,11 +1217,13 @@ def test_policy_pin_comes_from_config_not_receipt(tmp_path):
 
 
 def test_pinned_verify_refuses_unresolved_policy_pin(tmp_path, monkeypatch):
-    """Strict (pinned) mode refuses when the default policy file cannot be resolved."""
+    """Every mode refuses when the default policy file cannot be resolved, unless a sha flag is given."""
     out, r = _export(tmp_path)
     monkeypatch.setattr(rb, "POLICY_FILE", tmp_path / "missing-policy.json")
     with pytest.raises(rb.TapeError, match="required policy pin cannot be resolved"):
         rb.verify(out, pinned=True, expect_archive_sha256=r["archive_sha256"])
+    with pytest.raises(rb.TapeError, match="default policy file is missing"):
+        rb.verify(out)
     # a CLI flag still resolves the pin
     got = rb.verify(out, pinned=True, expect_archive_sha256=r["archive_sha256"],
                     expect_policy_sha256=r["price_policy"]["file_sha256"])
@@ -1587,3 +1590,105 @@ def test_pc_receipt_policy_edits_are_refused_in_self_only(tmp_path, pid):
     _pc_mut(pid)(rec)
     _resign_official(out, rec)
     _self_only_policy_refused(out, match="policy")
+
+
+# --- Zoodle re-gate at feac9080: fail closed when the configured policy file is unusable ---
+
+def _cli_main(args):
+    """In-process CLI so monkeypatch of POLICY_FILE is visible (subprocess cli() would miss it)."""
+    buf_out, buf_err = io.StringIO(), io.StringIO()
+    with redirect_stdout(buf_out), redirect_stderr(buf_err):
+        rc = rb.main(list(map(str, args)))
+    class _Run:
+        pass
+    run = _Run()
+    run.returncode, run.stdout, run.stderr = rc, buf_out.getvalue(), buf_err.getvalue()
+    return run
+
+
+def _edited_folder_for(tmp_path, pid):
+    """Re-signed output folder for a Zoodle id (R14 is a test-bundle export; the rest are official)."""
+    if pid == "R14":
+        out, _r = _export(tmp_path)
+        def mut(rec):
+            rec["price_policy"]["max_age_seconds"]["quote_last"] = "1"
+        _edit_receipt(out, mut)
+        return out
+    out, rec = _official_out(tmp_path)
+    if pid == "S12":
+        rec["price_policy"]["status"] = "APPROVED"
+    elif pid == "Pb1":
+        rec["price_policy"]["path"] = "config/alt_policy.json"
+        rec["price_policy"]["status"] = "ADOPTED"
+        rec["price_policy"]["file_sha256"] = "ab" * 32
+        rec["price_policy"]["max_age_seconds"]["quote_last"] = "99999"
+    elif pid == "Pb2":
+        rec["price_policy"]["path"] = "alt.json"
+    else:
+        _pc_mut(pid)(rec)
+    _resign_official(out, rec)
+    return out
+
+
+def _point_policy_at(tmp_path, monkeypatch, kind):
+    if kind == "missing":
+        monkeypatch.setattr(rb, "POLICY_FILE", tmp_path / "no-such-policy.json")
+        return "missing"
+    d = tmp_path / "policy-as-dir"
+    d.mkdir()
+    monkeypatch.setattr(rb, "POLICY_FILE", d)
+    return "directory"
+
+
+@pytest.mark.parametrize("kind", ["missing", "directory"])
+@pytest.mark.parametrize("pid", ["R14", "S12", "Pb1", "Pb2", "Pc3", "Pc5", "Pc8"])
+def test_self_only_refuses_when_policy_config_is_unusable(tmp_path, monkeypatch, kind, pid):
+    """Missing file or directory: self-only and unpinned verify refuse R14, S12, Pb1, Pb2, Pc3, Pc5, Pc8."""
+    out = _edited_folder_for(tmp_path, pid)
+    match = _point_policy_at(tmp_path, monkeypatch, kind)
+    with pytest.raises(rb.TapeError, match=match):
+        rb.verify(out)  # unpinned API
+    if pid != "R14":  # official folders; R14 is a test-bundle so pinned hits the archive pin first
+        with pytest.raises(rb.TapeError, match=match):
+            rb.verify(out, pinned=True)
+    run = _cli_main(["verify", "--self-consistency-only", out])
+    assert run.returncode == 2, run.stderr
+    assert match in run.stderr
+    assert "Policy status is unknown; this folder is not approved." in run.stderr
+    assert "not owner-approved" not in run.stderr
+
+
+@pytest.mark.parametrize("kind", ["missing", "directory"])
+def test_expect_policy_sha256_allows_verify_when_config_unusable(tmp_path, monkeypatch, kind):
+    """--expect-policy-sha256 is the escape hatch when the configured file cannot be read."""
+    out, rec = _official_out(tmp_path)
+    policy_sha = rec["price_policy"]["file_sha256"]
+    _point_policy_at(tmp_path, monkeypatch, kind)
+    got = rb.verify(out, expect_policy_sha256=policy_sha)
+    assert "policy_file_sha256" in got["_verification"]["checked"]
+    assert "official_sidecars" in got["_verification"]["skipped"]
+    run = _cli_main(["verify", "--self-consistency-only", out, "--expect-policy-sha256", policy_sha])
+    assert run.returncode == 0, run.stderr
+    assert "Policy status is unknown; this folder is not approved." in run.stdout
+    assert "not owner-approved" not in run.stdout
+
+
+def test_byte_identical_policy_at_another_path_is_refused_without_expect_flag(tmp_path):
+    """Identity is pinned to the configured path and content; --expect-policy-sha256 checks alternates."""
+    src = ROOT / "config" / "replay_bridge_price_policy.json"
+    alt = tmp_path / "alt-policy.json"
+    alt.write_bytes(src.read_bytes())
+    out, rec = _official_out(tmp_path, policy_path=alt)
+    assert rec["price_policy"]["path"] == "alt-policy.json"
+    assert rec["price_policy"]["file_sha256"] == sha(src.read_bytes())
+    with pytest.raises(rb.TapeError, match="price_policy.path"):
+        rb.verify(out)
+    run = cli(["verify", "--self-consistency-only", out], rb.ARCHIVE_SHA)
+    assert run.returncode == 2, run.stderr
+    assert "path" in run.stderr
+    got = rb.verify(out, expect_policy_sha256=rec["price_policy"]["file_sha256"])
+    assert "policy_file_sha256" in got["_verification"]["checked"]
+    run = cli(["verify", "--self-consistency-only", out,
+               "--expect-policy-sha256", rec["price_policy"]["file_sha256"]], rb.ARCHIVE_SHA)
+    assert run.returncode == 0, run.stderr
+    assert "self-consistency" in run.stdout

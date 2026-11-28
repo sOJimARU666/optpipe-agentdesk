@@ -1,7 +1,7 @@
 # Replay Bridge 001 evidence (SYNTHETIC, paper only, decision support only)
 
-Regenerated on 2026-11-28 (Europe/Berlin), after Zoodle's FAIL at `7ec5a19f` (self-only mode
-no longer compared the receipt policy to the configured policy file), from the frozen Lesson 001
+Regenerated on 2026-11-28 (Europe/Berlin), after Zoodle's FAIL at `feac9080` (self-only skipped the
+configured-policy compare when the policy file was missing or a directory), from the frozen Lesson 001
 v3 archive (sha256 `159de19c...47a3`) with the bridge source committed alongside it (its sha256
 is `code_sha256` in `output/bridge_receipt.json`).
 
@@ -23,6 +23,6 @@ Python 3.13.5. Results: 391 rows; final and upstream counts ABSTAIN 375, BLOCKED
 log records carry PAPER_ONLY and DECISION_SUPPORT_ONLY_NOT_AN_ENTRY_OR_FILL. The frozen tape has no DELAYED prices;
 the DELAYED class is covered by the tests in `tests.log` (PF-39 to PF-46 and extras), not by this run. Official
 `fixture_set` is `lesson001-portability-v3`. CLI `verify` of this folder applies the repo pins, recomputes the
-official sidecars, and exits 0. `--self-consistency-only` still compares the receipt's policy identity, status
-and numbers to the configured policy file, lists `official_sidecars` as skipped, and never reads approval status
-from the receipt.
+official sidecars, and exits 0. `--self-consistency-only` still compares the receipt's policy to the configured
+file, lists `official_sidecars` as skipped, and refuses if that file is missing, a directory, unreadable or
+invalid, unless `--expect-policy-sha256` is given. Approval status is never read from the receipt.
