@@ -1,6 +1,6 @@
 {
   "archive_sha256": "159de19c0fa74be03a46da954af92f8f1f164a62e0c439f0a57aa8bb1c3947a3",
-  "code_sha256": "65db4212e53611c482fa25561be8373d5f3a624f1ca459a513783a895e21ec23",
+  "code_sha256": "66c7b6c0e4b77a7f9184a1c2c1d2a44aee47476558be4a21263060da20538c8e",
   "command": "python -m optpipe.research.replay_bridge export Optpipe-Lesson-001-Portability-v3.zip output",
   "counts": {
     "ABSTAIN": 375,
@@ -11,7 +11,7 @@
   "csv_sha256": "039ee5883a49fbd82e74a921bf18d6c2a551b52f7adfdda5a01d35ff0b58de24",
   "decisions_sha256": "659175c6eb8a31ea3bebb53d71a27d462557ec0b62aa2494efab2918e71804f6",
   "fixture_set": "lesson001-portability-v3",
-  "generated_at_utc": "2026-11-28T13:49:34+00:00",
+  "generated_at_utc": "2026-11-28T14:12:26+00:00",
   "kind": "SYNTHETIC",
   "labeled_csv_sha256": "84c31714f5eb2d8ce327308b315ceef013a582ea24d897ec708232c0349af9ad",
   "labels": {
@@ -51,8 +51,10 @@
       "bar_close_1m": "0",
       "quote_last": "900"
     },
+    "path": "config/replay_bridge_price_policy.json",
     "policy_id": "RB001-PF-1.1.9-PROPOSED",
-    "status": "PROPOSED"
+    "status": "PROPOSED",
+    "status_note": "A policy with status PROPOSED is not owner-approved. This receipt records the status declared by the policy file; it has no approval mechanism."
   },
   "python": "3.13.5",
   "rows": 391,

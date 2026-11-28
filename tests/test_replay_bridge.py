@@ -251,6 +251,22 @@ def _export(tmp_path, name="out", **kw):
     return out, r
 
 
+
+FIELDS_DECISION = rb.FIELDS.index("decision")
+
+
+def _resign(out):
+    files = {n: (out / n).read_bytes() for n in rb.OUTPUT_FILES}
+    (out / "SHA256SUMS").write_bytes(rb.sha256sums(files))
+
+
+def _edit_receipt(out, mut):
+    rec = json.loads((out / "bridge_receipt.json").read_text())
+    mut(rec)
+    (out / "bridge_receipt.json").write_text(json.dumps(rec, indent=2, sort_keys=True) + "\n")
+    _resign(out)
+
+
 def test_receipt_records_code_hash_command_timestamp_and_sha256sums(tmp_path):
     out, r = _export(tmp_path)
     assert sorted(p.name for p in out.iterdir()) == sorted(rb.OUTPUT_FILES + ("SHA256SUMS",))
@@ -259,10 +275,17 @@ def test_receipt_records_code_hash_command_timestamp_and_sha256sums(tmp_path):
     assert r["generated_at_utc"] == "2026-11-28T13:00:00+00:00"
     assert r["price_policy"]["status"] == "PROPOSED"
     assert r["price_policy"]["max_age_seconds"] == {"bar_close_1m": "0", "quote_last": "900"}
+    assert r["price_policy"]["path"] == "config/replay_bridge_price_policy.json"
+    assert r["price_policy"]["file_sha256"] == sha((ROOT / "config" / "replay_bridge_price_policy.json").read_bytes())
+    assert r["price_policy"]["status_note"] == rb.POLICY_STATUS_NOTE
+    assert "not owner-approved" in r["price_policy"]["status_note"]
+    assert "no approval mechanism" in r["price_policy"]["status_note"]
     sums = dict(reversed(line.split("  ")) for line in (out / "SHA256SUMS").read_text().splitlines())
     assert sums == {n: sha((out / n).read_bytes()) for n in rb.OUTPUT_FILES}
     assert json.loads((out / "bridge_receipt.json").read_bytes()) == r
-    assert rb.verify(out)["rows"] == 391
+    v = rb.verify(out)
+    assert v["rows"] == 391 and v["_verification"]["mode"] == rb.VERIFY_SELF_ONLY
+    assert v["_verification"]["pins"] == []
 
 
 def test_atomic_failure_leaves_no_output_and_no_partial(tmp_path, monkeypatch):
@@ -344,6 +367,124 @@ def test_negative_control_extra_file(tmp_path):
         rb.verify(out)
 
 
+def test_verify_without_pins_prints_self_consistency_only(tmp_path):
+    out, _r = _export(tmp_path)
+    _bundle, asha = make_bundle(tmp_path)
+    run = cli(["verify", "--self-consistency-only", out], asha)
+    assert run.returncode == 0, run.stderr
+    assert "self-consistency only" in run.stdout
+    assert "no independent check of the archive, the bridge code, or the price policy" in run.stdout
+    assert "Policy status PROPOSED is not owner-approved" in run.stdout
+
+
+def test_verify_identity_pins_match(tmp_path):
+    out, r = _export(tmp_path)
+    _bundle, asha = make_bundle(tmp_path)
+    args = ["verify", "--self-consistency-only", out,
+            "--expect-archive-sha256", r["archive_sha256"],
+            "--expect-decisions-sha256", r["decisions_sha256"],
+            "--expect-code-sha256", r["code_sha256"],
+            "--expect-policy-sha256", r["price_policy"]["file_sha256"]]
+    run = cli(args, asha)
+    assert run.returncode == 0, run.stderr
+    assert "self-consistency plus supplied identity pins" in run.stdout
+    for name in ("archive_sha256", "decisions_sha256", "code_sha256", "policy_file_sha256"):
+        assert name in run.stdout
+    assert "Policy status PROPOSED is not owner-approved" in run.stdout
+
+
+@pytest.mark.parametrize("flag,field", [
+    ("--expect-archive-sha256", "archive"),
+    ("--expect-decisions-sha256", "decisions"),
+    ("--expect-code-sha256", "code"),
+    ("--expect-policy-sha256", "policy"),
+])
+def test_verify_identity_pin_mismatch_fails(tmp_path, flag, field):
+    out, _r = _export(tmp_path)
+    _bundle, asha = make_bundle(tmp_path)
+    run = cli(["verify", "--self-consistency-only", out, flag, "0" * 64], asha)
+    assert run.returncode == 2, run.stderr
+    assert "does not match the expected value" in run.stderr
+    # the folder itself is left untouched and is still self-consistent
+    assert rb.verify(out)["_verification"]["pins"] == []
+
+
+def _rehash_fixture(out, receipt, new_sha):
+    """Rebuild a self-consistent folder whose fixture / archive hash is `new_sha` (wrong)."""
+    old = receipt["labels"]["fixture_set_sha256"]
+    for name in ("decision_tape_labeled.csv", "price_block_log.csv", "price_accept_log.csv"):
+        (out / name).write_bytes((out / name).read_bytes().replace(old.encode(), new_sha.encode()))
+    r = json.loads((out / "bridge_receipt.json").read_text())
+    r["labels"]["fixture_set_sha256"] = new_sha
+    r["archive_sha256"] = new_sha
+    for key, name in (("labeled_csv_sha256", "decision_tape_labeled.csv"),
+                      ("price_block_log_sha256", "price_block_log.csv"),
+                      ("price_accept_log_sha256", "price_accept_log.csv")):
+        r[key] = sha((out / name).read_bytes())
+    (out / "bridge_receipt.json").write_text(json.dumps(r, sort_keys=True, indent=2) + "\n")
+    _resum(out)
+    return r
+
+
+def test_verify_rehashed_wrong_fixture_is_self_consistent_but_pin_fails(tmp_path):
+    """A folder rebuilt so its own SUMS and receipt agree, but the fixture hash is not the real one:
+    verify() without pins passes; --expect-archive-sha256 of the real fixture fails."""
+    out, r = _export(tmp_path)
+    real = r["archive_sha256"]
+    wrong = "ab" * 32
+    assert wrong != real
+    _rehash_fixture(out, r, wrong)
+    v = rb.verify(out)
+    assert v["_verification"]["mode"] == rb.VERIFY_SELF_ONLY
+    assert v["archive_sha256"] == wrong
+    _bundle, asha = make_bundle(tmp_path)
+    run = cli(["verify", "--self-consistency-only", out], asha)
+    assert run.returncode == 0, run.stderr
+    assert "self-consistency only" in run.stdout
+    run = cli(["verify", "--self-consistency-only", out, "--expect-archive-sha256", real], asha)
+    assert run.returncode == 2
+    assert "does not match the expected value" in run.stderr or "fixture_set_sha256" in run.stderr
+    with pytest.raises(rb.TapeError, match="does not match"):
+        rb.verify(out, expect_archive_sha256=real)
+    with pytest.raises(rb.TapeError, match="does not match"):
+        rb.verify(out, expect_decisions_sha256=real)   # wrong field on purpose: decisions sha is still the real tape
+    # decisions pin of the real decisions sha still passes (we only changed the fixture/archive field)
+    assert rb.verify(out, expect_decisions_sha256=r["decisions_sha256"])["decisions_sha256"] == r["decisions_sha256"]
+
+
+def test_verify_pin_on_missing_receipt_field_fails(tmp_path):
+    out, r = _export(tmp_path)
+    del r["code_sha256"]
+    (out / "bridge_receipt.json").write_text(json.dumps(r, sort_keys=True, indent=2) + "\n")
+    _resum(out)
+    with pytest.raises(rb.TapeError, match="code_sha256"):
+        rb.verify(out, expect_code_sha256="0" * 64)
+
+
+def test_policy_status_is_recorded_as_declared_with_no_approval_mechanism(tmp_path):
+    raw = {**RAW_POLICY, "status": "APPROVED"}   # a file may claim anything; this is not an approval
+    path = tmp_path / "TEST-FIXTURE-policy.json"
+    path.write_text(json.dumps(raw))
+    out, r = _export(tmp_path, "out-declared", policy_path=path)
+    assert r["price_policy"]["status"] == "APPROVED"
+    assert r["price_policy"]["path"] == path.name          # outside the repo: basename only, no absolute path
+    assert r["price_policy"]["file_sha256"] == sha(path.read_bytes())
+    assert "no approval mechanism" in r["price_policy"]["status_note"]
+    assert "not owner-approved" in r["price_policy"]["status_note"]
+    _bundle, asha = make_bundle(tmp_path)
+    run = cli(["verify", "--self-consistency-only", out], asha)
+    assert run.returncode == 0
+    assert "self-consistency only" in run.stdout
+    assert "Policy status PROPOSED is not owner-approved" not in run.stdout   # status is not PROPOSED
+
+
+def test_export_stdout_states_proposed_is_not_owner_approved(tmp_path):
+    bundle, asha = make_bundle(tmp_path)
+    run = cli(["export", bundle, tmp_path / "out"], asha)
+    assert run.returncode == 0, run.stderr
+    assert "Policy status PROPOSED is not owner-approved" in run.stdout
+
+
 def test_input_receipt_member_missing(tmp_path):
     p = tmp_path / "TEST-FIXTURE-no-receipt.zip"
     with zipfile.ZipFile(p, "w") as z:
@@ -381,7 +522,7 @@ def test_bridge_imports_no_network_module():
     tree = ast.parse(Path(rb.__file__).read_text())
     mods = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     mods |= {(n.module or "").split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
-    assert mods <= {"__future__", "argparse", "csv", "hashlib", "io", "json", "math", "os", "platform", "shlex",
+    assert mods <= {"__future__", "argparse", "csv", "hashlib", "io", "json", "math", "os", "platform", "signal", "shlex",
                     "shutil", "sys", "tempfile", "zipfile", "datetime", "decimal", "pathlib", "optpipe"}, mods
 
 
@@ -778,3 +919,237 @@ def test_pf_raw_ceiling_is_independent_of_the_adjusted_maximum():
     assert (res["reason"], res["age"], res["adjusted"]) == ("PF-STALE", Decimal(1300), Decimal(400))
     edge = evaluate("quote", as_of="2026-11-20T09:39:59-05:00", policy=loose, **dq())     # raw 1201, adjusted 301
     assert edge["reason"] == "PF-STALE"
+
+
+# --- Zoodle PR #40 baseline (f0be2bc0): R13-R16, O3c, X2a/X2b/X2c, PP18, A6/A7 ---
+
+def test_r13_edited_archive_hash_is_refused_after_resign(tmp_path):
+    """R13: changing receipt archive_sha256 and regenerating SHA256SUMS is refused."""
+    out, r = _export(tmp_path)
+    original = r["archive_sha256"]
+    _edit_receipt(out, lambda rec: rec.__setitem__("archive_sha256", "ab" * 32))
+    with pytest.raises(rb.TapeError, match="archive_sha256"):
+        rb.verify(out, expect_archive_sha256=original)
+    with pytest.raises(rb.TapeError, match="archive_sha256"):
+        rb.verify(out, pinned=True, expect_decisions_sha256=None)
+
+
+def test_r14_edited_policy_numbers_are_refused_after_resign(tmp_path):
+    """R14: changing receipt policy numbers (path still the default file) is refused."""
+    out, _r = _export(tmp_path)
+    def mut(rec):
+        rec["price_policy"]["max_age_seconds"]["quote_last"] = "1"
+    _edit_receipt(out, mut)
+    with pytest.raises(rb.TapeError, match="price_policy"):
+        rb.verify(out)
+
+
+def test_r15_edited_per_action_counts_are_refused_after_resign(tmp_path):
+    """R15: receipt counts / block / accept breakdowns must match the CSVs (doc claim)."""
+    out, r = _export(tmp_path)
+    assert r["counts"]["SIGNAL_BEAR"] == 0
+    def mut(rec):
+        rec["counts"]["SIGNAL_BEAR"] = 1
+        rec["counts"]["ABSTAIN"] = rec["counts"]["ABSTAIN"] - 1
+    _edit_receipt(out, mut)
+    with pytest.raises(rb.TapeError, match="per-action counts"):
+        rb.verify(out)
+    out2, _r = _export(tmp_path, name="out2")
+    def mut_blocks(rec):
+        rec["price_blocks"]["by_reason"] = {"PF-STATUS": 99}
+    _edit_receipt(out2, mut_blocks)
+    with pytest.raises(rb.TapeError, match="price_blocks"):
+        rb.verify(out2)
+
+
+def test_r16_edited_code_hash_is_refused_after_resign(tmp_path):
+    """R16: changing receipt code_sha256 and regenerating SHA256SUMS is refused."""
+    out, r = _export(tmp_path)
+    original = r["code_sha256"]
+    _edit_receipt(out, lambda rec: rec.__setitem__("code_sha256", "00" * 32))
+    with pytest.raises(rb.TapeError, match="code_sha256"):
+        rb.verify(out)
+    with pytest.raises(rb.TapeError, match="code_sha256"):
+        rb.verify(out, expect_code_sha256=original)
+
+
+def test_o3c_plain_tape_is_cross_checked_against_labeled(tmp_path):
+    """O3c: editing decision_tape.csv and re-signing it is refused against the labeled CSV."""
+    out, _r = _export(tmp_path)
+    path = out / "decision_tape.csv"
+    rows = list(csv.reader(path.read_text().splitlines()))
+    # flip the last HOLD/SIGNAL cell so the plain tape diverges from the labeled companion
+    rows[-1][FIELDS_DECISION] = "SIGNAL_BEAR" if rows[-1][FIELDS_DECISION] != "SIGNAL_BEAR" else "HOLD"
+    with path.open("w", newline="") as fh:
+        csv.writer(fh).writerows(rows)
+    rec = json.loads((out / "bridge_receipt.json").read_text())
+    rec["csv_sha256"] = rb.digest(path.read_bytes())
+    (out / "bridge_receipt.json").write_text(json.dumps(rec, indent=2, sort_keys=True) + "\n")
+    _resign(out)
+    with pytest.raises(rb.TapeError, match="decision_tape.csv does not match decision_tape_labeled.csv"):
+        rb.verify(out)
+
+
+def test_x2a_forged_action_in_both_csvs_is_refused(tmp_path):
+    """X2a: same forged action in both CSVs, receipt hashes/counts updated, SUMS regenerated."""
+    out, r = _export(tmp_path)
+    assert r["decisions_sha256"] == rb.FROZEN_DECISIONS_SHA
+    for name in ("decision_tape.csv", "decision_tape_labeled.csv"):
+        path = out / name
+        rows = list(csv.reader(path.read_text().splitlines()))
+        for row in reversed(rows[1:]):
+            if row[FIELDS_DECISION] == "SIGNAL_BULL":
+                row[FIELDS_DECISION] = "SIGNAL_BEAR"
+                break
+        with path.open("w", newline="") as fh:
+            csv.writer(fh).writerows(rows)
+    rec = json.loads((out / "bridge_receipt.json").read_text())
+    rec["csv_sha256"] = rb.digest((out / "decision_tape.csv").read_bytes())
+    rec["labeled_csv_sha256"] = rb.digest((out / "decision_tape_labeled.csv").read_bytes())
+    rec["counts"] = {"ABSTAIN": rec["counts"]["ABSTAIN"], "SIGNAL_BULL": rec["counts"]["SIGNAL_BULL"] - 1,
+                     "SIGNAL_BEAR": rec["counts"]["SIGNAL_BEAR"] + 1, "BLOCKED": rec["counts"]["BLOCKED"]}
+    (out / "bridge_receipt.json").write_text(json.dumps(rec, indent=2, sort_keys=True) + "\n")
+    _resign(out)
+    with pytest.raises(rb.TapeError, match="does not match the frozen Lesson 001 projection"):
+        rb.verify(out)
+
+
+def test_x2b_official_fixture_relabel_is_refused(tmp_path):
+    """X2b: relabel a test-bundle receipt as the official Lesson 001 v3 fixture and resign."""
+    out, r = _export(tmp_path)
+    assert r["labels"]["fixture_set"] == rb.UNOFFICIAL_FIXTURE_SET
+    def mut(rec):
+        rec["archive_sha256"] = "ab" * 32
+        rec["labels"]["fixture_set"] = rb.FIXTURE_SET
+        rec["labels"]["fixture_set_sha256"] = "ab" * 32
+        for name in ("decision_tape_labeled.csv", "price_block_log.csv", "price_accept_log.csv"):
+            pass
+    _edit_receipt(out, mut)
+    # also rewrite label columns in the CSVs so the label-row check does not fire first
+    for name in ("decision_tape_labeled.csv", "price_block_log.csv", "price_accept_log.csv"):
+        path = out / name
+        rows = list(csv.reader(path.read_text().splitlines()))
+        fi = rows[0].index("fixture_set")
+        fsi = rows[0].index("fixture_set_sha256")
+        for row in rows[1:]:
+            row[fi] = rb.FIXTURE_SET
+            row[fsi] = "ab" * 32
+        with path.open("w", newline="") as fh:
+            csv.writer(fh).writerows(rows)
+    rec = json.loads((out / "bridge_receipt.json").read_text())
+    rec["labeled_csv_sha256"] = rb.digest((out / "decision_tape_labeled.csv").read_bytes())
+    rec["price_block_log_sha256"] = rb.digest((out / "price_block_log.csv").read_bytes())
+    rec["price_accept_log_sha256"] = rb.digest((out / "price_accept_log.csv").read_bytes())
+    (out / "bridge_receipt.json").write_text(json.dumps(rec, indent=2, sort_keys=True) + "\n")
+    _resign(out)
+    with pytest.raises(rb.TapeError, match="official Lesson 001 v3"):
+        rb.verify(out)
+
+
+def test_x2c_other_archive_same_tape_is_refused_against_the_pin(tmp_path):
+    """X2c: a self-consistent folder from another archive sha (same frozen decisions/tape) fails pinned verify."""
+    official, _real = make_bundle(tmp_path)
+    repack = tmp_path / "repack.zip"
+    with zipfile.ZipFile(official) as z, zipfile.ZipFile(repack, "w") as w:
+        for info in z.infolist():
+            w.writestr(info, z.read(info.filename))
+        extra = zipfile.ZipInfo(rb.BASE + "README.txt", date_time=(2026, 11, 21, 16, 21, 0))
+        w.writestr(extra, b"other pack")
+    other = sha(repack.read_bytes())
+    assert other != rb.ARCHIVE_SHA
+    out = tmp_path / "out"
+    r = rb.export(repack, out, ROOT / "config" / "replay_bridge_price_policy.json",
+                  command="python -m optpipe.research.replay_bridge export b out", now=NOW, archive_sha=other)
+    assert r["archive_sha256"] == other
+    assert r["labels"]["fixture_set"] == rb.UNOFFICIAL_FIXTURE_SET
+    assert r["decisions_sha256"] == rb.FROZEN_DECISIONS_SHA
+    assert (out / "decision_tape.csv").read_bytes()  # same projection
+    assert rb.digest((out / "decision_tape.csv").read_bytes()) == rb.FROZEN_CSV_SHA
+    rb.verify(out)  # unpinned self-consistency of this other-archive folder is allowed
+    with pytest.raises(rb.TapeError, match="archive_sha256"):
+        rb.verify(out, pinned=True)
+    with pytest.raises(rb.TapeError, match="archive_sha256"):
+        rb.verify(out, expect_archive_sha256=rb.ARCHIVE_SHA)
+    run = cli(["verify", out], other)
+    assert run.returncode == 2
+    assert "archive_sha256" in run.stderr
+
+
+def test_pp18_string_policy_section_exits_2(tmp_path):
+    """PP18: a policy section written as a string must exit 2, not crash with exit 1."""
+    policy = tmp_path / "bad.json"
+    raw = json.loads((ROOT / "config" / "replay_bridge_price_policy.json").read_text())
+    raw["bar_close_1m"] = "0"
+    policy.write_text(json.dumps(raw))
+    bundle, asha = make_bundle(tmp_path)
+    run = cli(["export", bundle, tmp_path / "out", "--price-policy", policy], asha)
+    assert run.returncode == 2, run.stderr
+    assert "AttributeError" not in run.stderr
+    assert "Traceback" not in run.stderr
+    assert "must be an object" in run.stderr
+
+
+def test_a7_sigterm_cleans_up_the_temp_folder(tmp_path):
+    """A7: SIGTERM during write_output removes the hidden partial folder and exits 2."""
+    dest = tmp_path / "out"
+    script = tmp_path / "kill_during_write.py"
+    script.write_text(
+        "import os, signal, sys\n"
+        "from pathlib import Path\n"
+        f"sys.path.insert(0, {str(ROOT / 'src')!r})\n"
+        "from optpipe.research.replay_bridge import OUTPUT_FILES, PARTIAL_MARK, write_output\n"
+        "real = os.rename\n"
+        "def boom(src, dst):\n"
+        "    if PARTIAL_MARK in Path(src).name:\n"
+        "        os.kill(os.getpid(), signal.SIGTERM)\n"
+        "    return real(src, dst)\n"
+        "os.rename = boom\n"
+        "files = {n: b'x' for n in OUTPUT_FILES}\n"
+        "try:\n"
+        f"    write_output(Path({str(dest)!r}), files)\n"
+        "except SystemExit as e:\n"
+        "    raise SystemExit(e.code)\n"
+    )
+    run = subprocess.run([sys.executable, str(script)], check=False, capture_output=True, text=True)
+    assert run.returncode == 2, (run.returncode, run.stdout, run.stderr)
+    assert not dest.exists()
+    leftovers = [p.name for p in tmp_path.iterdir() if PARTIAL_MARK_NAME in p.name or p.name.startswith(".out")]
+    assert leftovers == [], leftovers
+
+
+PARTIAL_MARK_NAME = rb.PARTIAL_MARK
+
+
+def test_a6_leftover_partial_folder_is_refused_and_ignored(tmp_path):
+    """A6: a leftover hidden partial folder (e.g. after SIGKILL) is invalid; verify refuses it; export ignores it."""
+    leftover = tmp_path / ".out.partial-deadbeef"
+    leftover.mkdir()
+    (leftover / "decision_tape.csv").write_text("x")
+    assert rb.is_partial_output(leftover)
+    with pytest.raises(rb.TapeError, match="partial output folder"):
+        rb.verify(leftover)
+    run = cli(["verify", leftover], "00" * 32)
+    assert run.returncode == 2
+    assert "partial" in run.stderr
+    # a complete export beside the leftover still works; the leftover is ignored
+    out, _r = _export(tmp_path, name="complete")
+    rb.verify(out)
+    # writing into the leftover path itself is refused
+    with pytest.raises(ValueError, match="partial"):
+        rb.write_output(leftover, {n: b"x" for n in rb.OUTPUT_FILES})
+    # leftover is still there (export did not treat it as the dest) and dest is complete
+    assert leftover.is_dir()
+    assert (out / "decision_tape.csv").is_file()
+
+
+def test_cli_verify_defaults_to_repo_pins(tmp_path):
+    """CLI verify without flags applies repo pins, so a test-bundle folder is refused."""
+    out, _r = _export(tmp_path)
+    _bundle, asha = make_bundle(tmp_path)
+    run = cli(["verify", out], asha)
+    assert run.returncode == 2
+    assert "archive_sha256" in run.stderr
+    run = cli(["verify", "--self-consistency-only", out], asha)
+    # still compares code hash and default policy file; those match, unofficial fixture is ok
+    # but the frozen decisions + tape pin check is always on and should pass for this bundle
+    assert run.returncode == 0, run.stderr

@@ -15,14 +15,23 @@ folded in, plus Doodle's PROPOSED price-freshness policy (revised 2026-11-28 wit
 ```sh
 python -m optpipe.research.replay_bridge export path/to/Optpipe-Lesson-001-Portability-v3.zip NEW_OUTPUT_DIR
 python -m optpipe.research.replay_bridge verify NEW_OUTPUT_DIR
+python -m optpipe.research.replay_bridge verify --self-consistency-only NEW_OUTPUT_DIR
+python -m optpipe.research.replay_bridge verify NEW_OUTPUT_DIR \
+    --expect-archive-sha256 159de19c0fa74be03a46da954af92f8f1f164a62e0c439f0a57aa8bb1c3947a3 \
+    --expect-decisions-sha256 659175c6eb8a31ea3bebb53d71a27d462557ec0b62aa2494efab2918e71804f6 \
+    --expect-code-sha256 <sha256 of src/optpipe/research/replay_bridge.py> \
+    --expect-policy-sha256 <sha256 of config/replay_bridge_price_policy.json>
 ```
 
 `export` refuses any archive other than the pinned one, refuses an existing output folder (even an empty one), and
 refuses to run without a complete price policy (`--price-policy`, default `config/replay_bridge_price_policy.json`).
-Every refusal exits 2 and leaves no output folder.
+A policy section written as a string (instead of an object) also exits 2, not a crash. Every refusal exits 2 and
+leaves no output folder.
 
-Output folder (written atomically: built in a hidden temp folder beside the target, then one rename; on any error
-or interrupt the temp folder is removed, so the files land together or not at all):
+Output folder (written atomically: built in a hidden temp folder `.NAME.partial-*` beside the target, then one
+rename). On error or SIGTERM the temp folder is removed, so the files land together or not at all. SIGKILL cannot
+be caught and may leave a `.NAME.partial-*` folder; that folder is always invalid. `verify` refuses it, and
+`export` of the real target ignores leftovers beside it. Hidden partial folders are never accepted as output.
 
 | File | Content |
 |---|---|
@@ -30,11 +39,38 @@ or interrupt the temp folder is removed, so the files land together or not at al
 | `decision_tape_labeled.csv` | The same rows plus `upstream_decision`, `price_kind`, `price_label` (BAR / REALTIME / DELAYED), `price_status` (OK / BLOCKED), `price_reason_code`, `price_age_seconds`, `price_delay_seconds`, `price_adjusted_age_seconds`, `price_max_age_seconds` and the labels `paper_only`, `decision_support`, `fixture_set`, `fixture_set_sha256`. |
 | `price_block_log.csv` | One record per blocked decision-time price (header only when none): Doodle's 16 columns plus the same 4 label columns. |
 | `price_accept_log.csv` | One record per accepted decision-time price (header only when none): Doodle's 14 columns plus the same 4 label columns. Frozen archive: 390 records, all `label=BAR`, age 0. |
-| `bridge_receipt.json` | Archive, decisions and CSV hashes; counts (final and upstream); `price_policy` and `price_blocks`; `code_sha256` (sha256 of the bridge source file), the exact `command`, `python` version and `generated_at_utc`. |
+| `bridge_receipt.json` | Archive, decisions and CSV hashes; counts (final and upstream); `price_policy` (id, status, file sha256, path, status note, numbers) and `price_blocks` / `price_accepts`; `code_sha256` (sha256 of the bridge source file), the exact `command`, `python` version and `generated_at_utc`. |
 | `SHA256SUMS` | sha256 of the five files above. |
 
-`verify` refuses a folder with a missing or extra file, a SHA256SUMS mismatch, a receipt whose hashes or counts do
-not match the CSVs, or a CSV row without the paper-only / decision-support labels.
+`verify` always recomputes what it can from the files and refuses a mismatch (row counts, per-action counts,
+block and accept totals and breakdowns) even if SHA256SUMS was regenerated to match an edited receipt. It also
+cross-checks `decision_tape.csv` against `decision_tape_labeled.csv` row by row on Sol's 10 columns, so an
+edited and re-signed plain tape is refused. If the receipt claims the official fixture set, the archive sha
+must equal the repo pin `ARCHIVE_SHA`. If it records the frozen `decisions.json` sha, `decision_tape.csv` must
+equal `FROZEN_CSV_SHA`. The recorded `code_sha256` is compared to the running source file, and a receipt that
+points at the default policy file is compared to that file's hash and numbers. Hidden `.*.partial-*` folders
+are refused; hidden leftovers beside a complete folder are ignored.
+
+The CLI `verify` command also applies the repo pins by default (archive, frozen decisions, frozen tape, running
+code, and the default policy file where those pins exist). `--self-consistency-only` turns the repo pins off;
+the file-derived checks above still run. Optional flags are an independent check against values you supply:
+
+- `--expect-archive-sha256` — must equal the receipt `archive_sha256` and, when present, `labels.fixture_set_sha256`
+- `--expect-decisions-sha256` — must equal the receipt `decisions_sha256`
+- `--expect-code-sha256` — must equal the receipt `code_sha256`
+- `--expect-policy-sha256` — must equal the receipt `price_policy.file_sha256`
+
+Any pin that is given must match; a mismatch, or a missing receipt field, fails with exit 2 and writes nothing.
+The Python `verify()` API defaults to unpinned (file-derived checks only) so offline test-bundle folders can be
+checked; pass `pinned=True` to apply the repo pins. `--price-policy` on `export` still accepts any path;
+`load_policy` records the `status` the file declares. There is no approval flag and no way to mark a policy
+owner-approved. A folder exported from a test zip (not the official archive) is labeled `fixture_set=test-fixture`
+and is refused by the pinned CLI default.
+
+The receipt records `price_policy.file_sha256` and `price_policy.path` (repo-relative when the file is in the repo,
+otherwise the basename, never an absolute box path) and always includes `price_policy.status_note`: a policy with
+status PROPOSED is not owner-approved, and the receipt has no approval mechanism. `export` and `verify` also print
+that sentence when the recorded status is PROPOSED.
 
 ## The seven fixes
 
@@ -44,7 +80,10 @@ not match the CSVs, or a CSV row without the paper-only / decision-support label
    byte-identical (see Conflicts).
 2. **Inner tampers.** All 33 of Zoodle's inner controls are re-created in `tests/test_replay_bridge.py` and all are
    caught (table below). The 8 that passed before are now tape-integrity refusals.
-3. **Evidence.** `SHA256SUMS` in every output folder; the receipt records the code hash, the command and the time.
+3. **Evidence.** `SHA256SUMS` in every output folder; the receipt records the code hash, the command, the time,
+   the policy file sha256 and path, and a note that status PROPOSED is not owner-approved (no approval mechanism).
+   CLI `verify` applies the repo pins by default; `--self-consistency-only` turns those pins off. File-derived
+   checks (counts, tape cross-check, running code, default policy, official-fixture claims) always run.
 4. **Tests.** Network guard (bridge runs in a process with the repo guard on; the only guard hit is the probe),
    existing output folder refused (empty and non-empty, contents untouched), signal with a missing price.
 5. **Atomic output** plus negative controls for a missing receipt, a mismatched receipt (with and without
@@ -53,7 +92,8 @@ not match the CSVs, or a CSV row without the paper-only / decision-support label
 6. **Price status.** `price_status`, `price_reason_code`, `price_label` and the age columns in the labeled CSV.
 7. **Age ceiling.** Doodle's PROPOSED decision-time price policy (below), parameterised in
    `config/replay_bridge_price_policy.json`. A missing file, a missing key, a null, a negative or non-finite value
-   fails closed (exit 2, nothing written). TODO(Doodle): the values are PROPOSED for spec 1.1.9; Eugene's answers
+   fails closed (exit 2, nothing written). A policy object written as a string also exits 2 (not a crash).
+   TODO(Doodle): the values are PROPOSED for spec 1.1.9; Eugene's answers
    were relayed by Soodle; Doodle owns them.
 
 ## Inner-tamper disposition (Zoodle's I01-I33)
@@ -125,7 +165,41 @@ Source: Doodle's `trading/proposals/ReplayBridge-001-price-freshness.md`, sha256
 - Not implemented: the doc's pack `sources_terms` cross-check (MD-14: the field's `delay_minutes` must be at least
   the source's declared N). The Lesson 001 tape carries no pack terms, so there is nothing to check yet.
 
-## Conflicts between the fix list and Doodle's policy (the policy wins on freshness)
+## Verify identity pins and the PROPOSED policy (Sol, static review)
+
+Sol noted, and this was checked against the code at 657391c (Verified), that `verify` originally compared an
+output folder only to its own SHA256SUMS and receipt, so it had no independent trusted identity for the archive,
+the code or the policy; and that `load_policy` records whatever `status` the file declares, while
+`--price-policy` accepts any path. The second point is unchanged: there is still no approval mechanism, and
+`--price-policy` still accepts any path. The first point is addressed in this commit: the CLI `verify` default
+compares archive, decisions, tape, code and the default policy file to the repo pins; optional `--expect-*`
+flags add caller-supplied pins; and even `--self-consistency-only` still recomputes counts from the files,
+cross-checks the plain tape against the labeled CSV, compares the code hash to the running source, and compares
+a default-policy receipt to that file. A folder that is only internally consistent after an edit-and-resign no
+longer passes. The Python `verify()` API stays unpinned by default so test-bundle folders can still be checked.
+
+## Zoodle baseline at f0be2bc0 (R13–R16, O3c, X2a/X2b/X2c, PP18, A6/A7)
+
+Zoodle's report for head `f0be2bc0` (sha256 starts `cc776683`, ends `f97f`) is the baseline this commit folds in. Mapping (finding → test):
+
+- **R13** edited receipt archive hash + regenerated SUMS → `test_r13_edited_archive_hash_is_refused_after_resign`
+- **R14** edited receipt policy numbers + regenerated SUMS → `test_r14_edited_policy_numbers_are_refused_after_resign`
+- **R15** edited per-action / block counts + regenerated SUMS (the doc already claimed a refuse) →
+  `test_r15_edited_per_action_counts_are_refused_after_resign`
+- **R16** edited receipt code hash + regenerated SUMS → `test_r16_edited_code_hash_is_refused_after_resign`
+- **O3c** edited and re-signed plain `decision_tape.csv` → `test_o3c_plain_tape_is_cross_checked_against_labeled`
+- **X2a** forged SIGNAL_BEAR in both CSVs, rehashed → `test_x2a_forged_action_in_both_csvs_is_refused`
+- **X2b** unofficial folder relabelled as the official fixture, rehashed →
+  `test_x2b_official_fixture_relabel_is_refused`
+- **X2c** genuine other-archive repack, same frozen tape → `test_x2c_other_archive_same_tape_is_refused_against_the_pin`
+  (plus `test_cli_verify_defaults_to_repo_pins`)
+- **PP18** `bar_close_1m` written as the string `"0"` → `test_pp18_string_policy_section_exits_2`
+- **A7** SIGTERM mid-write cleans the temp folder, exit 2 → `test_a7_sigterm_cleans_up_the_temp_folder`
+- **A6** leftover `.*.partial-*` (SIGKILL cannot be caught) is refused by `verify` and by `write_output`, and
+  ignored beside a real target → `test_a6_leftover_partial_folder_is_refused_and_ignored`
+
+## Conflicts between the fix list and Doodle's policy
+ (the policy wins on freshness)
 
 - Fix 1 asked for label columns on every CSV row; the policy requires `decision_tape.csv` to stay byte-identical.
   The labels are in `decision_tape_labeled.csv`, `price_block_log.csv` and `price_accept_log.csv`;
