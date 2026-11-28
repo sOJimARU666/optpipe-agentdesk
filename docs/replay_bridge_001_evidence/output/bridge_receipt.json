@@ -1,0 +1,68 @@
+{
+  "archive_sha256": "159de19c0fa74be03a46da954af92f8f1f164a62e0c439f0a57aa8bb1c3947a3",
+  "code_sha256": "25ddb61d13a2cc2c9b73783c7edc4ff86c2a7485bba6131cddba50d2bd152cbc",
+  "command": "python -m optpipe.research.replay_bridge export Optpipe-Lesson-001-Portability-v3.zip output",
+  "counts": {
+    "ABSTAIN": 375,
+    "BLOCKED": 15,
+    "SIGNAL_BEAR": 0,
+    "SIGNAL_BULL": 1
+  },
+  "csv_sha256": "039ee5883a49fbd82e74a921bf18d6c2a551b52f7adfdda5a01d35ff0b58de24",
+  "decisions_sha256": "659175c6eb8a31ea3bebb53d71a27d462557ec0b62aa2494efab2918e71804f6",
+  "fixture_set": "lesson001-portability-v3",
+  "generated_at_utc": "2026-11-28T18:24:46+00:00",
+  "kind": "SYNTHETIC",
+  "labeled_csv_sha256": "84c31714f5eb2d8ce327308b315ceef013a582ea24d897ec708232c0349af9ad",
+  "labels": {
+    "decision_support": "DECISION_SUPPORT_ONLY_NOT_AN_ENTRY_OR_FILL",
+    "fixture_set": "lesson001-portability-v3",
+    "fixture_set_sha256": "159de19c0fa74be03a46da954af92f8f1f164a62e0c439f0a57aa8bb1c3947a3",
+    "paper_only": "PAPER_ONLY"
+  },
+  "price_accept_log_sha256": "c71fb9c1f9f274e9297df2bc92a74d82410326ffbdfc196202b6d14210cd5dd0",
+  "price_accepts": {
+    "by_label": {
+      "BAR": 390
+    },
+    "total": 390
+  },
+  "price_block_log_sha256": "36bfd5fe8bad7b022a6a391c695a8aaa295fe15fb2676f4b82fe53aca971a0ca",
+  "price_blocks": {
+    "by_label": {
+      "BAR": 1
+    },
+    "by_reason": {
+      "PF-STATUS": 1
+    },
+    "total": 1
+  },
+  "price_kind_default": "bar_close_1m",
+  "price_policy": {
+    "age": "decision_utc - as_of_utc, inclusive limits, first failure wins",
+    "delayed_quote": {
+      "absolute_ceiling_seconds": "1200",
+      "adjusted_max_seconds": "300",
+      "max_declared_delay_seconds": "900"
+    },
+    "file_sha256": "994d77250722f9ee28e941dcd66cb4791225862399a3935dd1f7cce82e6c511d",
+    "future_tolerance_seconds": "0",
+    "max_age_seconds": {
+      "bar_close_1m": "0",
+      "quote_last": "900"
+    },
+    "path": "config/replay_bridge_price_policy.json",
+    "policy_id": "RB001-PF-1.1.9-PROPOSED",
+    "status": "PROPOSED",
+    "status_note": "A policy with status PROPOSED is not owner-approved. This receipt records the status declared by the policy file; it has no approval mechanism."
+  },
+  "python": "3.13.5",
+  "rows": 391,
+  "scope": "decision projection only; no entries, fills, exits or P&L simulated",
+  "upstream_counts": {
+    "ABSTAIN": 375,
+    "BLOCKED": 15,
+    "SIGNAL_BEAR": 0,
+    "SIGNAL_BULL": 1
+  }
+}

@@ -1,0 +1,7 @@
+Verified and exported 391 synthetic decision rows; 1 decision-time price(s) blocked. Paper only, decision support only. No trades simulated.
+Policy status PROPOSED is not owner-approved.
+rc=0
+Verified output (pinned; checked: archive_sha256, decisions_sha256, csv_sha256, code_sha256, policy_file_sha256, official_sidecars; skipped: none; policy_status: PROPOSED; owner_approved: false): 391 rows, 1 price blocks. Paper only.
+Diagnostic sidecar fields (not derived from decision_tape.csv): upstream_decision, price_kind, price_label, price_reason_code, price_age_seconds, price_delay_seconds, price_adjusted_age_seconds, price_max_age_seconds, as_of_raw, status, kind, label.
+Policy status PROPOSED is not owner-approved.
+rc=0
