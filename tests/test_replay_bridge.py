@@ -285,8 +285,8 @@ def test_receipt_records_code_hash_command_timestamp_and_sha256sums(tmp_path):
     assert json.loads((out / "bridge_receipt.json").read_bytes()) == r
     v = rb.verify(out)
     assert v["rows"] == 391 and v["_verification"]["mode"] == rb.VERIFY_SELF_ONLY
-    assert v["_verification"]["checked"] == ["csv_sha256", "code_sha256"]
-    assert "archive_sha256" in v["_verification"]["skipped"]
+    assert v["_verification"]["checked"] == ["csv_sha256", "code_sha256", "policy_file_sha256"]
+    assert v["_verification"]["skipped"] == ["archive_sha256", "decisions_sha256", "official_sidecars"]
 
 
 def test_atomic_failure_leaves_no_output_and_no_partial(tmp_path, monkeypatch):
@@ -374,8 +374,8 @@ def test_verify_without_pins_prints_self_consistency_only(tmp_path):
     run = cli(["verify", "--self-consistency-only", out], asha)
     assert run.returncode == 0, run.stderr
     assert "self-consistency only" in run.stdout
-    assert "checked: csv_sha256, code_sha256" in run.stdout
-    assert "skipped: archive_sha256, decisions_sha256, policy_file_sha256" in run.stdout
+    assert "checked: csv_sha256, code_sha256, policy_file_sha256" in run.stdout
+    assert "skipped: archive_sha256, decisions_sha256, official_sidecars" in run.stdout
     assert "Diagnostic sidecar fields" in run.stdout
     assert "Policy status PROPOSED is not owner-approved" in run.stdout
 
@@ -394,7 +394,7 @@ def test_verify_identity_pins_match(tmp_path):
     assert "checked:" in run.stdout
     for name in ("archive_sha256", "decisions_sha256", "csv_sha256", "code_sha256", "policy_file_sha256"):
         assert name in run.stdout
-    assert "skipped: none" in run.stdout
+    assert "skipped: official_sidecars" in run.stdout
     assert "Policy status PROPOSED is not owner-approved" in run.stdout
 
 
@@ -413,7 +413,8 @@ def test_verify_identity_pin_mismatch_fails(tmp_path, flag, field):
     # the folder itself is left untouched and is still self-consistent
     v = rb.verify(out)["_verification"]
     assert "archive_sha256" in v["skipped"]
-    assert "policy_file_sha256" in v["skipped"]
+    assert "policy_file_sha256" in v["checked"]
+    assert "official_sidecars" in v["skipped"]
     assert "code_sha256" in v["checked"]
 
 
@@ -482,10 +483,11 @@ def test_policy_status_is_recorded_as_declared_with_no_approval_mechanism(tmp_pa
     assert "not owner-approved" in r["price_policy"]["status_note"]
     _bundle, asha = make_bundle(tmp_path)
     run = cli(["verify", "--self-consistency-only", out], asha)
-    assert run.returncode == 0
-    assert "self-consistency only" in run.stdout
-    # Approval status is never read from the receipt; the notice comes from the configured policy.
-    assert "Policy status PROPOSED is not owner-approved" in run.stdout
+    assert run.returncode == 2, run.stderr
+    assert "policy" in run.stderr
+    # Approval status is never read from the receipt.
+    with pytest.raises(rb.TapeError, match="policy"):
+        rb.verify(out)
 
 
 def test_export_stdout_states_proposed_is_not_owner_approved(tmp_path):
@@ -951,7 +953,13 @@ def test_r14_edited_policy_numbers_are_refused_after_resign(tmp_path):
         rec["price_policy"]["max_age_seconds"]["quote_last"] = "1"
     _edit_receipt(out, mut)
     with pytest.raises(rb.TapeError, match="price_policy"):
+        rb.verify(out)
+    with pytest.raises(rb.TapeError, match="price_policy"):
         rb.verify(out, expect_policy_sha256=rb.digest((ROOT / "config" / "replay_bridge_price_policy.json").read_bytes()))
+    _bundle, asha = make_bundle(tmp_path)
+    run = cli(["verify", "--self-consistency-only", out], asha)
+    assert run.returncode == 2, run.stderr
+    assert "price_policy" in run.stderr
 
 
 def test_r15_edited_per_action_counts_are_refused_after_resign(tmp_path):
@@ -1197,9 +1205,9 @@ def test_policy_pin_comes_from_config_not_receipt(tmp_path):
         rec["price_policy"]["path"] = "other-policy.json"
         rec["price_policy"]["file_sha256"] = "00" * 32
     _edit_receipt(out, mut)
-    # unpinned, no expect flag: policy pin is skipped (identity is not taken from the receipt)
-    v = rb.verify(out)
-    assert "policy_file_sha256" in v["_verification"]["skipped"]
+    # unpinned, no expect flag: still compared to the configured policy file, not the receipt path
+    with pytest.raises(rb.TapeError, match="policy"):
+        rb.verify(out)
     # pinned / config identity still compares to the default policy file, not the receipt path
     with pytest.raises(rb.TapeError, match="policy file sha256"):
         rb.verify(out, pinned=True, expect_archive_sha256=r["archive_sha256"])
@@ -1224,15 +1232,15 @@ def test_verify_lists_checked_and_skipped_pins(tmp_path):
     """Stdout and _verification list exactly the pins that were checked and skipped."""
     out, r = _export(tmp_path)
     v = rb.verify(out)["_verification"]
-    assert v["checked"] == ["csv_sha256", "code_sha256"]
-    assert v["skipped"] == ["archive_sha256", "decisions_sha256", "policy_file_sha256"]
+    assert v["checked"] == ["csv_sha256", "code_sha256", "policy_file_sha256"]
+    assert v["skipped"] == ["archive_sha256", "decisions_sha256", "official_sidecars"]
     assert v["pins"] == v["checked"]
     assert v["diagnostic_fields"] == list(rb.SIDECAR_DIAGNOSTIC_FIELDS)
     _bundle, asha = make_bundle(tmp_path)
     run = cli(["verify", "--self-consistency-only", out], asha)
     assert run.returncode == 0, run.stderr
-    assert "checked: csv_sha256, code_sha256" in run.stdout
-    assert "skipped: archive_sha256, decisions_sha256, policy_file_sha256" in run.stdout
+    assert "checked: csv_sha256, code_sha256, policy_file_sha256" in run.stdout
+    assert "skipped: archive_sha256, decisions_sha256, official_sidecars" in run.stdout
     assert "Diagnostic sidecar fields (not derived from decision_tape.csv):" in run.stdout
     for name in rb.SIDECAR_DIAGNOSTIC_FIELDS:
         assert name in run.stdout
@@ -1349,7 +1357,12 @@ def test_s12_approved_status_is_refused_and_notice_comes_from_config(tmp_path):
     _resign_official(out, rec)
     with pytest.raises(rb.TapeError, match="price_policy.status"):
         rb.verify(out, pinned=True)
+    with pytest.raises(rb.TapeError, match="price_policy.status"):
+        rb.verify(out)
     run = cli(["verify", out], rb.ARCHIVE_SHA)
+    assert run.returncode == 2, run.stderr
+    assert "price_policy.status" in run.stderr
+    run = cli(["verify", "--self-consistency-only", out], rb.ARCHIVE_SHA)
     assert run.returncode == 2, run.stderr
     assert "price_policy.status" in run.stderr
     # a clean official folder still prints the notice from the configured policy
@@ -1482,9 +1495,14 @@ def test_pb1_alternate_policy_identity_is_refused_in_pinned_mode(tmp_path):
     _resign_official(out, rec)
     with pytest.raises(rb.TapeError, match="policy"):
         rb.verify(out, pinned=True)
+    with pytest.raises(rb.TapeError, match="policy"):
+        rb.verify(out)
     run = cli(["verify", out], rb.ARCHIVE_SHA)
     assert run.returncode == 2, run.stderr
     assert "pinned" not in run.stdout  # must not print pinned-mode success
+    assert "policy" in run.stderr
+    run = cli(["verify", "--self-consistency-only", out], rb.ARCHIVE_SHA)
+    assert run.returncode == 2, run.stderr
     assert "policy" in run.stderr
 
 
@@ -1503,3 +1521,69 @@ def test_pb4_official_export_with_alternate_policy_is_refused(tmp_path):
     run = cli(["verify", out], rb.ARCHIVE_SHA)
     assert run.returncode == 2
     assert "pinned" not in run.stdout
+
+
+# --- Zoodle re-gate at 7ec5a19f: self-only policy compare (R14, S12, Pb1-Pb3, Pc1-Pc8) ---
+
+def _self_only_policy_refused(out, match="policy"):
+    with pytest.raises(rb.TapeError, match=match):
+        rb.verify(out)
+    run = cli(["verify", "--self-consistency-only", out], rb.ARCHIVE_SHA)
+    assert run.returncode == 2, run.stderr
+    assert "policy" in run.stderr
+
+
+def test_pb2_alt_json_path_is_refused_in_self_only(tmp_path):
+    """Pb2: receipt policy path changed to alt.json, fully re-signed; refused in self-only."""
+    out, rec = _official_out(tmp_path)
+    rec["price_policy"]["path"] = "alt.json"
+    _resign_official(out, rec)
+    _self_only_policy_refused(out)
+
+
+def test_pb3_dotted_config_path_is_refused_in_self_only(tmp_path):
+    """Pb3: receipt policy path spelled ./config/... with loosened numbers, fully re-signed."""
+    out, rec = _official_out(tmp_path)
+    rec["price_policy"]["path"] = "./config/replay_bridge_price_policy.json"
+    rec["price_policy"]["max_age_seconds"]["quote_last"] = "99999"
+    _resign_official(out, rec)
+    _self_only_policy_refused(out)
+
+
+def _pc_mut(pid):
+    """Zoodle harness7 Pc1–Pc8 receipt mutations (official folder, then fully re-signed)."""
+    def pc1(rec):
+        del rec["price_policy"]["path"]
+    def pc2(rec):
+        rec["price_policy"].pop("path", None)
+        rec["price_policy"]["file_sha256"] = "ab" * 32
+        rec["price_policy"]["max_age_seconds"]["quote_last"] = "99999"
+    def pc3(rec):
+        rec.pop("price_policy")
+    def pc4(rec):
+        rec["price_policy"] = {}
+    def pc5(rec):
+        rec["price_policy"].pop("file_sha256")
+    def pc6(rec):
+        rec["price_policy"]["path"] = ""
+        rec["price_policy"]["file_sha256"] = "ab" * 32
+        rec["price_policy"]["max_age_seconds"]["quote_last"] = "99999"
+    def pc7(rec):
+        rec["price_policy"].pop("status_note")
+    def pc8(rec):
+        rec["price_policy"]["delayed_quote"] = {
+            "absolute_ceiling_seconds": "99999",
+            "adjusted_max_seconds": "99999",
+            "max_declared_delay_seconds": "900",
+        }
+    return {"Pc1": pc1, "Pc2": pc2, "Pc3": pc3, "Pc4": pc4,
+            "Pc5": pc5, "Pc6": pc6, "Pc7": pc7, "Pc8": pc8}[pid]
+
+
+@pytest.mark.parametrize("pid", ["Pc1", "Pc2", "Pc3", "Pc4", "Pc5", "Pc6", "Pc7", "Pc8"])
+def test_pc_receipt_policy_edits_are_refused_in_self_only(tmp_path, pid):
+    """Pc1–Pc8: official folder, receipt policy edited and fully re-signed; refused in self-only."""
+    out, rec = _official_out(tmp_path)
+    _pc_mut(pid)(rec)
+    _resign_official(out, rec)
+    _self_only_policy_refused(out, match="policy")

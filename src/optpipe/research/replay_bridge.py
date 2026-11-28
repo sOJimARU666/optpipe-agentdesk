@@ -774,11 +774,13 @@ def verify(out: Path, *, expect_archive_sha256: str | None = None, expect_decisi
     pin (ARCHIVE_SHA, FROZEN_DECISIONS_SHA, FROZEN_CSV_SHA, the running source, and the default policy
     file) and refuses if a required pin cannot be resolved. ``--self-consistency-only`` sets pinned=False.
     The in-memory ``_verification`` result and the CLI output list the pins that were checked and the
-    pins that were skipped, and name the sidecar fields that are DIAGNOSTIC (not derivable from the
-    plain tape). In pinned official mode, those sidecar files and the receipt policy fields are
-    recomputed from the pinned archive plus the configured policy and compared byte-for-byte; the
-    not-owner-approved notice comes from the configured policy, never from the receipt. This function
-    never writes into `out`.
+    pins that were skipped (including ``official_sidecars`` in every mode), and name the sidecar fields
+    that are DIAGNOSTIC (not derivable from the plain tape). The receipt's policy identity, status and
+    numbers are compared to the configured policy file in every mode, including
+    ``--self-consistency-only``. In pinned official mode, the sidecar files and the receipt policy
+    fields are also recomputed from the pinned archive plus that configured policy and compared
+    byte-for-byte. The not-owner-approved notice comes from the configured policy, never from the
+    receipt. This function never writes into `out`.
     """
     out = Path(out)
     if is_partial_output(out):
@@ -890,12 +892,14 @@ def verify(out: Path, *, expect_archive_sha256: str | None = None, expect_decisi
         raise TapeError("code_sha256 does not match the running bridge source")
     checked.append("code_sha256")
 
+    # Receipt-vs-configured-policy compare runs in every mode, including self-only (R14 at 72078004).
+    # Identity, status and numbers come from the configured file or a CLI flag, never from the receipt.
     if expect_policy_sha256 is not None:
         expected_policy = expect_policy_sha256
-    elif pinned:
-        if not POLICY_FILE.is_file():
-            raise TapeError("required policy pin cannot be resolved: default policy file is missing")
+    elif POLICY_FILE.is_file():
         expected_policy = digest(POLICY_FILE.read_bytes())
+    elif pinned:
+        raise TapeError("required policy pin cannot be resolved: default policy file is missing")
     else:
         expected_policy = None
     if (pinned and POLICY_FILE.is_file() and expect_policy_sha256 is not None
@@ -924,11 +928,12 @@ def verify(out: Path, *, expect_archive_sha256: str | None = None, expect_decisi
         else:
             skipped.append("official_sidecars")
         mode = VERIFY_WITH_PINS
-    elif any(name in checked for name in ("archive_sha256", "decisions_sha256", "policy_file_sha256")
-             if name != "code_sha256"):
-        mode = "self-consistency plus supplied identity pins"
     else:
-        mode = VERIFY_SELF_ONLY
+        skipped.append("official_sidecars")
+        if "archive_sha256" in checked or "decisions_sha256" in checked:
+            mode = "self-consistency plus supplied identity pins"
+        else:
+            mode = VERIFY_SELF_ONLY
     receipt["_verification"] = {
         "mode": mode,
         "pinned": pinned,

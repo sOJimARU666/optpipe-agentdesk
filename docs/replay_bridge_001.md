@@ -64,9 +64,12 @@ code, and the configured policy file). In pinned official mode it also recompute
 pinned archive plus that configured policy, then compares the bytes, so an official folder that was edited
 and fully re-signed is refused. A required pin that cannot be resolved, or a policy identity that does not
 match the configured file, is refused. The output and the in-memory `_verification.checked` / `.skipped`
-lists name exactly the pins that ran (including `official_sidecars` when the official projection was
-compared). `--self-consistency-only` turns the repo pins and the official recompute off; the file-derived
-checks above still run. Optional flags are an independent check against values you supply:
+lists name exactly the pins that ran. `official_sidecars` is listed as checked when the official
+projection was compared, and as skipped in `--self-consistency-only` (and when pinned against a
+non-official archive). `--self-consistency-only` turns the archive, decisions and official-recompute
+pins off; it does not turn off the receipt-versus-configured-policy compare. File-derived checks
+(counts, tape cross-check, running code, configured policy identity/status/numbers, official-fixture
+claims) always run. Optional flags are an independent check against values you supply:
 
 - `--expect-archive-sha256` — must equal the receipt `archive_sha256` and, when present, `labels.fixture_set_sha256`
 - `--expect-decisions-sha256` — must equal the receipt `decisions_sha256`
@@ -97,8 +100,9 @@ are not pinned (they differ between genuine official runs).
    caught (table below). The 8 that passed before are now tape-integrity refusals.
 3. **Evidence.** `SHA256SUMS` in every output folder; the receipt records the code hash, the command, the time,
    the policy file sha256 and path, and a note that status PROPOSED is not owner-approved (no approval mechanism).
-   CLI `verify` applies the repo pins by default; `--self-consistency-only` turns those pins off. File-derived
-   checks (counts, tape cross-check, running code, default policy, official-fixture claims) always run.
+   CLI `verify` applies the repo pins by default; `--self-consistency-only` turns the archive, decisions
+   and official-recompute pins off. File-derived checks (counts, tape cross-check, running code, the
+   configured policy's identity, status and numbers, official-fixture claims) always run.
 4. **Tests.** Network guard (bridge runs in a process with the repo guard on; the only guard hit is the probe),
    existing output folder refused (empty and non-empty, contents untouched), signal with a missing price.
 5. **Atomic output** plus negative controls for a missing receipt, a mismatched receipt (with and without
@@ -189,8 +193,10 @@ the code or the policy; and that `load_policy` records whatever `status` the fil
 `--price-policy` still accepts any path. The first point is addressed in this commit: the CLI `verify` default
 compares archive, decisions, tape, code and the default policy file to the repo pins; optional `--expect-*`
 flags add caller-supplied pins; and even `--self-consistency-only` still recomputes counts from the files,
-cross-checks the plain tape against the labeled CSV, compares the code hash to the running source, and compares
-a configured policy file, never the receipt's path, and reports the pins that were actually checked or skipped.
+cross-checks the plain tape against the labeled CSV, compares the code hash to the running source, and
+compares the receipt's policy identity, status and numbers to the configured policy file (never to a path
+claimed by the receipt). The output reports the pins that were actually checked or skipped, including
+`official_sidecars`.
 In pinned official mode, the labeled CSV, both price logs and the receipt policy fields are recomputed from the
 pinned archive plus that configured policy and compared byte-for-byte, so an official folder that is only
 internally consistent after an edit-and-resign no longer passes. The Python `verify()` API stays unpinned by
