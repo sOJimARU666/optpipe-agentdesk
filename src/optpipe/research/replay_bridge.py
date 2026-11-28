@@ -8,17 +8,19 @@ sha256 8bb3ed3c...056f), with the fixes from Zoodle's test report and Noodle's r
 docs/replay_bridge_001.md for the fix list and the inner-tamper disposition table.
 
 Decision-time price freshness follows Doodle's PROPOSED spec 1.1.9 policy (trading/proposals/
-ReplayBridge-001-price-freshness.md, sha256 fc50b0e1...7619). The numbers are read from a policy file
-(config/replay_bridge_price_policy.json by default), never hard-coded here.
-TODO(Doodle): the policy values are PROPOSED and pending Eugene's answers. Doodle owns them. When the policy is
-missing or any value is unset, the bridge refuses to export (fail closed, exit 2).
+ReplayBridge-001-price-freshness.md, sha256 805f2681...e246, which replaces fc50b0e1...7619). The numbers are
+read from a policy file (config/replay_bridge_price_policy.json by default), never hard-coded here.
+TODO(Doodle): the policy values are PROPOSED for spec 1.1.9 (Eugene's answers relayed by Soodle). Doodle owns them.
+When the policy is missing or any value is unset, the bridge refuses to export (fail closed, exit 2).
 
-Outputs (one new folder, written atomically: all five files land together or none do):
+Outputs (one new folder, written atomically: all six files land together or none do):
   decision_tape.csv           Sol's 10-column projection (byte-identical for the frozen tape)
-  decision_tape_labeled.csv   the same rows plus paper-only / decision-support labels, fixture set + hash, price status
+  decision_tape_labeled.csv   the same rows plus paper-only / decision-support labels, fixture set + hash, price status,
+                              price label (BAR / REALTIME / DELAYED), delay and adjusted age
   price_block_log.csv         one record per blocked decision-time price (header only when none), plus labels
+  price_accept_log.csv        one record per accepted decision-time price (header only when none), plus labels
   bridge_receipt.json         hashes, counts, policy, code hash, command, timestamp
-  SHA256SUMS                  sha256 of the four files above
+  SHA256SUMS                  sha256 of the five files above
 """
 from __future__ import annotations
 
@@ -27,6 +29,7 @@ import csv
 import hashlib
 import io
 import json
+import math
 import os
 import platform
 import shlex
@@ -60,17 +63,27 @@ DIRECTION_GATES = ("noise", "range", "vwap")
 EXIT = {"action": "BLOCKED", "status": "Unknown"}
 CADENCE = timedelta(seconds=60)
 PRICE_KINDS = ("bar_close_1m", "quote_last")
+DELAY_FIELDS = ("delayed", "delay_minutes", "delay_seconds")
+MIN_DELAY_SECONDS = 60                      # MD-08: delayed:true needs delay_minutes >= 1
 
 FIELDS = ("decision_at_ny", "decision_at_berlin", "symbol", "observed_price_at_ny",
           "observed_price", "decision", "bull_signal", "bear_signal", "exit_state", "source_id")
 LABEL_FIELDS = ("paper_only", "decision_support", "fixture_set", "fixture_set_sha256")
-LABELED_FIELDS = FIELDS + ("upstream_decision", "price_kind", "price_status", "price_reason_code",
-                           "price_age_seconds", "price_max_age_seconds") + LABEL_FIELDS
-LOG_FIELDS = ("row_index", "decision_at_ny", "symbol", "price_kind", "status", "as_of_raw", "age_seconds",
-              "max_age_seconds", "reason_code", "upstream_action", "final_action", "source_id", "kind") + LABEL_FIELDS
+LABELED_FIELDS = FIELDS + ("upstream_decision", "price_kind", "price_label", "price_status", "price_reason_code",
+                           "price_age_seconds", "price_delay_seconds", "price_adjusted_age_seconds",
+                           "price_max_age_seconds") + LABEL_FIELDS
+LOG_FIELDS = ("row_index", "decision_at_ny", "symbol", "price_kind", "label", "status", "as_of_raw", "age_seconds",
+              "delay_seconds", "adjusted_age_seconds", "max_age_seconds", "reason_code", "upstream_action",
+              "final_action", "source_id", "kind") + LABEL_FIELDS
+ACCEPT_FIELDS = ("row_index", "decision_at_ny", "symbol", "price_kind", "label", "status", "as_of", "age_seconds",
+                 "delay_seconds", "adjusted_age_seconds", "max_age_seconds", "source_id", "kind",
+                 "action") + LABEL_FIELDS
+# Doodle's check order (first failure wins). PF-DELAY-DECL sits between PF-SESSION and PF-STALE.
 REASONS = ("PF-KIND", "PF-STATUS", "PF-TIME-MISSING", "PF-TIME-NAIVE", "PF-TIME-INVALID", "PF-CALENDAR",
-           "PF-CLOSED", "PF-FUTURE", "PF-SESSION", "PF-STALE", "PF-VALUE", "PF-BIDASK")
-OUTPUT_FILES = ("decision_tape.csv", "decision_tape_labeled.csv", "price_block_log.csv", "bridge_receipt.json")
+           "PF-CLOSED", "PF-FUTURE", "PF-SESSION", "PF-DELAY-DECL", "PF-STALE", "PF-VALUE", "PF-BIDASK")
+OUTPUT_FILES = ("decision_tape.csv", "decision_tape_labeled.csv", "price_block_log.csv", "price_accept_log.csv",
+                "bridge_receipt.json")
+CSV_FILES = OUTPUT_FILES[:4]
 
 
 class TapeError(ValueError):
@@ -105,12 +118,19 @@ def load_policy(raw) -> dict:
     pid = raw.get("policy_id")
     if not isinstance(pid, str) or not pid:
         raise PolicyError("price policy policy_id is not set")
+    dq = raw.get("delayed_quote")
+    dq = dq if isinstance(dq, dict) else {}
+    delayed = {k: _seconds(dq.get(k), f"delayed_quote.{k}")
+               for k in ("max_declared_delay_seconds", "absolute_ceiling_seconds", "adjusted_max_seconds")}
+    if delayed["max_declared_delay_seconds"] < MIN_DELAY_SECONDS:
+        raise PolicyError("price policy delayed_quote.max_declared_delay_seconds must be >= 60 (MD-08)")
     return {
         "policy_id": pid,
         "status": str(raw.get("status", "UNKNOWN")),
         "max_age_seconds": {k: _seconds((raw.get(k) or {}).get("max_age_seconds"), f"{k}.max_age_seconds")
                             for k in PRICE_KINDS},
         "future_tolerance_seconds": _seconds(raw.get("future_tolerance_seconds"), "future_tolerance_seconds"),
+        "delayed_quote": delayed,
     }
 
 
@@ -150,11 +170,44 @@ def _num(v) -> Decimal | None:
     return d if d.is_finite() else None
 
 
-def evaluate_price(price: dict, decision: datetime, price_kind: str | None, policy: dict) -> dict:
-    """Doodle's PROPOSED checks 1-12, fixed order, first failure wins. Never raises for a bad price.
+def _delay_declaration(price: dict, policy: dict):
+    """Validate a quote's delay declaration (MD-08 / MD-14 shape). Returns (declared, delay_seconds or None).
 
-    Returns {"ok", "reason", "age", "max_age", "value"}; age is recorded whenever both instants parse."""
-    out = {"ok": False, "reason": None, "age": None, "max_age": None, "value": None}
+    declared is False only for `delayed: false`/absent with no delay field (REALTIME). Anything else is a declaration:
+    a valid one gives delay_seconds, an invalid one gives None (PF-DELAY-DECL)."""
+    present = [k for k in DELAY_FIELDS if k in price]
+    if not present or (present == ["delayed"] and price["delayed"] is False):
+        return False, None
+    if price.get("delayed") is not True:                       # delayed:false with a delay field, or not a real bool
+        return True, None
+    cap = policy["delayed_quote"]["max_declared_delay_seconds"]
+    secs = None
+    if "delay_minutes" in price:
+        m = price["delay_minutes"]
+        if isinstance(m, bool) or not isinstance(m, int) or not (1 <= m <= cap // 60):
+            return True, None
+        secs = Decimal(m * 60)
+    if "delay_seconds" in price:
+        d = price["delay_seconds"]
+        if isinstance(d, bool) or not isinstance(d, (int, float)) or not math.isfinite(d):
+            return True, None
+        if d != int(d) or int(d) % 60 or not (MIN_DELAY_SECONDS <= int(d) <= cap):
+            return True, None
+        if secs is not None and secs != Decimal(int(d)):       # both present and disagreeing
+            return True, None
+        secs = Decimal(int(d))
+    return True, secs
+
+
+def evaluate_price(price: dict, decision: datetime, price_kind: str | None, policy: dict) -> dict:
+    """Doodle's PROPOSED checks 1-15 (policy 805f2681...e246), fixed order, first failure wins. Never raises for a
+    bad price. Returns {"ok", "reason", "label", "age", "delay", "adjusted", "max_age", "value"}.
+
+    label is BAR, REALTIME or DELAYED ("" for an unknown price_kind). A DELAYED price keeps its label whether it is
+    accepted or blocked; it is never relabeled REALTIME. age is recorded whenever both instants parse; delay and
+    adjusted age whenever they can be computed."""
+    out = {"ok": False, "reason": None, "label": "", "age": None, "delay": None, "adjusted": None, "max_age": None,
+           "value": None}
 
     def block(code):
         out["reason"] = code
@@ -171,32 +224,50 @@ def evaluate_price(price: dict, decision: datetime, price_kind: str | None, poli
         out["age"] = _age(decision, as_of)
     if price_kind not in PRICE_KINDS:                                             # 1
         return block("PF-KIND")
-    out["max_age"] = policy["max_age_seconds"][price_kind]
-    if price.get("status") != "ok":                                               # 2 (case-sensitive)
+    declared, delay = False, None
+    if price_kind == "bar_close_1m":
+        out["label"] = "BAR"
+        if any(k in price for k in DELAY_FIELDS):                                 # 2 (bars never take DELAYED)
+            return block("PF-KIND")
+    else:
+        declared, delay = _delay_declaration(price, policy)
+        out["label"] = "DELAYED" if declared else "REALTIME"
+    dq = policy["delayed_quote"]
+    out["max_age"] = (dq["absolute_ceiling_seconds"] if declared else policy["max_age_seconds"][price_kind])
+    if price.get("status") != "ok":                                               # 3 (case-sensitive)
         return block("PF-STATUS")
-    if not isinstance(raw_as_of, str) or not raw_as_of:                           # 3
+    if not isinstance(raw_as_of, str) or not raw_as_of:                           # 4
         return block("PF-TIME-MISSING")
-    if as_of is not None and as_of.utcoffset() is None:                           # 4
+    if as_of is not None and as_of.utcoffset() is None:                           # 5
         return block("PF-TIME-NAIVE")
-    if as_of is None:                                                             # 5
+    if as_of is None:                                                             # 6
         return block("PF-TIME-INVALID")
     d_ny = decision.astimezone(cal.NY)
-    if not cal.covers(d_ny.date()):                                               # 6
+    if not cal.covers(d_ny.date()):                                               # 7
         return block("PF-CALENDAR")
     close = cal.close_at(d_ny.date())
-    if close is None or not (cal.ny_at(d_ny.date(), cal.OPEN) <= d_ny <= close):  # 7 (both ends inclusive)
+    if close is None or not (cal.ny_at(d_ny.date(), cal.OPEN) <= d_ny <= close):  # 8 (both ends inclusive)
         return block("PF-CLOSED")
-    if -out["age"] > policy["future_tolerance_seconds"]:                          # 8
+    if -out["age"] > policy["future_tolerance_seconds"]:                          # 9
         return block("PF-FUTURE")
     a_ny = as_of.astimezone(cal.NY)
-    if a_ny.date() != d_ny.date() or a_ny < cal.ny_at(d_ny.date(), cal.OPEN):     # 9
+    if a_ny.date() != d_ny.date() or a_ny < cal.ny_at(d_ny.date(), cal.OPEN):     # 10
         return block("PF-SESSION")
-    if out["age"] > out["max_age"]:                                               # 10 (inclusive limit)
+    if declared:
+        if delay is None:                                                         # 11 invalid declaration
+            return block("PF-DELAY-DECL")
+        out["delay"] = delay
+        out["adjusted"] = out["age"] - delay
+        if out["adjusted"] < 0:                                                   # 12 fresher than its declared delay
+            return block("PF-DELAY-DECL")
+        if out["age"] > dq["absolute_ceiling_seconds"] or out["adjusted"] > dq["adjusted_max_seconds"]:   # 13
+            return block("PF-STALE")
+    elif out["age"] > out["max_age"]:                                             # 13 (inclusive limits)
         return block("PF-STALE")
     value = _num(price.get("value"))
-    if value is None or value <= 0:                                               # 11
+    if value is None or value <= 0:                                               # 14
         return block("PF-VALUE")
-    if "bid" in price or "ask" in price:                                          # 12
+    if "bid" in price or "ask" in price:                                          # 15
         bid, ask = _num(price.get("bid")), _num(price.get("ask"))
         if bid is None or ask is None or bid <= 0 or ask <= 0 or ask < bid:
             return block("PF-BIDASK")
@@ -264,11 +335,12 @@ def project(raw: bytes, receipt: dict, policy: dict, *, fixture_sha: str, price_
         price_kind = "bar_close_1m"     # set by the bridge for the frozen archive only (policy 3.1)
 
     labels = (PAPER_ONLY, DECISION_SUPPORT, FIXTURE_SET, fixture_sha)
-    bufs = {n: io.StringIO(newline="") for n in OUTPUT_FILES[:3]}
+    bufs = {n: io.StringIO(newline="") for n in CSV_FILES}
     w = {n: csv.writer(b, lineterminator="\n") for n, b in bufs.items()}
     w["decision_tape.csv"].writerow(FIELDS)
     w["decision_tape_labeled.csv"].writerow(LABELED_FIELDS)
     w["price_block_log.csv"].writerow(LOG_FIELDS)
+    w["price_accept_log.csv"].writerow(ACCEPT_FIELDS)
 
     source_id, symbol = tape[0]["provenance"]["source_id"], tape[0]["symbol"]
     first = _instant(tape[0]["clock"]["ny"], "ny")
@@ -280,6 +352,8 @@ def project(raw: bytes, receipt: dict, policy: dict, *, fixture_sha: str, price_
     upstream = dict.fromkeys(ACTIONS, 0)
     final = dict.fromkeys(ACTIONS, 0)
     blocks = dict.fromkeys(REASONS, 0)
+    block_labels: dict[str, int] = {}
+    accept_labels: dict[str, int] = {}
     last, signal_seen = None, False
     for i, row in enumerate(tape):
         try:
@@ -314,14 +388,22 @@ def project(raw: bytes, receipt: dict, policy: dict, *, fixture_sha: str, price_
                 int(final_action == "SIGNAL_BEAR"), "BLOCKED", source_id)
         w["decision_tape.csv"].writerow(base)
         w["decision_tape_labeled.csv"].writerow(base + (
-            action, kind or "", "OK" if res["ok"] else "BLOCKED", res["reason"] or "", _fmt(res["age"]),
-            _fmt(res["max_age"]), *labels))
-        if not res["ok"]:
+            action, kind or "", res["label"], "OK" if res["ok"] else "BLOCKED", res["reason"] or "",
+            _fmt(res["age"]), _fmt(res["delay"]), _fmt(res["adjusted"]), _fmt(res["max_age"]), *labels))
+        ages = (_fmt(res["age"]), _fmt(res["delay"]), _fmt(res["adjusted"]), _fmt(res["max_age"]))
+        if res["ok"]:
+            accept_labels[res["label"]] = accept_labels.get(res["label"], 0) + 1
+            w["price_accept_log.csv"].writerow((
+                i, clock["ny"], symbol, kind, res["label"], "ok", seen, *ages, source_id, row["provenance"]["kind"],
+                final_action, *labels))
+        else:
             blocks[res["reason"]] += 1
+            block_labels[res["label"]] = block_labels.get(res["label"], 0) + 1
             as_of_raw = price.get("as_of")
             w["price_block_log.csv"].writerow((
-                i, clock["ny"], symbol, kind or "", "" if price.get("status") is None else str(price.get("status")),
-                "" if as_of_raw is None else str(as_of_raw), _fmt(res["age"]), _fmt(res["max_age"]), res["reason"],
+                i, clock["ny"], symbol, kind or "", res["label"],
+                "" if price.get("status") is None else str(price.get("status")),
+                "" if as_of_raw is None else str(as_of_raw), *ages, res["reason"],
                 action, final_action, source_id, row["provenance"]["kind"], *labels))
     close = cal.close_at(day)
     if last != close:
@@ -333,7 +415,9 @@ def project(raw: bytes, receipt: dict, policy: dict, *, fixture_sha: str, price_
         "rows": len(tape),
         "counts": final,
         "upstream_counts": upstream,
-        "price_blocks": {"total": total, "by_reason": {k: v for k, v in blocks.items() if v}},
+        "price_blocks": {"total": total, "by_reason": {k: v for k, v in blocks.items() if v},
+                         "by_label": block_labels},
+        "price_accepts": {"total": sum(accept_labels.values()), "by_label": accept_labels},
         "price_kind_default": price_kind,
         "kind": "SYNTHETIC",
         "labels": dict(zip(LABEL_FIELDS, labels)),
@@ -398,9 +482,11 @@ def export(bundle: Path, out: Path, policy_path: Path, *, command: str, now=None
         "csv_sha256": digest(files["decision_tape.csv"]),
         "labeled_csv_sha256": digest(files["decision_tape_labeled.csv"]),
         "price_block_log_sha256": digest(files["price_block_log.csv"]),
+        "price_accept_log_sha256": digest(files["price_accept_log.csv"]),
         "price_policy": {"policy_id": policy["policy_id"], "status": policy["status"], "file_sha256": policy_sha,
                          "max_age_seconds": {k: _fmt(v) for k, v in policy["max_age_seconds"].items()},
                          "future_tolerance_seconds": _fmt(policy["future_tolerance_seconds"]),
+                         "delayed_quote": {k: _fmt(v) for k, v in policy["delayed_quote"].items()},
                          "age": "decision_utc - as_of_utc, inclusive limits, first failure wins"},
         "code_sha256": digest(Path(__file__).read_bytes()),
         "command": command,
@@ -428,16 +514,20 @@ def verify(out: Path) -> dict:
     except ValueError:
         raise TapeError("receipt is not valid JSON") from None
     for key, name in (("csv_sha256", "decision_tape.csv"), ("labeled_csv_sha256", "decision_tape_labeled.csv"),
-                      ("price_block_log_sha256", "price_block_log.csv")):
+                      ("price_block_log_sha256", "price_block_log.csv"),
+                      ("price_accept_log_sha256", "price_accept_log.csv")):
         if receipt.get(key) != digest(files[name]):
             raise TapeError(f"receipt {key} does not match {name}")
     rows = list(csv.reader(io.StringIO(files["decision_tape_labeled.csv"].decode())))
     log = list(csv.reader(io.StringIO(files["price_block_log.csv"].decode())))
-    if len(rows) - 1 != receipt.get("rows") or len(log) - 1 != receipt.get("price_blocks", {}).get("total"):
+    acc = list(csv.reader(io.StringIO(files["price_accept_log.csv"].decode())))
+    if (len(rows) - 1 != receipt.get("rows") or len(log) - 1 != receipt.get("price_blocks", {}).get("total")
+            or len(acc) - 1 != receipt.get("price_accepts", {}).get("total")
+            or len(log) + len(acc) - 2 != len(rows) - 1):
         raise TapeError("receipt row or block counts do not match the CSVs")
     got = receipt.get("labels") if isinstance(receipt.get("labels"), dict) else {}
     labels = [got.get(k) for k in LABEL_FIELDS]
-    for r in rows[1:] + log[1:]:
+    for r in rows[1:] + log[1:] + acc[1:]:
         if r[-len(LABEL_FIELDS):] != labels or labels[:2] != [PAPER_ONLY, DECISION_SUPPORT]:
             raise TapeError("a CSV row lacks the paper-only / decision-support labels")
     return receipt

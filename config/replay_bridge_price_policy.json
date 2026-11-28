@@ -1,9 +1,18 @@
 {
   "policy_id": "RB001-PF-1.1.9-PROPOSED",
   "status": "PROPOSED",
-  "owner": "Doodle (spec owner). Values are PROPOSED for spec 1.1.9 and pending Eugene's answers; pin 1.1.8 is unchanged.",
-  "source": "trading/proposals/ReplayBridge-001-price-freshness.md sha256 fc50b0e1d803fbe9b3f376beb05a7a88a1cc4cec2bb76189f44f60b4f2547619",
-  "bar_close_1m": {"max_age_seconds": "0"},
-  "quote_last": {"max_age_seconds": "900"},
-  "future_tolerance_seconds": "0"
+  "owner": "Doodle (spec owner). Values are PROPOSED for spec 1.1.9; Eugene's answers (2026-11-28 14:39 Berlin) were relayed by Soodle. Pin 1.1.8 is unchanged.",
+  "source": "trading/proposals/ReplayBridge-001-price-freshness.md sha256 805f2681eca44e2cc45b586861da10be84aa3067817cdd4c000fc90076e3e246 (replaces fc50b0e1d803fbe9b3f376beb05a7a88a1cc4cec2bb76189f44f60b4f2547619)",
+  "bar_close_1m": {
+    "max_age_seconds": "0"
+  },
+  "quote_last": {
+    "max_age_seconds": "900"
+  },
+  "future_tolerance_seconds": "0",
+  "delayed_quote": {
+    "max_declared_delay_seconds": "900",
+    "absolute_ceiling_seconds": "1200",
+    "adjusted_max_seconds": "300"
+  }
 }

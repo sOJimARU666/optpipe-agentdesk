@@ -29,7 +29,8 @@ RAW = (FIX / "decisions.json").read_bytes()
 RECEIPT = json.loads((FIX / "receipt.json").read_bytes())
 SOL_CSV_SHA = "039ee5883a49fbd82e74a921bf18d6c2a551b52f7adfdda5a01d35ff0b58de24"   # Sol's evidence tape
 S = 30                                         # the SIGNAL_BULL row (2026-11-20T10:00:00-05:00)
-POLICY = rb.load_policy(json.loads((ROOT / "config" / "replay_bridge_price_policy.json").read_text()))
+RAW_POLICY = json.loads((ROOT / "config" / "replay_bridge_price_policy.json").read_text())
+POLICY = rb.load_policy(RAW_POLICY)
 TF = "TEST-FIXTURE-pf"                         # source_id for built TEST FIXTURE prices
 sha = rb.digest
 
@@ -84,9 +85,14 @@ def test_pf35_frozen_tape_byte_identical_and_one_block():
     log = rows(files["price_block_log.csv"])
     assert [(r["row_index"], r["decision_at_ny"], r["reason_code"], r["status"], r["age_seconds"]) for r in log] == \
         [("0", "2026-11-20T09:30:00-05:00", "PF-STATUS", "missing", "")]
-    assert s["price_blocks"] == {"total": 1, "by_reason": {"PF-STATUS": 1}}
+    assert s["price_blocks"] == {"total": 1, "by_reason": {"PF-STATUS": 1}, "by_label": {"BAR": 1}}
+    assert s["price_accepts"] == {"total": 390, "by_label": {"BAR": 390}}
+    acc = rows(files["price_accept_log.csv"])
+    assert len(acc) == 390 and {(r["label"], r["age_seconds"], r["price_kind"]) for r in acc} == \
+        {("BAR", "0", "bar_close_1m")}
     lab = rows(files["decision_tape_labeled.csv"])
-    assert sum(r["price_status"] == "OK" and r["price_age_seconds"] == "0" for r in lab) == 390
+    assert sum(r["price_status"] == "OK" and r["price_age_seconds"] == "0" and r["price_label"] == "BAR"
+               for r in lab) == 390
     assert files == run_project()[0]                                           # deterministic
 
 
@@ -375,8 +381,8 @@ def test_bridge_imports_no_network_module():
     tree = ast.parse(Path(rb.__file__).read_text())
     mods = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     mods |= {(n.module or "").split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
-    assert mods <= {"__future__", "argparse", "csv", "hashlib", "io", "json", "os", "platform", "shlex", "shutil",
-                    "sys", "tempfile", "zipfile", "datetime", "decimal", "pathlib", "optpipe"}, mods
+    assert mods <= {"__future__", "argparse", "csv", "hashlib", "io", "json", "math", "os", "platform", "shlex",
+                    "shutil", "sys", "tempfile", "zipfile", "datetime", "decimal", "pathlib", "optpipe"}, mods
 
 
 @pytest.mark.parametrize("prefill", ["empty", "file"])
@@ -422,6 +428,11 @@ def test_policy_missing_fails_closed(tmp_path):
     {"bar_close_1m": None}, {"bar_close_1m": {"max_age_seconds": None}}, {"quote_last": {}},
     {"future_tolerance_seconds": None}, {"future_tolerance_seconds": True}, {"policy_id": ""},
     {"bar_close_1m": {"max_age_seconds": "-1"}}, {"quote_last": {"max_age_seconds": "NaN"}},
+    {"delayed_quote": None}, {"delayed_quote": {}}, {"delayed_quote": {"max_declared_delay_seconds": "900"}},
+    {"delayed_quote": {"max_declared_delay_seconds": "900", "absolute_ceiling_seconds": None,
+                       "adjusted_max_seconds": "300"}},
+    {"delayed_quote": {"max_declared_delay_seconds": "30", "absolute_ceiling_seconds": "1200",
+                       "adjusted_max_seconds": "300"}},
 ])
 def test_policy_unset_value_fails_closed(patch):
     raw = {**json.loads((ROOT / "config" / "replay_bridge_price_policy.json").read_text()), **patch}
@@ -430,8 +441,8 @@ def test_policy_unset_value_fails_closed(patch):
 
 
 def test_policy_values_are_adjustable():
-    loose = rb.load_policy({"policy_id": "TEST-FIXTURE", "bar_close_1m": {"max_age_seconds": "60"},
-                            "quote_last": {"max_age_seconds": "900"}, "future_tolerance_seconds": "60"})
+    loose = rb.load_policy({**RAW_POLICY, "policy_id": "TEST-FIXTURE", "bar_close_1m": {"max_age_seconds": "60"},
+                            "future_tolerance_seconds": "60"})
     assert evaluate("bar", "2026-11-20T09:59:00-05:00", policy=loose)["ok"]          # PF-03 passes at 60 s
     assert evaluate("bar", "2026-11-20T10:00:30-05:00", policy=loose)["ok"]          # future within 60 s
 
@@ -439,9 +450,13 @@ def test_policy_values_are_adjustable():
 def test_policy_file_is_proposed_and_matches_doodle_defaults():
     raw = json.loads((ROOT / "config" / "replay_bridge_price_policy.json").read_text())
     assert raw["status"] == "PROPOSED"
-    assert "fc50b0e1d803fbe9b3f376beb05a7a88a1cc4cec2bb76189f44f60b4f2547619" in raw["source"]
+    assert raw["source"].startswith("trading/proposals/ReplayBridge-001-price-freshness.md sha256 "
+                                    "805f2681eca44e2cc45b586861da10be84aa3067817cdd4c000fc90076e3e246")
+    assert "relayed by Soodle" in raw["owner"]
     assert POLICY["max_age_seconds"] == {"bar_close_1m": 0, "quote_last": 900}
     assert POLICY["future_tolerance_seconds"] == 0
+    assert POLICY["delayed_quote"] == {"max_declared_delay_seconds": 900, "absolute_ceiling_seconds": 1200,
+                                       "adjusted_max_seconds": 300}
 
 
 # ------------------------------------------------------------------------------- PF-01..PF-34 (TEST FIXTURE)
@@ -567,9 +582,11 @@ def test_pf36_rows_in_equal_rows_out_and_log_kind():
         t[i]["indicators"]["price"]["status"] = "stale"
     files, s = run_project(t, price_kind="bar_close_1m")
     lab, log = rows(files["decision_tape_labeled.csv"]), rows(files["price_block_log.csv"])
+    acc = rows(files["price_accept_log.csv"])
     assert len(lab) == len(t) == s["rows"]
     assert len(log) == sum(r["price_status"] == "BLOCKED" for r in lab) == 4
-    assert {r["kind"] for r in log} == {"SYNTHETIC"}
+    assert len(log) + len(acc) == len(lab)                       # every row is either accepted or blocked, none dropped
+    assert {r["kind"] for r in log + acc} == {"SYNTHETIC"}
 
 
 @pytest.mark.parametrize("mut", [
@@ -606,3 +623,158 @@ def test_session_coverage_and_indicator_shape(mut):
     mut(t)
     with pytest.raises(rb.TapeError):
         run_project(t)
+
+
+# ------------------------------------------------------------------------------- PF-39..PF-46 DELAYED (TEST FIXTURE)
+def dq(minutes=15, **kw):
+    return {"delayed": True, "delay_minutes": minutes, **kw}
+
+
+PF_DELAYED = {   # id: (mode, kwargs, expected reason or None, label, age, delay, adjusted)
+    "PF-39": ("quote", dq(as_of="2026-11-20T09:45:00-05:00"), None, "DELAYED", 900, 900, 0),
+    "PF-40": ("quote", dq(as_of="2026-11-20T09:40:00-05:00"), None, "DELAYED", 1200, 900, 300),
+    "PF-41": ("quote", dq(as_of="2026-11-20T09:39:59-05:00"), "PF-STALE", "DELAYED", 1201, 900, 301),
+    "PF-42": ("quote", dq(10, as_of="2026-11-20T09:44:59-05:00"), "PF-STALE", "DELAYED", 901, 600, 301),
+    "PF-43a": ("quote", {"delayed": True, "delay_seconds": 901}, "PF-DELAY-DECL", "DELAYED", 0, None, None),
+    "PF-43b": ("quote", dq(16), "PF-DELAY-DECL", "DELAYED", 0, None, None),
+    "PF-44": ("quote", dq(as_of="2026-11-20T09:45:01-05:00"), "PF-DELAY-DECL", "DELAYED", 899, 900, -1),
+    "PF-45": ("quote", {"as_of": "2026-11-20T09:44:59-05:00"}, "PF-STALE", "REALTIME", 901, None, None),
+    "PF-46": ("bar", dq(), "PF-KIND", "BAR", 0, None, None),
+}
+
+
+@pytest.mark.parametrize("pf", sorted(PF_DELAYED))
+def test_pf_delayed_cases(pf):
+    """TEST FIXTURE (SYNTHETIC) PF-39..PF-46 from Doodle's PROPOSED policy (805f2681...e246)."""
+    mode, kw, code, label, age, delay, adjusted = PF_DELAYED[pf]
+    res = evaluate(mode, **kw)
+    assert (res["ok"], res["reason"]) == (code is None, code), res
+    assert res["label"] == label and res["age"] == Decimal(age)
+    assert res["delay"] == (None if delay is None else Decimal(delay))
+    assert res["adjusted"] == (None if adjusted is None else Decimal(adjusted))
+
+
+@pytest.mark.parametrize("decl", [
+    {"delayed": True},                                                    # no delay at all
+    {"delayed": True, "delay_minutes": 0}, {"delayed": True, "delay_minutes": -1},
+    {"delayed": True, "delay_minutes": 15.0}, {"delayed": True, "delay_minutes": "15"},
+    {"delayed": True, "delay_minutes": True}, {"delayed": True, "delay_minutes": None},
+    {"delayed": True, "delay_seconds": 0}, {"delayed": True, "delay_seconds": 30},
+    {"delayed": True, "delay_seconds": 960}, {"delayed": True, "delay_seconds": float("nan")},
+    {"delayed": True, "delay_seconds": float("inf")}, {"delayed": True, "delay_seconds": 59.5},
+    {"delayed": True, "delay_minutes": 5, "delay_seconds": 600},          # both present and disagreeing
+    {"delayed": False, "delay_minutes": 15},                              # a delay field without delayed:true
+    {"delayed": "true", "delay_minutes": 15}, {"delayed": 1, "delay_minutes": 15},
+    {"delay_minutes": 15}, {"delay_seconds": 900},
+])
+def test_pf_bad_delay_declaration_is_blocked_as_delayed(decl):
+    res = evaluate("quote", as_of="2026-11-20T09:50:00-05:00", **decl)
+    assert (res["ok"], res["reason"], res["label"]) == (False, "PF-DELAY-DECL", "DELAYED"), res
+
+
+@pytest.mark.parametrize("decl", [
+    {"delayed": True, "delay_minutes": 1}, {"delayed": True, "delay_minutes": 15},
+    {"delayed": True, "delay_seconds": 60},
+    {"delayed": True, "delay_seconds": 900}, {"delayed": True, "delay_minutes": 5, "delay_seconds": 300},
+    {"delayed": True, "delay_seconds": 300.0},
+])
+def test_pf_good_delay_declarations_are_delayed(decl):
+    delay = decl.get("delay_minutes", 0) * 60 or decl["delay_seconds"]
+    as_of = datetime.fromisoformat(D).timestamp() - delay
+    iso = datetime.fromtimestamp(as_of, tz=datetime.fromisoformat(D).tzinfo).isoformat()
+    res = evaluate("quote", as_of=iso, **decl)
+    assert res["ok"] and res["label"] == "DELAYED" and res["adjusted"] == 0, res
+
+
+def test_pf_delayed_false_is_realtime():
+    res = evaluate("quote", delayed=False)
+    assert res["ok"] and res["label"] == "REALTIME" and res["delay"] is None and res["adjusted"] is None
+    res = evaluate("quote", as_of="2026-11-20T09:44:59-05:00", delayed=False)         # no allowance without delay
+    assert (res["reason"], res["label"]) == ("PF-STALE", "REALTIME")
+
+
+@pytest.mark.parametrize("field", [{"delayed": True}, {"delayed": False}, {"delay_minutes": 15}, {"delay_seconds": 900},
+                                   {"delayed": "false"}])
+def test_pf_bar_with_any_delay_field_is_pf_kind(field):
+    res = evaluate("bar", **field)
+    assert (res["reason"], res["label"]) == ("PF-KIND", "BAR"), res
+
+
+def test_pf_delayed_check_order():
+    """First failure wins, in Doodle's order: KIND, STATUS, TIME-*, CALENDAR, CLOSED, FUTURE, SESSION, DELAY-DECL
+    (declaration, then adjusted < 0), STALE, VALUE, BIDASK."""
+    bad = {"delayed": True, "delay_minutes": 99}
+    assert evaluate("bar", status="stale", **bad)["reason"] == "PF-KIND"
+    assert evaluate("quote", status="stale", **bad)["reason"] == "PF-STATUS"
+    assert evaluate("quote", as_of=None, **bad)["reason"] == "PF-TIME-MISSING"
+    assert evaluate("quote", as_of="2026-11-20T10:00:00", **bad)["reason"] == "PF-TIME-NAIVE"
+    assert evaluate("quote", decision="2026-11-21T10:00:00-05:00", as_of="2026-11-21T10:00:00-05:00",
+                    **bad)["reason"] == "PF-CLOSED"
+    assert evaluate("quote", as_of="2026-11-20T10:00:01-05:00", **bad)["reason"] == "PF-FUTURE"
+    assert evaluate("quote", decision="2026-11-20T09:31:00-05:00", as_of="2026-11-19T15:59:00-05:00",
+                    **bad)["reason"] == "PF-SESSION"
+    assert evaluate("quote", as_of="2026-11-20T09:30:00-05:00", **bad)["reason"] == "PF-DELAY-DECL"
+    assert evaluate("quote", as_of="2026-11-20T09:39:59-05:00", value="NaN", **dq())["reason"] == "PF-STALE"
+    assert evaluate("quote", value="NaN", bid="2", ask="1")["reason"] == "PF-VALUE"
+    assert evaluate("quote", bid="2", ask="1")["reason"] == "PF-BIDASK"
+
+
+def test_pf_delayed_policy_values_are_adjustable():
+    wide = rb.load_policy({**RAW_POLICY, "delayed_quote": {"max_declared_delay_seconds": "1800",
+                                                          "absolute_ceiling_seconds": "2400",
+                                                          "adjusted_max_seconds": "600"}})
+    assert not evaluate("quote", as_of="2026-11-20T09:30:00-05:00", **dq(30))["ok"]    # 30 min declared: still default
+    assert evaluate("quote", as_of="2026-11-20T09:30:00-05:00", policy=wide, **dq(30))["ok"]
+    assert evaluate("quote", decision="2026-11-20T15:00:00-05:00", as_of="2026-11-20T12:00:00-05:00", policy=wide,
+                    **dq(30))["reason"] == "PF-STALE"
+
+
+def test_pf39_through_export_delayed_signal_kept_and_logged_with_all_four_fields():
+    t = tape()
+    price = t[S]["indicators"]["price"]
+    price.update(dq(as_of="2026-11-20T09:45:00-05:00"))
+    files, s = run_project(t, price_kind="quote_last")
+    lab = rows(files["decision_tape_labeled.csv"])[S]
+    assert (lab["decision"], lab["bull_signal"], lab["price_label"], lab["price_delay_seconds"],
+            lab["price_age_seconds"], lab["price_adjusted_age_seconds"]) == ("SIGNAL_BULL", "1", "DELAYED", "900",
+                                                                             "900", "0")
+    acc = [r for r in rows(files["price_accept_log.csv"]) if r["row_index"] == str(S)]
+    assert [(r["label"], r["delay_seconds"], r["age_seconds"], r["adjusted_age_seconds"], r["action"])
+            for r in acc] == [("DELAYED", "900", "900", "0", "SIGNAL_BULL")]
+    assert s["price_accepts"]["by_label"]["DELAYED"] == 1
+    # the tape row carries the observed price like any other accepted price; the label lives in the sidecars only
+    assert rows(files["decision_tape.csv"])[S]["decision"] == "SIGNAL_BULL"
+    assert set(rows(files["decision_tape.csv"])[S]) == set(rb.FIELDS)
+
+
+def test_pf41_through_export_blocked_delayed_signal_becomes_blocked_and_is_not_filled():
+    t = tape()
+    t[S]["indicators"]["price"].update(dq(as_of="2026-11-20T09:39:59-05:00"))
+    files, s = run_project(t, price_kind="quote_last")
+    row = rows(files["decision_tape.csv"])[S]
+    assert (row["decision"], row["bull_signal"], row["observed_price"], row["observed_price_at_ny"]) == \
+        ("BLOCKED", "0", "", "")
+    rec = [r for r in rows(files["price_block_log.csv"]) if r["row_index"] == str(S)]
+    assert [(r["label"], r["reason_code"], r["age_seconds"], r["adjusted_age_seconds"], r["delay_seconds"],
+             r["upstream_action"], r["final_action"]) for r in rec] == \
+        [("DELAYED", "PF-STALE", "1201", "301", "900", "SIGNAL_BULL", "BLOCKED")]
+    assert s["price_blocks"]["by_label"]["DELAYED"] == 1
+
+
+def test_delayed_run_never_changes_the_frozen_tape_bytes():
+    """The DELAYED class is a sidecar concern: the frozen archive still gives Sol's decision_tape.csv exactly."""
+    assert sha(run_project()[0]["decision_tape.csv"]) == SOL_CSV_SHA
+
+
+def test_pf_raw_ceiling_is_independent_of_the_adjusted_maximum():
+    """With the default numbers the raw 1200 s ceiling is implied by delay <= 900 and adjusted <= 300. It is a separate
+    parameter, so with a looser adjusted maximum it must still block on its own (reason PF-STALE, first match)."""
+    loose = rb.load_policy({**RAW_POLICY, "delayed_quote": {"max_declared_delay_seconds": "900",
+                                                           "absolute_ceiling_seconds": "1200",
+                                                           "adjusted_max_seconds": "600"}})
+    ok = evaluate("quote", as_of="2026-11-20T09:40:00-05:00", policy=loose, **dq())       # raw 1200, adjusted 300
+    assert ok["ok"]
+    res = evaluate("quote", as_of="2026-11-20T09:38:20-05:00", policy=loose, **dq())      # raw 1300, adjusted 400
+    assert (res["reason"], res["age"], res["adjusted"]) == ("PF-STALE", Decimal(1300), Decimal(400))
+    edge = evaluate("quote", as_of="2026-11-20T09:39:59-05:00", policy=loose, **dq())     # raw 1201, adjusted 301
+    assert edge["reason"] == "PF-STALE"

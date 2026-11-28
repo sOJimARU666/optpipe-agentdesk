@@ -8,7 +8,7 @@ BLOCKED, never raise one. Nothing here is a trade instruction.
 
 Origin: Sol's standalone prototype `Optpipe-Replay-Bridge-001.zip` (sha256 `dd6a0815...fb220`; `replay_bridge.py`
 sha256 `8bb3ed3c...056f`), with Zoodle's test report (PASS with gaps) and Noodle's review (ACCEPT WITH CONDITIONS)
-folded in, plus Doodle's PROPOSED price-freshness policy.
+folded in, plus Doodle's PROPOSED price-freshness policy (revised 2026-11-28 with Eugene's answers, relayed by Soodle).
 
 ## Run
 
@@ -27,10 +27,11 @@ or interrupt the temp folder is removed, so the files land together or not at al
 | File | Content |
 |---|---|
 | `decision_tape.csv` | Sol's 10 columns. Byte-identical to Sol's evidence tape for the frozen archive (sha256 `039ee588...8de24`). |
-| `decision_tape_labeled.csv` | The same rows plus `upstream_decision`, `price_kind`, `price_status` (OK / BLOCKED), `price_reason_code`, `price_age_seconds`, `price_max_age_seconds` and the labels `paper_only`, `decision_support`, `fixture_set`, `fixture_set_sha256`. |
-| `price_block_log.csv` | One record per blocked decision-time price (header only when none): Doodle's 13 columns plus the same 4 label columns. |
+| `decision_tape_labeled.csv` | The same rows plus `upstream_decision`, `price_kind`, `price_label` (BAR / REALTIME / DELAYED), `price_status` (OK / BLOCKED), `price_reason_code`, `price_age_seconds`, `price_delay_seconds`, `price_adjusted_age_seconds`, `price_max_age_seconds` and the labels `paper_only`, `decision_support`, `fixture_set`, `fixture_set_sha256`. |
+| `price_block_log.csv` | One record per blocked decision-time price (header only when none): Doodle's 16 columns plus the same 4 label columns. |
+| `price_accept_log.csv` | One record per accepted decision-time price (header only when none): Doodle's 14 columns plus the same 4 label columns. Frozen archive: 390 records, all `label=BAR`, age 0. |
 | `bridge_receipt.json` | Archive, decisions and CSV hashes; counts (final and upstream); `price_policy` and `price_blocks`; `code_sha256` (sha256 of the bridge source file), the exact `command`, `python` version and `generated_at_utc`. |
-| `SHA256SUMS` | sha256 of the four files above. |
+| `SHA256SUMS` | sha256 of the five files above. |
 
 `verify` refuses a folder with a missing or extra file, a SHA256SUMS mismatch, a receipt whose hashes or counts do
 not match the CSVs, or a CSV row without the paper-only / decision-support labels.
@@ -49,11 +50,11 @@ not match the CSVs, or a CSV row without the paper-only / decision-support label
 5. **Atomic output** plus negative controls for a missing receipt, a mismatched receipt (with and without
    regenerated SHA256SUMS), a receipt from another run, a tampered CSV, a stripped label and an extra file; and on
    the input side, a missing receipt member and a receipt digest / count mismatch.
-6. **Price status.** `price_status`, `price_reason_code` and `price_age_seconds` in the labeled CSV.
+6. **Price status.** `price_status`, `price_reason_code`, `price_label` and the age columns in the labeled CSV.
 7. **Age ceiling.** Doodle's PROPOSED decision-time price policy (below), parameterised in
    `config/replay_bridge_price_policy.json`. A missing file, a missing key, a null, a negative or non-finite value
-   fails closed (exit 2, nothing written). TODO(Doodle): the values are PROPOSED for spec 1.1.9 and pending
-   Eugene's answers; Doodle owns them.
+   fails closed (exit 2, nothing written). TODO(Doodle): the values are PROPOSED for spec 1.1.9; Eugene's answers
+   were relayed by Soodle; Doodle owns them.
 
 ## Inner-tamper disposition (Zoodle's I01-I33)
 
@@ -86,34 +87,59 @@ Lesson 001's decisions are right.
 ## Decision-time price policy (PROPOSED, spec 1.1.9; pin 1.1.8 unchanged)
 
 Source: Doodle's `trading/proposals/ReplayBridge-001-price-freshness.md`, sha256
-`fc50b0e1d803fbe9b3f376beb05a7a88a1cc4cec2bb76189f44f60b4f2547619`.
+`805f2681eca44e2cc45b586861da10be84aa3067817cdd4c000fc90076e3e246`. It replaces the first version (sha256
+`fc50b0e1d803fbe9b3f376beb05a7a88a1cc4cec2bb76189f44f60b4f2547619`). The policy is still PROPOSED. Eugene's answers of
+2026-11-28 14:39 Berlin reached us through Soodle, not from Eugene directly. Doodle owns the values.
 
 - Age = `decision_utc - as_of_utc` in exact decimal seconds, both converted to UTC first. Limits are inclusive.
-- Defaults (adjustable, in the policy file): `bar_close_1m` 0 s, `quote_last` 900 s, future tolerance 0 s.
-- Checks, first failure wins: PF-KIND, PF-STATUS, PF-TIME-MISSING, PF-TIME-NAIVE, PF-TIME-INVALID, PF-CALENDAR,
-  PF-CLOSED, PF-FUTURE, PF-SESSION, PF-STALE, PF-VALUE, PF-BIDASK. `age_seconds` is recorded whenever both instants
-  parse.
+- Values (adjustable, in `config/replay_bridge_price_policy.json`, never hard-coded): `bar_close_1m` 0 s,
+  `quote_last` 900 s, future tolerance 0 s, and for DELAYED quotes: max declared delay 900 s, raw-age ceiling
+  1200 s, adjusted-age maximum 300 s.
+- Checks, first failure wins: PF-KIND (unknown kind; then a bar with any delay field), PF-STATUS, PF-TIME-MISSING,
+  PF-TIME-NAIVE, PF-TIME-INVALID, PF-CALENDAR, PF-CLOSED, PF-FUTURE, PF-SESSION, PF-DELAY-DECL (invalid
+  declaration; then adjusted age < 0), PF-STALE, PF-VALUE, PF-BIDASK. `age_seconds` is recorded whenever both
+  instants parse; `delay_seconds` and `adjusted_age_seconds` whenever they can be computed.
+- **DELAYED class, `quote_last` only.** It applies only when the price explicitly declares `delayed: true` and an
+  integer (not bool) `delay_minutes` from 1 to 15 (`delay_seconds` = minutes x 60, the MD-08 / MD-14 shape). A row
+  that carries only `delay_seconds` is accepted only as an integer multiple of 60 from 60 to 900; both fields present
+  and disagreeing, a non-finite or out-of-range delay, `delayed: false` with a delay field, or a non-boolean
+  `delayed` is `PF-DELAY-DECL`. Adjusted age = raw age - delay_seconds: below 0 is `PF-DELAY-DECL`; over 300 s or
+  raw age over 1200 s is `PF-STALE`. An undeclared quote (or `delayed: false` alone) is REALTIME, limited to
+  900 s, with no delay allowance. A bar with `delayed` or any delay field is `PF-KIND`.
+- A DELAYED price is never relabeled or promoted to REALTIME. Its label, delay, raw age and adjusted age appear
+  in `price_accept_log.csv` / `price_block_log.csv` (`label`, `delay_seconds`, `age_seconds`,
+  `adjusted_age_seconds`) and in the labeled companion CSV, never in `decision_tape.csv`. In the logs,
+  `max_age_seconds` is the raw ceiling that applies (DELAYED: 1200).
 - No forward fill, no last-good substitution, no promotion. A SIGNAL row with a blocked price becomes BLOCKED with
-  both signal flags 0. A price problem never aborts the export and never raises on a null.
+  both signal flags 0 and is logged. A price problem never aborts the export and never raises on a null.
 - `price_kind` is `bar_close_1m` for the frozen Lesson 001 decisions (identified by their sha256 `659175c6...04f6`,
   the archive's own `decisions.json`); any other tape must declare `indicators.price.price_kind`, or every price
   is blocked `PF-KIND`.
 - Frozen archive result: 391 rows, counts 375 / 15 / 1 / 0, `decision_tape.csv` byte-identical, one block
-  (row 0, 09:30, `PF-STATUS`).
-- Tests PF-01 to PF-38 (all TEST FIXTURE, SYNTHETIC) are in `tests/test_replay_bridge.py`.
+  (row 0, 09:30, `PF-STATUS`), 390 accepts all `label=BAR` at age 0. The receipt gains `price_accepts` and
+  `price_blocks.by_label`.
+- Tests PF-01 to PF-46 (all TEST FIXTURE, SYNTHETIC) are in `tests/test_replay_bridge.py`, plus extra DELAYED cases
+  (bad declarations, adjustable policy, check order, export-level behavior).
 - Not changed here: repo `MD-19-STALE-quote` in `marketdata.py` uses 20 min at decision time, while spec R01 says
-  15 min. Doodle flagged the divergence; this PR leaves it alone.
+  15 min. Doodle flagged the divergence and it stays unresolved; this PR leaves it alone.
+- Not implemented: the doc's pack `sources_terms` cross-check (MD-14: the field's `delay_minutes` must be at least
+  the source's declared N). The Lesson 001 tape carries no pack terms, so there is nothing to check yet.
 
 ## Conflicts between the fix list and Doodle's policy (the policy wins on freshness)
 
 - Fix 1 asked for label columns on every CSV row; the policy requires `decision_tape.csv` to stay byte-identical.
-  The labels are in `decision_tape_labeled.csv` and `price_block_log.csv`; `decision_tape.csv` has none.
-- `price_block_log.csv` has Doodle's 13 columns followed by the 4 label columns.
+  The labels are in `decision_tape_labeled.csv`, `price_block_log.csv` and `price_accept_log.csv`;
+  `decision_tape.csv` has none. Consequence: a DELAYED accepted price is exported in `decision_tape.csv` like any other
+  accepted price, and only the sidecars say DELAYED.
+- The block and accept logs have Doodle's columns followed by the 4 label columns. The labeled companion CSV also
+  carries `price_label`, `price_delay_seconds` and `price_adjusted_age_seconds` (an addition beyond the doc).
 - The earlier draft aborted the export when a signal had no usable price; the policy lowers that row to BLOCKED and
   logs it. A future-dated or invalid price is now a logged block instead of an abort.
 - PF-34 says `price_kind` is set for the frozen archive. The bridge keys this on the frozen `decisions.json`
   sha256, so the offline suite can use the vendored copy in `tests/fixtures/lesson001_v3/` instead of the 4.5 MB
   archive. The CLI still accepts only the pinned archive.
+- The doc says the numbers live once in `market_data_rules.yaml` (proposed). This PR does not touch the spec pin,
+  so they live in `config/replay_bridge_price_policy.json` until Doodle's 1.1.9 lands.
 
 ## Fixture
 
