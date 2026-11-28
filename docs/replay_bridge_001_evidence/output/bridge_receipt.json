@@ -1,6 +1,6 @@
 {
   "archive_sha256": "159de19c0fa74be03a46da954af92f8f1f164a62e0c439f0a57aa8bb1c3947a3",
-  "code_sha256": "7cb76d005b11e0d218808ede8a91feff955361c9bc5c023eb01fccb5811f2076",
+  "code_sha256": "fc06f9761039c1703eb5c8d42bad8ab6a758e7edd4ab4ae5ac8d3189129b6817",
   "command": "python -m optpipe.research.replay_bridge export Optpipe-Lesson-001-Portability-v3.zip output",
   "counts": {
     "ABSTAIN": 375,
@@ -11,7 +11,7 @@
   "csv_sha256": "039ee5883a49fbd82e74a921bf18d6c2a551b52f7adfdda5a01d35ff0b58de24",
   "decisions_sha256": "659175c6eb8a31ea3bebb53d71a27d462557ec0b62aa2494efab2918e71804f6",
   "fixture_set": "lesson001-portability-v3",
-  "generated_at_utc": "2026-11-28T16:52:50+00:00",
+  "generated_at_utc": "2026-11-28T17:46:31+00:00",
   "kind": "SYNTHETIC",
   "labeled_csv_sha256": "84c31714f5eb2d8ce327308b315ceef013a582ea24d897ec708232c0349af9ad",
   "labels": {

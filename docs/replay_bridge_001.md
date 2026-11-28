@@ -57,8 +57,8 @@ The expected policy identity comes from the repo configuration (`config/replay_b
 from `--expect-policy-sha256`, never from the receipt. Approval status is never read from the receipt. The
 "Policy status PROPOSED is not owner-approved" notice is printed when the *configured* policy file has that
 status, not when the folder claims it. If the configured file is missing, a directory, unreadable or invalid,
-`verify` refuses unless `--expect-policy-sha256` is given, and it prints that policy status is unknown and the
-folder is not approved.
+`verify` refuses in every mode, whether or not `--expect-policy-sha256` is given, and it prints that policy
+status is unknown and the folder is not approved.
 
 The CLI `verify` command applies the repo pins by default (archive, frozen decisions, frozen tape, running
 code, and the configured policy file). In pinned official mode it also recomputes `decision_tape_labeled.csv`,
@@ -72,9 +72,10 @@ non-official archive). `--self-consistency-only` turns the archive, decisions an
 pins off; it does not turn off the receipt-versus-configured-policy compare. File-derived checks
 (counts, tape cross-check, running code, configured policy identity/status/numbers, official-fixture
 claims) run in every mode. If the configured policy file is missing, a directory, unreadable or
-invalid, verification is refused (self-only and the unpinned API included) unless
-`--expect-policy-sha256` is given, in which case the receipt's policy hash is compared to that sha.
-Optional flags are an independent check against values you supply:
+invalid, verification is refused in every mode, including self-only and the unpinned API, whether
+or not `--expect-policy-sha256` is given. That flag is an extra pin, compared against the real
+configured file when the file is usable, alongside the full content compare. Optional flags are an
+independent check against values you supply:
 
 - `--expect-archive-sha256` — must equal the receipt `archive_sha256` and, when present, `labels.fixture_set_sha256`
 - `--expect-decisions-sha256` — must equal the receipt `decisions_sha256`
@@ -82,13 +83,12 @@ Optional flags are an independent check against values you supply:
 - `--expect-policy-sha256` — must equal the receipt `price_policy.file_sha256`
 
 Any pin that is given must match; a mismatch, or a missing receipt field, fails with exit 2 and writes nothing.
-In pinned mode `--expect-policy-sha256` must equal the configured policy file. The Python `verify()` API defaults
+When the configured file is usable, `--expect-policy-sha256` must equal that file (every mode) and is an extra pin alongside the full content compare; it does not bypass a missing or unreadable file. The Python `verify()` API defaults
 to unpinned (file-derived checks only) so offline test-bundle folders can be checked; pass `pinned=True` to apply
 the repo pins. `--price-policy` on `export` still accepts any path; `load_policy` records the `status` the file
 declares. A folder exported from a byte-identical copy of the policy at another path is refused by
-`verify` in every mode, including `--self-consistency-only`, because identity is pinned to the
-configured path and content. To check such a folder, pass `--expect-policy-sha256` of that file
-(self-only or the unpinned API). There is no approval flag and no way to mark a policy owner-approved. A folder exported from a test
+`verify` in every mode, including `--self-consistency-only` and when `--expect-policy-sha256` is
+given, because identity is pinned to the configured path and content. There is no approval flag and no way to mark a policy owner-approved. A folder exported from a test
 zip (not the official archive) is labeled `fixture_set=test-fixture` and is refused by the pinned CLI default.
 
 The receipt records `price_policy.file_sha256` and `price_policy.path` (repo-relative when the file is in the repo,
@@ -112,8 +112,8 @@ are not pinned (they differ between genuine official runs).
    CLI `verify` applies the repo pins by default; `--self-consistency-only` turns the archive, decisions
    and official-recompute pins off. File-derived checks (counts, tape cross-check, running code, the
    configured policy's identity, status and numbers, official-fixture claims) run in every mode. A
-   missing, directory, unreadable or invalid configured policy file is refused unless
-   `--expect-policy-sha256` is given.
+   missing, directory, unreadable or invalid configured policy file is refused in every mode,
+   whether or not `--expect-policy-sha256` is given. That flag is an extra pin against the real file.
 4. **Tests.** Network guard (bridge runs in a process with the repo guard on; the only guard hit is the probe),
    existing output folder refused (empty and non-empty, contents untouched), signal with a missing price.
 5. **Atomic output** plus negative controls for a missing receipt, a mismatched receipt (with and without
@@ -207,8 +207,9 @@ flags add caller-supplied pins; and even `--self-consistency-only` still recompu
 cross-checks the plain tape against the labeled CSV, compares the code hash to the running source, and
 compares the receipt's policy identity, status and numbers to the configured policy file (never to a path
 claimed by the receipt). If that file is missing, a directory, unreadable or invalid, verification is
-refused unless `--expect-policy-sha256` is given. `--price-policy` still accepts any path on export, but
-a byte-identical copy at another path is refused by verify unless that flag is given, because identity
+refused in every mode, whether or not `--expect-policy-sha256` is given. That flag is an extra pin
+against the real file, alongside the full content compare. `--price-policy` still accepts any path on
+export, but a byte-identical copy at another path is refused by verify in every mode, because identity
 is pinned to the configured path and content. The output reports the pins that were actually checked or
 skipped, including `official_sidecars`. When the configured file cannot be read, verify prints that
 policy status is unknown and the folder is not approved.

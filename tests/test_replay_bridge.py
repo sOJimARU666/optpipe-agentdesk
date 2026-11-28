@@ -410,7 +410,8 @@ def test_verify_identity_pin_mismatch_fails(tmp_path, flag, field):
     _bundle, asha = make_bundle(tmp_path)
     run = cli(["verify", "--self-consistency-only", out, flag, "0" * 64], asha)
     assert run.returncode == 2, run.stderr
-    assert "does not match the expected value" in run.stderr
+    assert ("does not match the expected value" in run.stderr
+            or "does not match the configured policy file" in run.stderr)
     # the folder itself is left untouched and is still self-consistent
     v = rb.verify(out)["_verification"]
     assert "archive_sha256" in v["skipped"]
@@ -1217,18 +1218,16 @@ def test_policy_pin_comes_from_config_not_receipt(tmp_path):
 
 
 def test_pinned_verify_refuses_unresolved_policy_pin(tmp_path, monkeypatch):
-    """Every mode refuses when the default policy file cannot be resolved, unless a sha flag is given."""
+    """Every mode refuses when the default policy file cannot be resolved, flag or not."""
     out, r = _export(tmp_path)
     monkeypatch.setattr(rb, "POLICY_FILE", tmp_path / "missing-policy.json")
     with pytest.raises(rb.TapeError, match="required policy pin cannot be resolved"):
         rb.verify(out, pinned=True, expect_archive_sha256=r["archive_sha256"])
     with pytest.raises(rb.TapeError, match="default policy file is missing"):
         rb.verify(out)
-    # a CLI flag still resolves the pin
-    got = rb.verify(out, pinned=True, expect_archive_sha256=r["archive_sha256"],
-                    expect_policy_sha256=r["price_policy"]["file_sha256"])
-    assert "policy_file_sha256" in got["_verification"]["checked"]
-    assert got["_verification"]["skipped"] == ["official_sidecars"]
+    with pytest.raises(rb.TapeError, match="default policy file is missing"):
+        rb.verify(out, pinned=True, expect_archive_sha256=r["archive_sha256"],
+                  expect_policy_sha256=r["price_policy"]["file_sha256"])
 
 
 def test_verify_lists_checked_and_skipped_pins(tmp_path):
@@ -1634,10 +1633,17 @@ def _point_policy_at(tmp_path, monkeypatch, kind):
     if kind == "missing":
         monkeypatch.setattr(rb, "POLICY_FILE", tmp_path / "no-such-policy.json")
         return "missing"
-    d = tmp_path / "policy-as-dir"
-    d.mkdir()
-    monkeypatch.setattr(rb, "POLICY_FILE", d)
-    return "directory"
+    if kind == "directory":
+        d = tmp_path / "policy-as-dir"
+        d.mkdir()
+        monkeypatch.setattr(rb, "POLICY_FILE", d)
+        return "directory"
+    if kind == "invalid":
+        bad = tmp_path / "invalid-policy.json"
+        bad.write_text("{not valid json")
+        monkeypatch.setattr(rb, "POLICY_FILE", bad)
+        return "invalid"
+    raise ValueError(kind)
 
 
 @pytest.mark.parametrize("kind", ["missing", "directory"])
@@ -1658,19 +1664,18 @@ def test_self_only_refuses_when_policy_config_is_unusable(tmp_path, monkeypatch,
     assert "not owner-approved" not in run.stderr
 
 
-@pytest.mark.parametrize("kind", ["missing", "directory"])
-def test_expect_policy_sha256_allows_verify_when_config_unusable(tmp_path, monkeypatch, kind):
-    """--expect-policy-sha256 is the escape hatch when the configured file cannot be read."""
+@pytest.mark.parametrize("kind", ["missing", "directory", "invalid"])
+def test_expect_policy_sha256_does_not_rescue_unusable_config(tmp_path, monkeypatch, kind):
+    """The flag is not an escape hatch: a genuine folder is still refused when the config is unusable."""
     out, rec = _official_out(tmp_path)
     policy_sha = rec["price_policy"]["file_sha256"]
-    _point_policy_at(tmp_path, monkeypatch, kind)
-    got = rb.verify(out, expect_policy_sha256=policy_sha)
-    assert "policy_file_sha256" in got["_verification"]["checked"]
-    assert "official_sidecars" in got["_verification"]["skipped"]
+    match = _point_policy_at(tmp_path, monkeypatch, kind)
+    with pytest.raises(rb.TapeError, match=match):
+        rb.verify(out, expect_policy_sha256=policy_sha)
     run = _cli_main(["verify", "--self-consistency-only", out, "--expect-policy-sha256", policy_sha])
-    assert run.returncode == 0, run.stderr
-    assert "Policy status is unknown; this folder is not approved." in run.stdout
-    assert "not owner-approved" not in run.stdout
+    assert run.returncode == 2, run.stderr
+    assert match in run.stderr
+    assert "Policy status is unknown; this folder is not approved." in run.stderr
 
 
 def test_byte_identical_policy_at_another_path_is_refused_without_expect_flag(tmp_path):
@@ -1686,9 +1691,83 @@ def test_byte_identical_policy_at_another_path_is_refused_without_expect_flag(tm
     run = cli(["verify", "--self-consistency-only", out], rb.ARCHIVE_SHA)
     assert run.returncode == 2, run.stderr
     assert "path" in run.stderr
-    got = rb.verify(out, expect_policy_sha256=rec["price_policy"]["file_sha256"])
-    assert "policy_file_sha256" in got["_verification"]["checked"]
+    # the flag is an extra pin, not a path bypass
+    with pytest.raises(rb.TapeError, match="price_policy.path"):
+        rb.verify(out, expect_policy_sha256=rec["price_policy"]["file_sha256"])
     run = cli(["verify", "--self-consistency-only", out,
                "--expect-policy-sha256", rec["price_policy"]["file_sha256"]], rb.ARCHIVE_SHA)
+    assert run.returncode == 2, run.stderr
+    assert "path" in run.stderr
+
+
+def test_unreadable_policy_config_is_refused(tmp_path, monkeypatch):
+    """chmod 000 on the configured file: verify refuses, flag or not. Skip if running as root."""
+    out, rec = _official_out(tmp_path)
+    path = tmp_path / "unreadable-policy.json"
+    path.write_bytes((ROOT / "config" / "replay_bridge_price_policy.json").read_bytes())
+    path.chmod(0o000)
+    try:
+        if os.access(path, os.R_OK):
+            pytest.skip("running as root; chmod 000 stays readable")
+        monkeypatch.setattr(rb, "POLICY_FILE", path)
+        with pytest.raises(rb.TapeError, match="unreadable"):
+            rb.verify(out)
+        with pytest.raises(rb.TapeError, match="unreadable"):
+            rb.verify(out, expect_policy_sha256=rec["price_policy"]["file_sha256"])
+        run = _cli_main(["verify", "--self-consistency-only", out,
+                         "--expect-policy-sha256", rec["price_policy"]["file_sha256"]])
+        assert run.returncode == 2, run.stderr
+        assert "unreadable" in run.stderr
+        assert "Policy status is unknown; this folder is not approved." in run.stderr
+    finally:
+        path.chmod(0o644)
+
+
+def test_invalid_policy_config_is_refused(tmp_path, monkeypatch):
+    """An invalid configured policy file is refused in every mode, flag or not."""
+    out, rec = _official_out(tmp_path)
+    match = _point_policy_at(tmp_path, monkeypatch, "invalid")
+    with pytest.raises(rb.TapeError, match=match):
+        rb.verify(out)
+    with pytest.raises(rb.TapeError, match=match):
+        rb.verify(out, expect_policy_sha256=rec["price_policy"]["file_sha256"])
+    run = _cli_main(["verify", "--self-consistency-only", out,
+                     "--expect-policy-sha256", rec["price_policy"]["file_sha256"]])
+    assert run.returncode == 2, run.stderr
+    assert match in run.stderr
+
+
+@pytest.mark.parametrize("kind", ["missing", "directory", "invalid"])
+@pytest.mark.parametrize("pid", ["R14", "S12", "Pc8", "Pc7"])
+def test_edited_receipt_with_correct_flag_is_refused_when_config_unusable(tmp_path, monkeypatch, kind, pid):
+    """R14, S12, Pc8, Pc7: correct --expect-policy-sha256 does not accept a wrong receipt when the config is unusable."""
+    out = _edited_folder_for(tmp_path, pid)
+    # official policy sha (the "correct" flag); R14 keeps this hash, others may not
+    policy_sha = sha((ROOT / "config" / "replay_bridge_price_policy.json").read_bytes())
+    match = _point_policy_at(tmp_path, monkeypatch, kind)
+    with pytest.raises(rb.TapeError, match=match):
+        rb.verify(out, expect_policy_sha256=policy_sha)
+    run = _cli_main(["verify", "--self-consistency-only", out, "--expect-policy-sha256", policy_sha])
+    assert run.returncode == 2, run.stderr
+    assert match in run.stderr
+    assert "Policy status is unknown; this folder is not approved." in run.stderr
+
+
+def test_policy_pin_list_is_accurate(tmp_path):
+    """policy_file_sha256 is listed as checked only after the full content compare has run."""
+    out, rec = _official_out(tmp_path)
+    v = rb.verify(out)["_verification"]
+    assert v["checked"].count("policy_file_sha256") == 1
+    assert "policy_file_sha256" not in v["skipped"]
+    # with the extra flag (matching the real file) the pin is still listed once
+    v2 = rb.verify(out, expect_policy_sha256=rec["price_policy"]["file_sha256"])["_verification"]
+    assert v2["checked"].count("policy_file_sha256") == 1
+    run = cli(["verify", "--self-consistency-only", out], rb.ARCHIVE_SHA)
     assert run.returncode == 0, run.stderr
-    assert "self-consistency" in run.stdout
+    assert "checked: csv_sha256, code_sha256, policy_file_sha256" in run.stdout
+    assert "policy_file_sha256" not in run.stdout.split("skipped:")[1].splitlines()[0]
+    # a path-only edit is still refused with the correct flag, so the list is never a hash-only success
+    rec["price_policy"]["path"] = "alt.json"
+    _resign_official(out, rec)
+    with pytest.raises(rb.TapeError, match="price_policy.path"):
+        rb.verify(out, expect_policy_sha256=rec["price_policy"]["file_sha256"])
