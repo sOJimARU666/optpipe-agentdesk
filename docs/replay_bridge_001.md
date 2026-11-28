@@ -44,16 +44,29 @@ be caught and may leave a `.NAME.partial-*` folder; that folder is always invali
 
 `verify` always recomputes what it can from the files and refuses a mismatch (row counts, per-action counts,
 block and accept totals and breakdowns) even if SHA256SUMS was regenerated to match an edited receipt. It also
-cross-checks `decision_tape.csv` against `decision_tape_labeled.csv` row by row on Sol's 10 columns, so an
-edited and re-signed plain tape is refused. If the receipt claims the official fixture set, the archive sha
-must equal the repo pin `ARCHIVE_SHA`. If it records the frozen `decisions.json` sha, `decision_tape.csv` must
-equal `FROZEN_CSV_SHA`. The recorded `code_sha256` is compared to the running source file, and a receipt that
-points at the default policy file is compared to that file's hash and numbers. Hidden `.*.partial-*` folders
-are refused; hidden leftovers beside a complete folder are ignored.
+cross-checks `decision_tape.csv` against `decision_tape_labeled.csv` row by row on Sol's 10 columns, and checks
+the sidecars against the plain-tape projection (accepted vs blocked price, accept/block partition, flags, and
+log fields that repeat the tape). Sidecar columns that cannot be derived from the plain tape are listed as
+DIAGNOSTIC in the CLI output and in `_verification.diagnostic_fields`; they must still agree between the
+labeled CSV and the matching log row. If the receipt claims the official fixture set, the archive sha must
+equal the repo pin `ARCHIVE_SHA`. If it records the frozen `decisions.json` sha, `decision_tape.csv` must
+equal `FROZEN_CSV_SHA`. The recorded `code_sha256` is compared to the running source file. Hidden
+`.*.partial-*` folders are refused; hidden leftovers beside a complete folder are ignored.
 
-The CLI `verify` command also applies the repo pins by default (archive, frozen decisions, frozen tape, running
-code, and the default policy file where those pins exist). `--self-consistency-only` turns the repo pins off;
-the file-derived checks above still run. Optional flags are an independent check against values you supply:
+The expected policy identity comes from the repo configuration (`config/replay_bridge_price_policy.json`) or
+from `--expect-policy-sha256`, never from the receipt. Approval status is never read from the receipt. The
+"Policy status PROPOSED is not owner-approved" notice is printed when the *configured* policy file has that
+status, not when the folder claims it.
+
+The CLI `verify` command applies the repo pins by default (archive, frozen decisions, frozen tape, running
+code, and the configured policy file). In pinned official mode it also recomputes `decision_tape_labeled.csv`,
+`price_block_log.csv`, `price_accept_log.csv` and the receipt's `price_policy` fields from the vendored
+pinned archive plus that configured policy, then compares the bytes, so an official folder that was edited
+and fully re-signed is refused. A required pin that cannot be resolved, or a policy identity that does not
+match the configured file, is refused. The output and the in-memory `_verification.checked` / `.skipped`
+lists name exactly the pins that ran (including `official_sidecars` when the official projection was
+compared). `--self-consistency-only` turns the repo pins and the official recompute off; the file-derived
+checks above still run. Optional flags are an independent check against values you supply:
 
 - `--expect-archive-sha256` — must equal the receipt `archive_sha256` and, when present, `labels.fixture_set_sha256`
 - `--expect-decisions-sha256` — must equal the receipt `decisions_sha256`
@@ -61,16 +74,18 @@ the file-derived checks above still run. Optional flags are an independent check
 - `--expect-policy-sha256` — must equal the receipt `price_policy.file_sha256`
 
 Any pin that is given must match; a mismatch, or a missing receipt field, fails with exit 2 and writes nothing.
-The Python `verify()` API defaults to unpinned (file-derived checks only) so offline test-bundle folders can be
-checked; pass `pinned=True` to apply the repo pins. `--price-policy` on `export` still accepts any path;
-`load_policy` records the `status` the file declares. There is no approval flag and no way to mark a policy
-owner-approved. A folder exported from a test zip (not the official archive) is labeled `fixture_set=test-fixture`
-and is refused by the pinned CLI default.
+In pinned mode `--expect-policy-sha256` must equal the configured policy file. The Python `verify()` API defaults
+to unpinned (file-derived checks only) so offline test-bundle folders can be checked; pass `pinned=True` to apply
+the repo pins. `--price-policy` on `export` still accepts any path; `load_policy` records the `status` the file
+declares. There is no approval flag and no way to mark a policy owner-approved. A folder exported from a test
+zip (not the official archive) is labeled `fixture_set=test-fixture` and is refused by the pinned CLI default.
 
 The receipt records `price_policy.file_sha256` and `price_policy.path` (repo-relative when the file is in the repo,
 otherwise the basename, never an absolute box path) and always includes `price_policy.status_note`: a policy with
-status PROPOSED is not owner-approved, and the receipt has no approval mechanism. `export` and `verify` also print
-that sentence when the recorded status is PROPOSED.
+status PROPOSED is not owner-approved, and the receipt has no approval mechanism. `verify` prints that sentence
+when the configured policy file is PROPOSED, even if a re-signed receipt claims APPROVED. `export` prints it
+from the same configured file. Receipt fields `command` and `generated_at_utc` are produced at export time and
+are not pinned (they differ between genuine official runs).
 
 ## The seven fixes
 
@@ -175,8 +190,11 @@ the code or the policy; and that `load_policy` records whatever `status` the fil
 compares archive, decisions, tape, code and the default policy file to the repo pins; optional `--expect-*`
 flags add caller-supplied pins; and even `--self-consistency-only` still recomputes counts from the files,
 cross-checks the plain tape against the labeled CSV, compares the code hash to the running source, and compares
-a default-policy receipt to that file. A folder that is only internally consistent after an edit-and-resign no
-longer passes. The Python `verify()` API stays unpinned by default so test-bundle folders can still be checked.
+a configured policy file, never the receipt's path, and reports the pins that were actually checked or skipped.
+In pinned official mode, the labeled CSV, both price logs and the receipt policy fields are recomputed from the
+pinned archive plus that configured policy and compared byte-for-byte, so an official folder that is only
+internally consistent after an edit-and-resign no longer passes. The Python `verify()` API stays unpinned by
+default so test-bundle folders can still be checked.
 
 ## Zoodle baseline at f0be2bc0 (R13–R16, O3c, X2a/X2b/X2c, PP18, A6/A7)
 
@@ -197,6 +215,41 @@ Zoodle's report for head `f0be2bc0` (sha256 starts `cc776683`, ends `f97f`) is t
 - **A7** SIGTERM mid-write cleans the temp folder, exit 2 → `test_a7_sigterm_cleans_up_the_temp_folder`
 - **A6** leftover `.*.partial-*` (SIGKILL cannot be caught) is refused by `verify` and by `write_output`, and
   ignored beside a real target → `test_a6_leftover_partial_folder_is_refused_and_ignored`
+
+
+## Zoodle gate at 72078004 (S12, E10/S4/SD2, S8/S9, S1/S3/S5/S6, Pb1–Pb4)
+
+Zoodle's report for head `72078004` (sha256 starts `c4160f0e`, ends `299d`) is a FAIL on official folders that
+were edited and fully re-signed. Every named re-run item from `f0be2bc0` was already fixed; these new probes
+are folded in here. Mapping (finding → test):
+
+- **S12** receipt `price_policy.status` PROPOSED → APPROVED (the not-owner-approved notice must still come from
+  the configured policy) → `test_s12_approved_status_is_refused_and_notice_comes_from_config`
+- **E10 / S4 / SD2** a BAR row relabelled DELAYED in the labeled CSV, accept log and receipt →
+  `test_e10_s4_sd2_bar_relabeled_delayed_is_refused`
+- **S9** block reason PF-STATUS → PF-STALE in the labeled CSV → `test_s9_block_reason_changed_in_labeled_csv_is_refused`
+- **S8** the same reason change in the block log, labeled CSV and receipt →
+  `test_s8_block_reason_changed_in_log_and_receipt_is_refused`
+- **S1 / SD1** labeled `price_age_seconds` edited → `test_s1_sd1_labeled_age_cell_edited_is_refused`
+- **S3** labeled `price_kind` edited → `test_s3_price_kind_edited_is_refused`
+- **S5 / SD4** block-log `as_of_raw` edited → `test_s5_sd4_as_of_timestamp_edited_is_refused`
+- **S6 / SD7** accept-log `age_seconds` edited → `test_s6_sd7_accept_log_age_edited_is_refused`
+- **Pb1–Pb3** receipt policy path/status/sha/numbers changed to an alternate identity →
+  `test_pb1_alternate_policy_identity_is_refused_in_pinned_mode`
+- **Pb4** genuine official-archive export made with an alternate loose ADOPTED policy →
+  `test_pb4_official_export_with_alternate_policy_is_refused`
+
+**S11** (`generated_at_utc` and `command` edited on an otherwise official folder) is run-specific metadata
+produced at export time. It is not part of the official sidecar projection and is not pinned.
+
+## Comparison and quote-evidence principles
+
+- Sequence comparisons cover the full sequence and its length, never a prefix only (`zip(..., strict=True)`
+  plus an explicit row-count check; a labeled CSV that is only a matching prefix of the tape is refused by
+  `test_verify_compares_full_tape_not_a_prefix`).
+- OHLCV with equal bid and ask (QSTrader-style) does not count as quote evidence. The accepted price is
+  always `price.value`. A present bid/ask pair is only a PF-BIDASK validity check (missing, non-positive,
+  or inverted), not a quote source, and a locked market (`bid == ask`) is not quote evidence.
 
 ## Conflicts between the fix list and Doodle's policy
  (the policy wins on freshness)

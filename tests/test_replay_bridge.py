@@ -285,7 +285,8 @@ def test_receipt_records_code_hash_command_timestamp_and_sha256sums(tmp_path):
     assert json.loads((out / "bridge_receipt.json").read_bytes()) == r
     v = rb.verify(out)
     assert v["rows"] == 391 and v["_verification"]["mode"] == rb.VERIFY_SELF_ONLY
-    assert v["_verification"]["pins"] == []
+    assert v["_verification"]["checked"] == ["csv_sha256", "code_sha256"]
+    assert "archive_sha256" in v["_verification"]["skipped"]
 
 
 def test_atomic_failure_leaves_no_output_and_no_partial(tmp_path, monkeypatch):
@@ -373,7 +374,9 @@ def test_verify_without_pins_prints_self_consistency_only(tmp_path):
     run = cli(["verify", "--self-consistency-only", out], asha)
     assert run.returncode == 0, run.stderr
     assert "self-consistency only" in run.stdout
-    assert "no independent check of the archive, the bridge code, or the price policy" in run.stdout
+    assert "checked: csv_sha256, code_sha256" in run.stdout
+    assert "skipped: archive_sha256, decisions_sha256, policy_file_sha256" in run.stdout
+    assert "Diagnostic sidecar fields" in run.stdout
     assert "Policy status PROPOSED is not owner-approved" in run.stdout
 
 
@@ -388,8 +391,10 @@ def test_verify_identity_pins_match(tmp_path):
     run = cli(args, asha)
     assert run.returncode == 0, run.stderr
     assert "self-consistency plus supplied identity pins" in run.stdout
-    for name in ("archive_sha256", "decisions_sha256", "code_sha256", "policy_file_sha256"):
+    assert "checked:" in run.stdout
+    for name in ("archive_sha256", "decisions_sha256", "csv_sha256", "code_sha256", "policy_file_sha256"):
         assert name in run.stdout
+    assert "skipped: none" in run.stdout
     assert "Policy status PROPOSED is not owner-approved" in run.stdout
 
 
@@ -406,7 +411,10 @@ def test_verify_identity_pin_mismatch_fails(tmp_path, flag, field):
     assert run.returncode == 2, run.stderr
     assert "does not match the expected value" in run.stderr
     # the folder itself is left untouched and is still self-consistent
-    assert rb.verify(out)["_verification"]["pins"] == []
+    v = rb.verify(out)["_verification"]
+    assert "archive_sha256" in v["skipped"]
+    assert "policy_file_sha256" in v["skipped"]
+    assert "code_sha256" in v["checked"]
 
 
 def _rehash_fixture(out, receipt, new_sha):
@@ -436,6 +444,7 @@ def test_verify_rehashed_wrong_fixture_is_self_consistent_but_pin_fails(tmp_path
     _rehash_fixture(out, r, wrong)
     v = rb.verify(out)
     assert v["_verification"]["mode"] == rb.VERIFY_SELF_ONLY
+    assert "archive_sha256" in v["_verification"]["skipped"]
     assert v["archive_sha256"] == wrong
     _bundle, asha = make_bundle(tmp_path)
     run = cli(["verify", "--self-consistency-only", out], asha)
@@ -475,7 +484,8 @@ def test_policy_status_is_recorded_as_declared_with_no_approval_mechanism(tmp_pa
     run = cli(["verify", "--self-consistency-only", out], asha)
     assert run.returncode == 0
     assert "self-consistency only" in run.stdout
-    assert "Policy status PROPOSED is not owner-approved" not in run.stdout   # status is not PROPOSED
+    # Approval status is never read from the receipt; the notice comes from the configured policy.
+    assert "Policy status PROPOSED is not owner-approved" in run.stdout
 
 
 def test_export_stdout_states_proposed_is_not_owner_approved(tmp_path):
@@ -941,7 +951,7 @@ def test_r14_edited_policy_numbers_are_refused_after_resign(tmp_path):
         rec["price_policy"]["max_age_seconds"]["quote_last"] = "1"
     _edit_receipt(out, mut)
     with pytest.raises(rb.TapeError, match="price_policy"):
-        rb.verify(out)
+        rb.verify(out, expect_policy_sha256=rb.digest((ROOT / "config" / "replay_bridge_price_policy.json").read_bytes()))
 
 
 def test_r15_edited_per_action_counts_are_refused_after_resign(tmp_path):
@@ -994,20 +1004,42 @@ def test_x2a_forged_action_in_both_csvs_is_refused(tmp_path):
     """X2a: same forged action in both CSVs, receipt hashes/counts updated, SUMS regenerated."""
     out, r = _export(tmp_path)
     assert r["decisions_sha256"] == rb.FROZEN_DECISIONS_SHA
+    target_ny = None
     for name in ("decision_tape.csv", "decision_tape_labeled.csv"):
         path = out / name
         rows = list(csv.reader(path.read_text().splitlines()))
+        di = rows[0].index("decision")
+        bull_i = rows[0].index("bull_signal")
+        bear_i = rows[0].index("bear_signal")
+        ny_i = rows[0].index("decision_at_ny")
+        up_i = rows[0].index("upstream_decision") if "upstream_decision" in rows[0] else None
         for row in reversed(rows[1:]):
-            if row[FIELDS_DECISION] == "SIGNAL_BULL":
-                row[FIELDS_DECISION] = "SIGNAL_BEAR"
+            if row[di] == "SIGNAL_BULL":
+                row[di] = "SIGNAL_BEAR"
+                row[bull_i] = "0"
+                row[bear_i] = "1"
+                if up_i is not None:
+                    row[up_i] = "SIGNAL_BEAR"
+                target_ny = row[ny_i]
                 break
         with path.open("w", newline="") as fh:
             csv.writer(fh).writerows(rows)
+    path = out / "price_accept_log.csv"
+    rows = list(csv.reader(path.read_text().splitlines()))
+    ai = rows[0].index("action")
+    ny_i = rows[0].index("decision_at_ny")
+    for row in rows[1:]:
+        if row[ny_i] == target_ny:
+            row[ai] = "SIGNAL_BEAR"
+    with path.open("w", newline="") as fh:
+        csv.writer(fh).writerows(rows)
     rec = json.loads((out / "bridge_receipt.json").read_text())
     rec["csv_sha256"] = rb.digest((out / "decision_tape.csv").read_bytes())
     rec["labeled_csv_sha256"] = rb.digest((out / "decision_tape_labeled.csv").read_bytes())
+    rec["price_accept_log_sha256"] = rb.digest((out / "price_accept_log.csv").read_bytes())
     rec["counts"] = {"ABSTAIN": rec["counts"]["ABSTAIN"], "SIGNAL_BULL": rec["counts"]["SIGNAL_BULL"] - 1,
                      "SIGNAL_BEAR": rec["counts"]["SIGNAL_BEAR"] + 1, "BLOCKED": rec["counts"]["BLOCKED"]}
+    rec["upstream_counts"] = dict(rec["counts"])
     (out / "bridge_receipt.json").write_text(json.dumps(rec, indent=2, sort_keys=True) + "\n")
     _resign(out)
     with pytest.raises(rb.TapeError, match="does not match the frozen Lesson 001 projection"):
@@ -1153,3 +1185,321 @@ def test_cli_verify_defaults_to_repo_pins(tmp_path):
     # still compares code hash and default policy file; those match, unofficial fixture is ok
     # but the frozen decisions + tape pin check is always on and should pass for this bundle
     assert run.returncode == 0, run.stderr
+
+
+# --- Sol verify-identity follow-up (72078004 L670-713) and sidecar projection ---
+
+def test_policy_pin_comes_from_config_not_receipt(tmp_path):
+    """A receipt that stops claiming the default policy path cannot drop the policy pin."""
+    out, r = _export(tmp_path)
+    original = r["price_policy"]["file_sha256"]
+    def mut(rec):
+        rec["price_policy"]["path"] = "other-policy.json"
+        rec["price_policy"]["file_sha256"] = "00" * 32
+    _edit_receipt(out, mut)
+    # unpinned, no expect flag: policy pin is skipped (identity is not taken from the receipt)
+    v = rb.verify(out)
+    assert "policy_file_sha256" in v["_verification"]["skipped"]
+    # pinned / config identity still compares to the default policy file, not the receipt path
+    with pytest.raises(rb.TapeError, match="policy file sha256"):
+        rb.verify(out, pinned=True, expect_archive_sha256=r["archive_sha256"])
+    with pytest.raises(rb.TapeError, match="policy file sha256"):
+        rb.verify(out, expect_policy_sha256=original)
+
+
+def test_pinned_verify_refuses_unresolved_policy_pin(tmp_path, monkeypatch):
+    """Strict (pinned) mode refuses when the default policy file cannot be resolved."""
+    out, r = _export(tmp_path)
+    monkeypatch.setattr(rb, "POLICY_FILE", tmp_path / "missing-policy.json")
+    with pytest.raises(rb.TapeError, match="required policy pin cannot be resolved"):
+        rb.verify(out, pinned=True, expect_archive_sha256=r["archive_sha256"])
+    # a CLI flag still resolves the pin
+    got = rb.verify(out, pinned=True, expect_archive_sha256=r["archive_sha256"],
+                    expect_policy_sha256=r["price_policy"]["file_sha256"])
+    assert "policy_file_sha256" in got["_verification"]["checked"]
+    assert got["_verification"]["skipped"] == ["official_sidecars"]
+
+
+def test_verify_lists_checked_and_skipped_pins(tmp_path):
+    """Stdout and _verification list exactly the pins that were checked and skipped."""
+    out, r = _export(tmp_path)
+    v = rb.verify(out)["_verification"]
+    assert v["checked"] == ["csv_sha256", "code_sha256"]
+    assert v["skipped"] == ["archive_sha256", "decisions_sha256", "policy_file_sha256"]
+    assert v["pins"] == v["checked"]
+    assert v["diagnostic_fields"] == list(rb.SIDECAR_DIAGNOSTIC_FIELDS)
+    _bundle, asha = make_bundle(tmp_path)
+    run = cli(["verify", "--self-consistency-only", out], asha)
+    assert run.returncode == 0, run.stderr
+    assert "checked: csv_sha256, code_sha256" in run.stdout
+    assert "skipped: archive_sha256, decisions_sha256, policy_file_sha256" in run.stdout
+    assert "Diagnostic sidecar fields (not derived from decision_tape.csv):" in run.stdout
+    for name in rb.SIDECAR_DIAGNOSTIC_FIELDS:
+        assert name in run.stdout
+    # pinned against the test-bundle archive lists every identity pin as checked
+    got = rb.verify(out, pinned=True, expect_archive_sha256=r["archive_sha256"])
+    assert got["_verification"]["mode"] == rb.VERIFY_WITH_PINS
+    assert got["_verification"]["checked"] == list(rb.IDENTITY_PINS)
+    assert got["_verification"]["skipped"] == ["official_sidecars"]
+
+
+def test_sidecar_projection_mismatch_is_refused(tmp_path):
+    """A labeled price_status that contradicts the plain-tape observed_price is refused."""
+    out, _r = _export(tmp_path)
+    path = out / "decision_tape_labeled.csv"
+    rows = list(csv.reader(path.read_text().splitlines()))
+    status_i = rows[0].index("price_status")
+    reason_i = rows[0].index("price_reason_code")
+    # the 09:30 open is the blocked PF-STATUS row (empty observed_price on the plain tape)
+    rows[1][status_i] = "OK"
+    rows[1][reason_i] = ""
+    with path.open("w", newline="") as fh:
+        csv.writer(fh).writerows(rows)
+    rec = json.loads((out / "bridge_receipt.json").read_text())
+    rec["labeled_csv_sha256"] = rb.digest(path.read_bytes())
+    (out / "bridge_receipt.json").write_text(json.dumps(rec, indent=2, sort_keys=True) + "\n")
+    _resign(out)
+    with pytest.raises(rb.TapeError, match="labeled price_status does not match the blocked plain-tape price"):
+        rb.verify(out)
+
+
+def test_sidecar_diagnostic_field_must_agree_across_sidecars(tmp_path):
+    """DIAGNOSTIC fields are not derived from the tape, but labeled vs log must still agree."""
+    out, _r = _export(tmp_path)
+    path = out / "decision_tape_labeled.csv"
+    rows = list(csv.reader(path.read_text().splitlines()))
+    li = rows[0].index("price_label")
+    # flip a label on an accepted row (row 2 is 09:31, accepted BAR)
+    rows[2][li] = "REALTIME"
+    with path.open("w", newline="") as fh:
+        csv.writer(fh).writerows(rows)
+    rec = json.loads((out / "bridge_receipt.json").read_text())
+    rec["labeled_csv_sha256"] = rb.digest(path.read_bytes())
+    (out / "bridge_receipt.json").write_text(json.dumps(rec, indent=2, sort_keys=True) + "\n")
+    _resign(out)
+    with pytest.raises(rb.TapeError, match="label does not match the labeled CSV"):
+        rb.verify(out)
+
+
+def test_verify_compares_full_tape_not_a_prefix(tmp_path):
+    """A labeled CSV that is only a matching prefix of the tape (last row dropped) is refused."""
+    out, r = _export(tmp_path)
+    path = out / "decision_tape_labeled.csv"
+    rows = list(csv.reader(path.read_text().splitlines()))
+    assert len(rows) - 1 == r["rows"]
+    with path.open("w", newline="") as fh:
+        csv.writer(fh).writerows(rows[:-1])  # drop the last data row
+    rec = json.loads((out / "bridge_receipt.json").read_text())
+    rec["labeled_csv_sha256"] = rb.digest(path.read_bytes())
+    rec["rows"] = r["rows"] - 1
+    rec["counts"]["ABSTAIN"] = rec["counts"]["ABSTAIN"] - 1
+    (out / "bridge_receipt.json").write_text(json.dumps(rec, indent=2, sort_keys=True) + "\n")
+    _resign(out)
+    with pytest.raises(rb.TapeError, match="different row counts"):
+        rb.verify(out)
+
+
+# --- Zoodle FAIL at 72078004: official folder, edited and fully re-signed (S12, E10, S8/S9, S1/S3/S5/S6, Pb1–Pb4) ---
+
+def _official_out(tmp_path, name="official", policy_path=None):
+    """Write a complete official Lesson 001 output folder from the vendored fixture."""
+    path = Path(policy_path) if policy_path is not None else ROOT / "config" / "replay_bridge_price_policy.json"
+    policy, policy_sha = rb.read_policy(path)
+    files, summary = rb.official_projection(policy)
+    receipt = {
+        **summary,
+        "archive_sha256": rb.ARCHIVE_SHA,
+        "csv_sha256": rb.digest(files["decision_tape.csv"]),
+        "labeled_csv_sha256": rb.digest(files["decision_tape_labeled.csv"]),
+        "price_block_log_sha256": rb.digest(files["price_block_log.csv"]),
+        "price_accept_log_sha256": rb.digest(files["price_accept_log.csv"]),
+        "price_policy": rb._receipt_policy_from_file(path) if path.resolve() == (ROOT / "config" / "replay_bridge_price_policy.json").resolve()
+        else {**rb._receipt_policy_from_file(path), "path": path.name, "file_sha256": policy_sha},
+        "code_sha256": rb.digest(Path(rb.__file__).read_bytes()),
+        "command": "python -m optpipe.research.replay_bridge export Optpipe-Lesson-001-Portability-v3.zip output",
+        "python": "3.13.5",
+        "generated_at_utc": "2026-11-28T14:12:26+00:00",
+    }
+    # path/hash for a non-default policy file must not pretend to be the repo default
+    if policy_path is not None:
+        receipt["price_policy"] = {
+            **rb._receipt_policy_from_file(path),
+            "path": path.name,
+            "file_sha256": policy_sha,
+        }
+    files = {**files, "bridge_receipt.json": (json.dumps(receipt, sort_keys=True, indent=2) + "\n").encode()}
+    out = tmp_path / name
+    rb.write_output(out, files)
+    return out, receipt
+
+
+def _resign_official(out, rec):
+    rec["csv_sha256"] = rb.digest((out / "decision_tape.csv").read_bytes())
+    rec["labeled_csv_sha256"] = rb.digest((out / "decision_tape_labeled.csv").read_bytes())
+    rec["price_block_log_sha256"] = rb.digest((out / "price_block_log.csv").read_bytes())
+    rec["price_accept_log_sha256"] = rb.digest((out / "price_accept_log.csv").read_bytes())
+    (out / "bridge_receipt.json").write_text(json.dumps(rec, indent=2, sort_keys=True) + "\n")
+    _resign(out)
+
+
+def test_s12_approved_status_is_refused_and_notice_comes_from_config(tmp_path):
+    """S12: receipt status PROPOSED → APPROVED, fully re-signed; pinned verify refuses and still prints the notice."""
+    out, rec = _official_out(tmp_path)
+    rec["price_policy"]["status"] = "APPROVED"
+    _resign_official(out, rec)
+    with pytest.raises(rb.TapeError, match="price_policy.status"):
+        rb.verify(out, pinned=True)
+    run = cli(["verify", out], rb.ARCHIVE_SHA)
+    assert run.returncode == 2, run.stderr
+    assert "price_policy.status" in run.stderr
+    # a clean official folder still prints the notice from the configured policy
+    out2, _r = _official_out(tmp_path, name="clean")
+    run = cli(["verify", out2], rb.ARCHIVE_SHA)
+    assert run.returncode == 0, run.stderr
+    assert "Policy status PROPOSED is not owner-approved" in run.stdout
+    assert "official_sidecars" in run.stdout
+    assert "skipped: none" in run.stdout
+
+
+def test_e10_s4_sd2_bar_relabeled_delayed_is_refused(tmp_path):
+    """E10 / S4 / SD2: a BAR row relabelled DELAYED in the labeled CSV, accept log and receipt, then re-signed."""
+    out, rec = _official_out(tmp_path)
+    labeled = out / "decision_tape_labeled.csv"
+    rows = list(csv.reader(labeled.read_text().splitlines()))
+    li = rows[0].index("price_label")
+    # row 2 is 09:31, an accepted BAR bar_close_1m
+    assert rows[2][li] == "BAR"
+    rows[2][li] = "DELAYED"
+    with labeled.open("w", newline="") as fh:
+        csv.writer(fh).writerows(rows)
+    acc = out / "price_accept_log.csv"
+    arows = list(csv.reader(acc.read_text().splitlines()))
+    ali = arows[0].index("label")
+    # accept log row 1 is tape row 1 (09:31)
+    arows[1][ali] = "DELAYED"
+    with acc.open("w", newline="") as fh:
+        csv.writer(fh).writerows(arows)
+    rec["price_accepts"]["by_label"] = {"BAR": rec["price_accepts"]["by_label"]["BAR"] - 1, "DELAYED": 1}
+    _resign_official(out, rec)
+    with pytest.raises(rb.TapeError, match="does not match the projection from the pinned archive"):
+        rb.verify(out, pinned=True)
+
+
+def test_s9_block_reason_changed_in_labeled_csv_is_refused(tmp_path):
+    """S9: block reason PF-STATUS → PF-STALE in the labeled CSV only, fully re-signed."""
+    out, rec = _official_out(tmp_path)
+    path = out / "decision_tape_labeled.csv"
+    rows = list(csv.reader(path.read_text().splitlines()))
+    ri = rows[0].index("price_reason_code")
+    assert rows[1][ri] == "PF-STATUS"
+    rows[1][ri] = "PF-STALE"
+    with path.open("w", newline="") as fh:
+        csv.writer(fh).writerows(rows)
+    _resign_official(out, rec)
+    with pytest.raises(rb.TapeError, match="reason does not match the labeled CSV|does not match the projection"):
+        rb.verify(out, pinned=True)
+
+
+def test_s8_block_reason_changed_in_log_and_receipt_is_refused(tmp_path):
+    """S8: block reason PF-STATUS → PF-STALE in the block log, labeled CSV and receipt, fully re-signed."""
+    out, rec = _official_out(tmp_path)
+    for name, col in (("decision_tape_labeled.csv", "price_reason_code"), ("price_block_log.csv", "reason_code")):
+        path = out / name
+        rows = list(csv.reader(path.read_text().splitlines()))
+        i = rows[0].index(col)
+        rows[1][i] = "PF-STALE"
+        with path.open("w", newline="") as fh:
+            csv.writer(fh).writerows(rows)
+    rec["price_blocks"]["by_reason"] = {"PF-STALE": 1}
+    _resign_official(out, rec)
+    with pytest.raises(rb.TapeError, match="does not match the projection from the pinned archive"):
+        rb.verify(out, pinned=True)
+
+
+def test_s1_sd1_labeled_age_cell_edited_is_refused(tmp_path):
+    """S1 / SD1: labeled price_age_seconds edited and fully re-signed."""
+    out, rec = _official_out(tmp_path)
+    path = out / "decision_tape_labeled.csv"
+    rows = list(csv.reader(path.read_text().splitlines()))
+    i = rows[0].index("price_age_seconds")
+    rows[2][i] = "99"
+    with path.open("w", newline="") as fh:
+        csv.writer(fh).writerows(rows)
+    _resign_official(out, rec)
+    with pytest.raises(rb.TapeError, match="age does not match the labeled CSV|does not match the projection"):
+        rb.verify(out, pinned=True)
+
+
+def test_s3_price_kind_edited_is_refused(tmp_path):
+    """S3: labeled price_kind edited and fully re-signed."""
+    out, rec = _official_out(tmp_path)
+    path = out / "decision_tape_labeled.csv"
+    rows = list(csv.reader(path.read_text().splitlines()))
+    i = rows[0].index("price_kind")
+    rows[2][i] = "quote_last"
+    with path.open("w", newline="") as fh:
+        csv.writer(fh).writerows(rows)
+    _resign_official(out, rec)
+    with pytest.raises(rb.TapeError, match="price_kind does not match the labeled CSV|does not match the projection"):
+        rb.verify(out, pinned=True)
+
+
+def test_s5_sd4_as_of_timestamp_edited_is_refused(tmp_path):
+    """S5 / SD4: block-log as_of_raw edited and fully re-signed."""
+    out, rec = _official_out(tmp_path)
+    path = out / "price_block_log.csv"
+    rows = list(csv.reader(path.read_text().splitlines()))
+    i = rows[0].index("as_of_raw")
+    rows[1][i] = "1999-01-01T00:00:00-05:00"
+    with path.open("w", newline="") as fh:
+        csv.writer(fh).writerows(rows)
+    _resign_official(out, rec)
+    with pytest.raises(rb.TapeError, match="does not match the projection from the pinned archive"):
+        rb.verify(out, pinned=True)
+
+
+def test_s6_sd7_accept_log_age_edited_is_refused(tmp_path):
+    """S6 / SD7: accept-log age_seconds edited and fully re-signed."""
+    out, rec = _official_out(tmp_path)
+    path = out / "price_accept_log.csv"
+    rows = list(csv.reader(path.read_text().splitlines()))
+    i = rows[0].index("age_seconds")
+    rows[1][i] = "99"
+    with path.open("w", newline="") as fh:
+        csv.writer(fh).writerows(rows)
+    _resign_official(out, rec)
+    with pytest.raises(rb.TapeError, match="age does not match the labeled CSV|does not match the projection"):
+        rb.verify(out, pinned=True)
+
+
+def test_pb1_alternate_policy_identity_is_refused_in_pinned_mode(tmp_path):
+    """Pb1–Pb3: receipt policy path/status/sha/numbers changed to an alternate identity, fully re-signed."""
+    out, rec = _official_out(tmp_path)
+    rec["price_policy"]["path"] = "config/alt_policy.json"
+    rec["price_policy"]["status"] = "ADOPTED"
+    rec["price_policy"]["file_sha256"] = "ab" * 32
+    rec["price_policy"]["max_age_seconds"]["quote_last"] = "99999"
+    _resign_official(out, rec)
+    with pytest.raises(rb.TapeError, match="policy"):
+        rb.verify(out, pinned=True)
+    run = cli(["verify", out], rb.ARCHIVE_SHA)
+    assert run.returncode == 2, run.stderr
+    assert "pinned" not in run.stdout  # must not print pinned-mode success
+    assert "policy" in run.stderr
+
+
+def test_pb4_official_export_with_alternate_policy_is_refused(tmp_path):
+    """Pb4: a genuine official-archive export made with an alternate loose ADOPTED policy is refused when pinned."""
+    alt = tmp_path / "alt.json"
+    raw = json.loads((ROOT / "config" / "replay_bridge_price_policy.json").read_text())
+    raw["status"] = "ADOPTED"
+    raw["bar_close_1m"]["max_age_seconds"] = "99999"
+    alt.write_text(json.dumps(raw))
+    out, rec = _official_out(tmp_path, policy_path=alt)
+    assert rec["price_policy"]["status"] == "ADOPTED"
+    assert rec["price_policy"]["path"] == "alt.json"
+    with pytest.raises(rb.TapeError, match="policy|does not match the projection"):
+        rb.verify(out, pinned=True)
+    run = cli(["verify", out], rb.ARCHIVE_SHA)
+    assert run.returncode == 2
+    assert "pinned" not in run.stdout

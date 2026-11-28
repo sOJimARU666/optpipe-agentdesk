@@ -53,14 +53,20 @@ BASE = "out/lesson001/"
 MODULE_CMD = "python -m optpipe.research.replay_bridge"
 POLICY_FILE = Path(__file__).resolve().parents[3] / "config" / "replay_bridge_price_policy.json"
 REPO_ROOT = POLICY_FILE.parent.parent
+OFFICIAL_FIXTURE_DIR = REPO_ROOT / "tests" / "fixtures" / "lesson001_v3"
 # Copied into the receipt and printed on export/verify.
 # Not an approval switch: there is no way to mark a policy approved.
 POLICY_STATUS_NOTE = ("A policy with status PROPOSED is not owner-approved. This receipt records the status "
                       "declared by the policy file; it has no approval mechanism.")
-VERIFY_SELF_ONLY = ("self-consistency only; no independent check of the archive, the bridge code, "
-                    "or the price policy")
-VERIFY_WITH_PINS = ("self-consistency plus repo pins (archive, decisions, tape, code, and the default "
-                    "policy file where those pins exist)")
+VERIFY_SELF_ONLY = "self-consistency only"
+VERIFY_WITH_PINS = "pinned"
+IDENTITY_PINS = ("archive_sha256", "decisions_sha256", "csv_sha256", "code_sha256", "policy_file_sha256")
+# Sidecar columns that cannot be derived from decision_tape.csv alone (plain-tape projection).
+SIDECAR_DIAGNOSTIC_FIELDS = (
+    "upstream_decision", "price_kind", "price_label", "price_reason_code",
+    "price_age_seconds", "price_delay_seconds", "price_adjusted_age_seconds", "price_max_age_seconds",
+    "as_of_raw", "status", "kind", "label",
+)
 PARTIAL_MARK = ".partial-"  # hidden temp folder prefix used by write_output
 
 PAPER_ONLY = "PAPER_ONLY"
@@ -482,11 +488,69 @@ def _policy_display_path(path: Path) -> str:
         return path.name
 
 
-def _policy_notice(receipt: dict) -> str | None:
-    status = (receipt.get("price_policy") or {}).get("status")
-    if status == "PROPOSED":
+def _configured_policy_status() -> str | None:
+    """Status of the repo policy file. Approval status is never taken from a receipt."""
+    if not POLICY_FILE.is_file():
+        return None
+    try:
+        raw = json.loads(POLICY_FILE.read_bytes())
+    except ValueError:
+        return None
+    if not isinstance(raw, dict):
+        return None
+    status = raw.get("status")
+    return status if isinstance(status, str) else None
+
+
+def _policy_notice(_receipt: dict | None = None) -> str | None:
+    """The not-owner-approved notice comes from the configured policy file, never from the folder."""
+    if _configured_policy_status() == "PROPOSED":
         return "Policy status PROPOSED is not owner-approved."
     return None
+
+
+def _receipt_policy_from_file(path: Path) -> dict:
+    """The price_policy object export() would write for this policy file."""
+    policy, policy_sha = read_policy(path)
+    return {
+        "policy_id": policy["policy_id"], "status": policy["status"],
+        "file_sha256": policy_sha, "path": _policy_display_path(path),
+        "status_note": POLICY_STATUS_NOTE,
+        "max_age_seconds": {k: _fmt(v) for k, v in policy["max_age_seconds"].items()},
+        "future_tolerance_seconds": _fmt(policy["future_tolerance_seconds"]),
+        "delayed_quote": {k: _fmt(v) for k, v in policy["delayed_quote"].items()},
+        "age": "decision_utc - as_of_utc, inclusive limits, first failure wins",
+    }
+
+
+def official_projection(policy: dict | None = None):
+    """Recompute the official Lesson 001 sidecars from the vendored frozen fixture and a policy."""
+    decisions = OFFICIAL_FIXTURE_DIR / "decisions.json"
+    receipt_path = OFFICIAL_FIXTURE_DIR / "receipt.json"
+    if not decisions.is_file() or not receipt_path.is_file():
+        raise TapeError("required official sidecar pin cannot be resolved: vendored Lesson 001 fixture is missing")
+    raw = decisions.read_bytes()
+    if digest(raw) != FROZEN_DECISIONS_SHA:
+        raise TapeError("vendored Lesson 001 fixture does not match the frozen decisions pin")
+    rec = json.loads(receipt_path.read_bytes())
+    if policy is None:
+        policy, _sha = read_policy(POLICY_FILE)
+    return project(raw, rec, policy, fixture_sha=ARCHIVE_SHA, fixture_set=FIXTURE_SET)
+
+
+def _check_official_sidecars(files: dict, receipt: dict) -> None:
+    """Pinned official mode: recompute labeled CSV, logs and receipt policy fields, then compare bytes."""
+    if not POLICY_FILE.is_file():
+        raise TapeError("required policy pin cannot be resolved: default policy file is missing")
+    expected_files, _summary = official_projection()
+    for name in ("decision_tape.csv", "decision_tape_labeled.csv", "price_block_log.csv", "price_accept_log.csv"):
+        if files[name] != expected_files[name]:
+            raise TapeError(f"{name} does not match the projection from the pinned archive and configured policy")
+    want = _receipt_policy_from_file(POLICY_FILE)
+    got = receipt.get("price_policy") if isinstance(receipt.get("price_policy"), dict) else {}
+    for key, val in want.items():
+        if got.get(key) != val:
+            raise TapeError(f"receipt price_policy.{key} does not match the configured policy")
 
 
 def is_partial_output(path: Path) -> bool:
@@ -561,6 +625,110 @@ def export(bundle: Path, out: Path, policy_path: Path, *, command: str, now=None
     return receipt
 
 
+def _index_log(rows):
+    out = {}
+    for r in rows:
+        try:
+            i = int(r["row_index"])
+        except (KeyError, TypeError, ValueError):
+            raise TapeError("a price log row is missing a valid row_index") from None
+        if i in out:
+            raise TapeError(f"duplicate row_index {i} in a price log")
+        out[i] = r
+    return out
+
+
+def _cross_check_sidecars(tape, labeled, log, acc) -> None:
+    """Check sidecars against the plain-tape projection, and against each other.
+
+    Derivable from decision_tape.csv: the 10 tape columns, bull/bear flags, exit_state, whether the
+    decision-time price was accepted (non-empty observed_price) or blocked, the accept/block partition,
+    and log fields that repeat the tape (clock, symbol, source_id, final action, accepted as_of).
+    Fields in SIDECAR_DIAGNOSTIC_FIELDS cannot be derived from the tape; they must still agree between
+    the labeled CSV and the matching log row.
+    """
+    accepted = _index_log(acc)
+    blocked = _index_log(log)
+    if set(accepted) & set(blocked):
+        raise TapeError("a row appears in both price_accept_log.csv and price_block_log.csv")
+    if set(accepted) | set(blocked) != set(range(len(tape))):
+        raise TapeError("price logs do not partition the decision_tape.csv rows")
+    for i, (plain, full) in enumerate(zip(tape, labeled, strict=True)):
+        action = plain.get(FIELDS[5])  # tape action column (ABSTAIN/BLOCKED/SIGNAL_*), not an approval decision
+        if plain.get("bull_signal") != ("1" if action == "SIGNAL_BULL" else "0"):
+            raise TapeError(f"bull_signal does not match decision at row {i}")
+        if plain.get("bear_signal") != ("1" if action == "SIGNAL_BEAR" else "0"):
+            raise TapeError(f"bear_signal does not match decision at row {i}")
+        if plain.get("exit_state") != "BLOCKED":
+            raise TapeError(f"exit_state is not BLOCKED at row {i}")
+        accepted_price = plain.get("observed_price") != ""
+        if accepted_price:
+            if plain.get("observed_price_at_ny") == "":
+                raise TapeError(f"accepted price at row {i} has no observed_price_at_ny")
+            if full.get("price_status") != "OK" or full.get("price_reason_code") != "":
+                raise TapeError(f"labeled price_status does not match the accepted plain-tape price at row {i}")
+            if i not in accepted:
+                raise TapeError(f"accepted tape row {i} is missing from price_accept_log.csv")
+            rec = accepted[i]
+            if rec.get("as_of") != plain.get("observed_price_at_ny"):
+                raise TapeError(f"price_accept_log.csv as_of does not match decision_tape.csv at row {i}")
+            if rec.get("action") != action:
+                raise TapeError(f"price_accept_log.csv action does not match decision_tape.csv at row {i}")
+            if full.get("upstream_decision") != action:
+                raise TapeError(f"upstream_decision does not match the accepted plain-tape decision at row {i}")
+            if rec.get("status") != "ok":
+                raise TapeError(f"price_accept_log.csv status is not ok at row {i}")
+            _sidecar_pair(i, "accept", plain, full, rec,
+                          reason="", label_reason="price_reason_code", log_reason=None,
+                          as_of_key="as_of")
+        else:
+            if plain.get("observed_price_at_ny") != "":
+                raise TapeError(f"blocked price at row {i} still has observed_price_at_ny")
+            if action in SIGNALS:
+                raise TapeError(f"a SIGNAL row on the plain tape has no observed price at row {i}")
+            if full.get("price_status") != "BLOCKED" or not full.get("price_reason_code"):
+                raise TapeError(f"labeled price_status does not match the blocked plain-tape price at row {i}")
+            if i not in blocked:
+                raise TapeError(f"blocked tape row {i} is missing from price_block_log.csv")
+            rec = blocked[i]
+            if rec.get("final_action") != action:
+                raise TapeError(f"price_block_log.csv final_action does not match decision_tape.csv at row {i}")
+            if action == "ABSTAIN" and full.get("upstream_decision") != "ABSTAIN":
+                raise TapeError(f"upstream_decision does not match the ABSTAIN plain-tape decision at row {i}")
+            _sidecar_pair(i, "block", plain, full, rec,
+                          reason=full.get("price_reason_code"), label_reason="price_reason_code",
+                          log_reason="reason_code", as_of_key="as_of_raw")
+
+
+def _sidecar_pair(i, which, plain, full, rec, *, reason, label_reason, log_reason, as_of_key) -> None:
+    if rec.get("decision_at_ny") != plain.get("decision_at_ny") or rec.get("symbol") != plain.get("symbol"):
+        raise TapeError(f"price_{which}_log.csv clock/symbol does not match decision_tape.csv at row {i}")
+    if rec.get("source_id") != plain.get("source_id"):
+        raise TapeError(f"price_{which}_log.csv source_id does not match decision_tape.csv at row {i}")
+    if rec.get("price_kind") != full.get("price_kind"):
+        raise TapeError(f"price_{which}_log.csv price_kind does not match the labeled CSV at row {i}")
+    if rec.get("label") != full.get("price_label"):
+        raise TapeError(f"price_{which}_log.csv label does not match the labeled CSV at row {i}")
+    if rec.get("age_seconds") != full.get("price_age_seconds"):
+        raise TapeError(f"price_{which}_log.csv age does not match the labeled CSV at row {i}")
+    if rec.get("delay_seconds") != full.get("price_delay_seconds"):
+        raise TapeError(f"price_{which}_log.csv delay does not match the labeled CSV at row {i}")
+    if rec.get("adjusted_age_seconds") != full.get("price_adjusted_age_seconds"):
+        raise TapeError(f"price_{which}_log.csv adjusted age does not match the labeled CSV at row {i}")
+    if rec.get("max_age_seconds") != full.get("price_max_age_seconds"):
+        raise TapeError(f"price_{which}_log.csv max age does not match the labeled CSV at row {i}")
+    if log_reason and rec.get(log_reason) != full.get(label_reason):
+        raise TapeError(f"price_{which}_log.csv reason does not match the labeled CSV at row {i}")
+    if reason is not None and log_reason is None and full.get(label_reason) != reason:
+        raise TapeError(f"labeled {label_reason} mismatch at row {i}")
+
+
+def _format_verification(v: dict) -> str:
+    checked = ", ".join(v["checked"]) or "none"
+    skipped = ", ".join(v["skipped"]) or "none"
+    return f"{v['mode']}; checked: {checked}; skipped: {skipped}"
+
+
 def _pin(got, expected, name: str) -> None:
     if expected is None:
         return
@@ -594,15 +762,23 @@ def verify(out: Path, *, expect_archive_sha256: str | None = None, expect_decisi
     """Check an output folder.
 
     Always (even without pins): SHA256SUMS and receipt file hashes, labels, a row-by-row cross-check of
-    decision_tape.csv against decision_tape_labeled.csv, and counts / block / accept totals recomputed from
-    the CSVs (so an edited-and-re-signed receipt is refused). Hidden `.*.partial-*` folders are refused.
-    If the receipt claims the official fixture set, the archive sha must equal ARCHIVE_SHA. If it records
-    the frozen decisions sha, decision_tape.csv must equal FROZEN_CSV_SHA.
+    decision_tape.csv against decision_tape_labeled.csv, a plain-tape projection check of the sidecars,
+    and counts / block / accept totals recomputed from the CSVs (so an edited-and-re-signed receipt is
+    refused). Hidden `.*.partial-*` folders are refused. If the receipt claims the official fixture set,
+    the archive sha must equal ARCHIVE_SHA. If it records the frozen decisions sha, decision_tape.csv
+    must equal FROZEN_CSV_SHA. The recorded code hash is compared to the running source.
 
     Optional ``--expect-*-sha256`` flags compare archive, decisions, code and policy hashes to the values
-    you supply. ``pinned=True`` (the CLI default) also compares those fields to the repo pins where they
-    exist (ARCHIVE_SHA, FROZEN_DECISIONS_SHA, FROZEN_CSV_SHA, the running source file, and the default
-    policy file). ``--self-consistency-only`` sets pinned=False. This function never writes into `out`.
+    you supply. The expected policy identity comes from that flag or, in pinned mode, from the default
+    policy file on disk -- never from the receipt. ``pinned=True`` (the CLI default) applies every repo
+    pin (ARCHIVE_SHA, FROZEN_DECISIONS_SHA, FROZEN_CSV_SHA, the running source, and the default policy
+    file) and refuses if a required pin cannot be resolved. ``--self-consistency-only`` sets pinned=False.
+    The in-memory ``_verification`` result and the CLI output list the pins that were checked and the
+    pins that were skipped, and name the sidecar fields that are DIAGNOSTIC (not derivable from the
+    plain tape). In pinned official mode, those sidecar files and the receipt policy fields are
+    recomputed from the pinned archive plus the configured policy and compared byte-for-byte; the
+    not-owner-approved notice comes from the configured policy, never from the receipt. This function
+    never writes into `out`.
     """
     out = Path(out)
     if is_partial_output(out):
@@ -660,57 +836,107 @@ def verify(out: Path, *, expect_archive_sha256: str | None = None, expect_decisi
         if [r.get(k) for k in LABEL_FIELDS] != labels or labels[:2] != [PAPER_ONLY, DECISION_SUPPORT]:
             raise TapeError("a CSV row lacks the paper-only / decision-support labels")
 
+    _cross_check_sidecars(tape, labeled, log, acc)
+
     # Claimed official identity must match the repo pins even without --pinned (X2b-style relabel).
     if (got.get("fixture_set") == FIXTURE_SET
             and (receipt.get("archive_sha256") != ARCHIVE_SHA or got.get("fixture_set_sha256") != ARCHIVE_SHA)):
         raise TapeError("fixture_set claims the official Lesson 001 v3 archive, but the sha256 does not match the pin")
-    if receipt.get("decisions_sha256") == FROZEN_DECISIONS_SHA and digest(files["decision_tape.csv"]) != FROZEN_CSV_SHA:
-        raise TapeError("decision_tape.csv does not match the frozen Lesson 001 projection")
-    policy = receipt.get("price_policy") if isinstance(receipt.get("price_policy"), dict) else {}
-    if policy.get("path") == "config/replay_bridge_price_policy.json" and POLICY_FILE.is_file():
-        live_sha = digest(POLICY_FILE.read_bytes())
-        live = load_policy(json.loads(POLICY_FILE.read_bytes()))
-        want = {k: _fmt(v) for k, v in live["max_age_seconds"].items()}
-        if policy.get("file_sha256") != live_sha or policy.get("max_age_seconds") != want:
-            raise TapeError("receipt price_policy does not match the default policy file")
-    if receipt.get("code_sha256") != digest(Path(__file__).read_bytes()):
-        # Always compare the recorded code hash to the running source (R16). A folder from another
-        # revision is refused until re-exported.
-        raise TapeError("code_sha256 does not match the running bridge source")
 
-    # Repo pins (CLI default) and any caller-supplied expected values.
-    if pinned:
-        if expect_archive_sha256 is None:
-            expect_archive_sha256 = ARCHIVE_SHA
-        if expect_decisions_sha256 is None:
-            expect_decisions_sha256 = FROZEN_DECISIONS_SHA
-        if expect_code_sha256 is None:
-            expect_code_sha256 = digest(Path(__file__).read_bytes())
-        policy = receipt.get("price_policy") if isinstance(receipt.get("price_policy"), dict) else {}
-        if (expect_policy_sha256 is None and POLICY_FILE.is_file()
-                and policy.get("path") in {None, "", "config/replay_bridge_price_policy.json"}):
-            expect_policy_sha256 = digest(POLICY_FILE.read_bytes())
-        if digest(files["decision_tape.csv"]) != FROZEN_CSV_SHA:
-            raise TapeError("decision_tape.csv does not match the pinned Lesson 001 projection")
+    checked: list[str] = []
+    skipped: list[str] = []
 
-    pins = {"archive_sha256": expect_archive_sha256, "decisions_sha256": expect_decisions_sha256,
-            "code_sha256": expect_code_sha256, "policy_file_sha256": expect_policy_sha256}
-    supplied = [k for k, v in pins.items() if v is not None]
-    if pins["archive_sha256"] is not None:
-        _pin(receipt.get("archive_sha256"), pins["archive_sha256"], "archive_sha256")
+    # Archive / decisions / policy identity comes from the repo pins or a CLI flag, never from the receipt.
+    if expect_archive_sha256 is not None or pinned:
+        expected_archive = expect_archive_sha256 if expect_archive_sha256 is not None else ARCHIVE_SHA
+        if not expected_archive:
+            raise TapeError("required archive pin cannot be resolved")
+        _pin(receipt.get("archive_sha256"), expected_archive, "archive_sha256")
         fixture = got.get("fixture_set_sha256")
-        if fixture and fixture != pins["archive_sha256"]:
+        if fixture and fixture != expected_archive:
             raise TapeError("fixture_set_sha256 does not match the expected archive sha256")
-    _pin(receipt.get("decisions_sha256"), pins["decisions_sha256"], "decisions_sha256")
-    _pin(receipt.get("code_sha256"), pins["code_sha256"], "code_sha256")
-    _pin((receipt.get("price_policy") or {}).get("file_sha256"), pins["policy_file_sha256"], "policy file sha256")
+        checked.append("archive_sha256")
+    else:
+        skipped.append("archive_sha256")
+
+    if expect_decisions_sha256 is not None or pinned:
+        expected_decisions = expect_decisions_sha256 if expect_decisions_sha256 is not None else FROZEN_DECISIONS_SHA
+        if not expected_decisions:
+            raise TapeError("required decisions pin cannot be resolved")
+        _pin(receipt.get("decisions_sha256"), expected_decisions, "decisions_sha256")
+        checked.append("decisions_sha256")
+    else:
+        skipped.append("decisions_sha256")
+
+    tape_sha = digest(files["decision_tape.csv"])
     if pinned:
+        if tape_sha != FROZEN_CSV_SHA:
+            raise TapeError("decision_tape.csv does not match the pinned Lesson 001 projection")
+        checked.append("csv_sha256")
+    elif receipt.get("decisions_sha256") == FROZEN_DECISIONS_SHA:
+        if tape_sha != FROZEN_CSV_SHA:
+            raise TapeError("decision_tape.csv does not match the frozen Lesson 001 projection")
+        checked.append("csv_sha256")
+    else:
+        skipped.append("csv_sha256")
+
+    running_code = digest(Path(__file__).read_bytes())
+    expected_code = expect_code_sha256 if expect_code_sha256 is not None else running_code
+    if not expected_code:
+        raise TapeError("required code pin cannot be resolved")
+    if expect_code_sha256 is not None:
+        _pin(receipt.get("code_sha256"), expected_code, "code_sha256")
+    elif receipt.get("code_sha256") != running_code:
+        raise TapeError("code_sha256 does not match the running bridge source")
+    checked.append("code_sha256")
+
+    if expect_policy_sha256 is not None:
+        expected_policy = expect_policy_sha256
+    elif pinned:
+        if not POLICY_FILE.is_file():
+            raise TapeError("required policy pin cannot be resolved: default policy file is missing")
+        expected_policy = digest(POLICY_FILE.read_bytes())
+    else:
+        expected_policy = None
+    if (pinned and POLICY_FILE.is_file() and expect_policy_sha256 is not None
+            and expect_policy_sha256 != digest(POLICY_FILE.read_bytes())):
+        raise TapeError("policy file sha256 does not match the configured policy file")
+    if expected_policy:
+        _pin((receipt.get("price_policy") or {}).get("file_sha256"), expected_policy, "policy file sha256")
+        if POLICY_FILE.is_file() and expected_policy == digest(POLICY_FILE.read_bytes()):
+            want = _receipt_policy_from_file(POLICY_FILE)
+            got = receipt.get("price_policy") if isinstance(receipt.get("price_policy"), dict) else {}
+            for key, val in want.items():
+                if got.get(key) != val:
+                    raise TapeError(f"receipt price_policy.{key} does not match the configured policy")
+        checked.append("policy_file_sha256")
+    else:
+        skipped.append("policy_file_sha256")
+
+    if pinned:
+        missing = [name for name in IDENTITY_PINS if name not in checked]
+        if missing:
+            raise TapeError("required pin cannot be resolved: " + ", ".join(missing))
+        expected_archive = expect_archive_sha256 if expect_archive_sha256 is not None else ARCHIVE_SHA
+        if expected_archive == ARCHIVE_SHA:
+            _check_official_sidecars(files, receipt)
+            checked.append("official_sidecars")
+        else:
+            skipped.append("official_sidecars")
         mode = VERIFY_WITH_PINS
-    elif supplied:
-        mode = "self-consistency plus supplied identity pins: " + ", ".join(supplied)
+    elif any(name in checked for name in ("archive_sha256", "decisions_sha256", "policy_file_sha256")
+             if name != "code_sha256"):
+        mode = "self-consistency plus supplied identity pins"
     else:
         mode = VERIFY_SELF_ONLY
-    receipt["_verification"] = {"mode": mode, "pins": supplied, "pinned": pinned}
+    receipt["_verification"] = {
+        "mode": mode,
+        "pinned": pinned,
+        "checked": checked,
+        "skipped": skipped,
+        "pins": checked,  # alias of checked
+        "diagnostic_fields": list(SIDECAR_DIAGNOSTIC_FIELDS),
+    }
     return receipt
 
 
@@ -745,9 +971,11 @@ def main(argv=None, *, _archive_sha: str = ARCHIVE_SHA) -> int:
                        expect_code_sha256=a.expect_code_sha256,
                        expect_policy_sha256=a.expect_policy_sha256,
                        pinned=not a.self_consistency_only)
-            mode = r["_verification"]["mode"]
-            print(f"Verified output ({mode}): {r['rows']} rows, {r['price_blocks']['total']} price blocks. "
-                  f"Paper only.")
+            v = r["_verification"]
+            print(f"Verified output ({_format_verification(v)}): {r['rows']} rows, "
+                  f"{r['price_blocks']['total']} price blocks. Paper only.")
+            print("Diagnostic sidecar fields (not derived from decision_tape.csv): "
+                  + ", ".join(v["diagnostic_fields"]) + ".")
             note = _policy_notice(r)
             if note:
                 print(note)
