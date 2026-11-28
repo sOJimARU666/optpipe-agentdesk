@@ -53,8 +53,9 @@ equal the repo pin `ARCHIVE_SHA`. If it records the frozen `decisions.json` sha,
 equal `FROZEN_CSV_SHA`. The recorded `code_sha256` is compared to the running source file. Hidden
 `.*.partial-*` folders are refused; hidden leftovers beside a complete folder are ignored.
 
-The expected policy identity comes from the repo configuration (`config/replay_bridge_price_policy.json`) or
-from `--expect-policy-sha256`, never from the receipt. Approval status is never read from the receipt. The
+The expected policy identity comes from the repo configuration (`config/replay_bridge_price_policy.json`),
+never from the receipt. `--expect-policy-sha256` is only an extra pin against that file, not a source of
+identity. Approval status is never read from the receipt. The
 "Policy status PROPOSED is not owner-approved" notice is printed when the *configured* policy file has that
 status, not when the folder claims it. If the configured file is missing, a directory, unreadable or invalid,
 `verify` refuses in every mode, whether or not `--expect-policy-sha256` is given, and it prints that policy
@@ -66,7 +67,9 @@ code, and the configured policy file). In pinned official mode it also recompute
 pinned archive plus that configured policy, then compares the bytes, so an official folder that was edited
 and fully re-signed is refused. A required pin that cannot be resolved, or a policy identity that does not
 match the configured file, is refused. The output and the in-memory `_verification.checked` / `.skipped`
-lists name exactly the pins that ran. `official_sidecars` is listed as checked when the official
+lists name exactly the pins that ran. `_verification` also records `policy_status` and
+`owner_approved`, read from the configured policy file, never from the receipt; `owner_approved` is
+always false (there is no approval mechanism). The CLI verify line prints both fields. `official_sidecars` is listed as checked when the official
 projection was compared, and as skipped in `--self-consistency-only` (and when pinned against a
 non-official archive). `--self-consistency-only` turns the archive, decisions and official-recompute
 pins off; it does not turn off the receipt-versus-configured-policy compare. File-derived checks

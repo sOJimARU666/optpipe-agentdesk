@@ -1,8 +1,9 @@
 # Replay Bridge 001 evidence (SYNTHETIC, paper only, decision support only)
 
-Regenerated on 2026-11-28 (Europe/Berlin), after Zoodle's FAIL at `723d1123` (the
-`--expect-policy-sha256` escape hatch accepted re-signed receipts with wrong policy contents
-when the configured file was unusable), from the frozen Lesson 001 v3 archive (sha256
+Regenerated on 2026-11-28 (Europe/Berlin), after Noodle's condition at `51c0f050`
+(config-derived `policy_status` and `owner_approved` on `_verification`, never from the
+receipt) and Zoodle's two doc nits (policy identity is not taken from
+`--expect-policy-sha256`; stale test name), from the frozen Lesson 001 v3 archive (sha256
 `159de19c...47a3`) with the bridge source committed alongside it (its sha256 is `code_sha256`
 in `output/bridge_receipt.json`).
 
@@ -10,7 +11,8 @@ in `output/bridge_receipt.json`).
   holding the archive): `python -m optpipe.research.replay_bridge export Optpipe-Lesson-001-Portability-v3.zip output`.
   `output/SHA256SUMS` is the bridge's own checksum file (five files: the three CSVs, the accept log and the receipt).
 - `export.log`: that export plus `verify output` (CLI default, repo pins on, official sidecars recomputed; both
-  exit 0). The verify line lists the pins that were checked and skipped; both commands print that policy status
+  exit 0). The verify line lists the pins that were checked and skipped, plus `policy_status` and
+  `owner_approved` from the configured policy file; both commands print that policy status
   PROPOSED is not owner-approved, from the configured policy file.
 - `exists.log`: the same export repeated into the existing `output` folder (refused, exit 2, nothing written).
 - `tests.log`: `python -m pytest -p no:cacheprovider -o addopts="" -v tests/test_replay_bridge.py` with
@@ -26,4 +28,6 @@ the DELAYED class is covered by the tests in `tests.log` (PF-39 to PF-46 and ext
 `fixture_set` is `lesson001-portability-v3`. CLI `verify` of this folder applies the repo pins, recomputes the
 official sidecars, and exits 0. If the configured policy file is missing, a directory, unreadable or invalid,
 verify refuses in every mode, whether or not `--expect-policy-sha256` is given. That flag is an extra pin
-against the real file, alongside the full content compare. Approval status is never read from the receipt.
+against the real file, alongside the full content compare, and is not a source of policy identity. Approval
+status is never read from the receipt.
+

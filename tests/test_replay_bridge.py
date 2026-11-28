@@ -1678,8 +1678,8 @@ def test_expect_policy_sha256_does_not_rescue_unusable_config(tmp_path, monkeypa
     assert "Policy status is unknown; this folder is not approved." in run.stderr
 
 
-def test_byte_identical_policy_at_another_path_is_refused_without_expect_flag(tmp_path):
-    """Identity is pinned to the configured path and content; --expect-policy-sha256 checks alternates."""
+def test_byte_identical_policy_at_another_path_is_refused_even_with_expect_flag(tmp_path):
+    """Identity is pinned to the configured path and content; --expect-policy-sha256 does not allow an alternate path."""
     src = ROOT / "config" / "replay_bridge_price_policy.json"
     alt = tmp_path / "alt-policy.json"
     alt.write_bytes(src.read_bytes())
@@ -1771,3 +1771,42 @@ def test_policy_pin_list_is_accurate(tmp_path):
     _resign_official(out, rec)
     with pytest.raises(rb.TapeError, match="price_policy.path"):
         rb.verify(out, expect_policy_sha256=rec["price_policy"]["file_sha256"])
+
+
+def test_verification_policy_status_matches_configured_file(tmp_path):
+    """_verification.policy_status and owner_approved match the configured policy file."""
+    raw = json.loads((ROOT / "config" / "replay_bridge_price_policy.json").read_text())
+    assert raw["status"] == "PROPOSED"
+    out, _r = _official_out(tmp_path)
+    v = rb.verify(out)["_verification"]
+    assert v["policy_status"] == raw["status"] == "PROPOSED"
+    assert v["owner_approved"] is False
+    run = cli(["verify", "--self-consistency-only", out], rb.ARCHIVE_SHA)
+    assert run.returncode == 0, run.stderr
+    assert "policy_status: PROPOSED" in run.stdout
+    assert "owner_approved: false" in run.stdout
+    assert "Policy status PROPOSED is not owner-approved" in run.stdout
+
+
+def test_verification_policy_status_ignores_receipt_approved_claim(tmp_path):
+    """A re-signed receipt claiming APPROVED does not change the config-derived fields."""
+    out, rec = _official_out(tmp_path)
+    rec["price_policy"]["status"] = "APPROVED"
+    _resign_official(out, rec)
+    assert rec["price_policy"]["status"] == "APPROVED"
+    with pytest.raises(rb.TapeError, match="price_policy.status"):
+        rb.verify(out)
+    info = rb._verification_policy()
+    assert info["policy_status"] == "PROPOSED"
+    assert info["owner_approved"] is False
+    assert info["policy_status"] != rec["price_policy"]["status"]
+    # a genuine sibling folder still reports the configured values, not the edited receipt
+    out2, rec2 = _official_out(tmp_path, name="clean")
+    assert rec2["price_policy"]["status"] == "PROPOSED"
+    v = rb.verify(out2)["_verification"]
+    assert v["policy_status"] == "PROPOSED"
+    assert v["owner_approved"] is False
+    run = cli(["verify", "--self-consistency-only", out], rb.ARCHIVE_SHA)
+    assert run.returncode == 2, run.stderr
+    assert "Policy status PROPOSED is not owner-approved" in run.stderr
+    assert "APPROVED" not in run.stderr

@@ -538,6 +538,18 @@ def _policy_notice(_receipt: dict | None = None) -> str | None:
     return None
 
 
+def _verification_policy() -> dict:
+    """Machine-readable policy status for ``_verification``.
+
+    Read from the configured policy file only. The receipt is not an argument and is never
+    consulted. ``owner_approved`` is always False: there is no approval mechanism.
+    """
+    return {
+        "policy_status": _configured_policy_status(),
+        "owner_approved": False,
+    }
+
+
 def _receipt_policy_from_file(path: Path) -> dict:
     """The price_policy object export() would write for this policy file."""
     policy, policy_sha = read_policy(path)
@@ -755,7 +767,11 @@ def _sidecar_pair(i, which, plain, full, rec, *, reason, label_reason, log_reaso
 def _format_verification(v: dict) -> str:
     checked = ", ".join(v["checked"]) or "none"
     skipped = ", ".join(v["skipped"]) or "none"
-    return f"{v['mode']}; checked: {checked}; skipped: {skipped}"
+    status = v.get("policy_status")
+    status_s = status if status is not None else "unknown"
+    approved = "true" if v.get("owner_approved") else "false"
+    return (f"{v['mode']}; checked: {checked}; skipped: {skipped}; "
+            f"policy_status: {status_s}; owner_approved: {approved}")
 
 
 def _pin(got, expected, name: str) -> None:
@@ -815,8 +831,10 @@ def verify(out: Path, *, expect_archive_sha256: str | None = None, expect_decisi
     byte-identical policy copy used via ``--price-policy`` at another path is refused in every mode,
     including when the flag is given. In pinned official mode, the sidecar files and the receipt
     policy fields are also recomputed from the pinned archive plus that configured policy and
-    compared byte-for-byte. The not-owner-approved notice comes from the configured policy, never
-    from the receipt. When the configured file cannot be read, the notice states that policy status
+    compared byte-for-byte. The in-memory ``_verification`` result and the CLI verify line also record
+    ``policy_status`` and ``owner_approved``, read from the configured policy file, never from
+    the receipt; ``owner_approved`` is always False. The not-owner-approved notice comes from the
+    configured policy, never from the receipt. When the configured file cannot be read, the notice states that policy status
     is unknown and the folder is not approved. This function never writes into `out`.
     """
     out = Path(out)
@@ -965,6 +983,7 @@ def verify(out: Path, *, expect_archive_sha256: str | None = None, expect_decisi
             mode = "self-consistency plus supplied identity pins"
         else:
             mode = VERIFY_SELF_ONLY
+    policy = _verification_policy()  # config only; the receipt is not passed in
     receipt["_verification"] = {
         "mode": mode,
         "pinned": pinned,
@@ -972,6 +991,8 @@ def verify(out: Path, *, expect_archive_sha256: str | None = None, expect_decisi
         "skipped": skipped,
         "pins": checked,  # alias of checked
         "diagnostic_fields": list(SIDECAR_DIAGNOSTIC_FIELDS),
+        "policy_status": policy["policy_status"],
+        "owner_approved": policy["owner_approved"],
     }
     return receipt
 
